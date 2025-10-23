@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 
 # Set the project name and version
 project(vt-lb VERSION 1.0 LANGUAGES CXX)
@@ -8,6 +8,10 @@ find_program(ccache_binary ccache)
 if (ccache_binary)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${ccache_binary}")
 endif()
+
+find_package(MPI REQUIRED)
+find_package(magistrate)
+find_package(vt)
 
 file(
   GLOB
@@ -28,7 +32,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use")
+  set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 endif()
 message(STATUS "CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
 

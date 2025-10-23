@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                 temperedlb.h
+//                                termination.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * Redistributions in binary form, must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,68 +41,50 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
-#define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
+#if !defined INCLUDED_VT_LB_COMM_TERMINATION_H
+#define INCLUDED_VT_LB_COMM_TERMINATION_H
 
-#include <vt-lb/comm/comm_traits.h>
-#include <vt-lb/algo/baselb/baselb.h>
+#include <cstdint>
+#include <memory>
+#include "class_handle.h"
 
-#include <limits>
+namespace vt_lb::comm {
 
-namespace vt_lb::algo::temperedlb {
+struct CommMPI;
+template <typename T>
+struct ClassHandle;
 
-struct WorkModel {
-  /// @brief  Coefficient for load component (per rank)
-  double rank_alpha = 1.0;
-  /// @brief  Coefficient for inter-node communication component
-  double beta = 0.0;
-  /// @brief  Coefficient for intra-node communication component
-  double gamma = 0.0;
-  /// @brief  Coefficient for shared-memory communication component
-  double delta = 0.0;
+namespace detail {
+
+struct TerminationDetector {
+  static constexpr int kArity = 4;
+
+  void init(CommMPI& comm, ClassHandle<TerminationDetector> handle);
+  void startFirstWave();
+  void onControl();
+  void onResponse(uint64_t in_sent, uint64_t in_recv);
+  void notifyMessageSend();
+  void notifyMessageReceive();
+  bool isTerminated() const { return terminated_; }
+  void sendControlToChildren();
+  void sendResponseToParent(uint64_t in_sent, uint64_t in_recv);
+  void terminated();
+
+  int rank_ = 0;
+  int size_ = 0;
+  int parent_ = -1;
+  int first_child_ = 0;
+  int num_children_ = 0;
+  int waiting_children_ = 0;
+  bool terminated_ = false;
+  uint64_t sent_ = 0;
+  uint64_t recv_ = 0;
+  uint64_t global_sent1_ = 0, global_recv1_ = 0;
+  uint64_t global_sent2_ = 0, global_recv2_ = 0;
+  ClassHandle<TerminationDetector> handle_;
 };
 
-struct Configuration {
-  /// @brief  Number of trials to perform
-  int num_trials_ = 1;
-  /// @brief  Number of iterations per trial
-  int num_iters_ = 10;
-  /// @brief  Fanout for information propagation
-  int f_ = 2;
-  /// @brief  Number of rounds of information propagation
-  int k_max_ = 0;
+} // namespace detail
+} // namespace vt_lb::comm
 
-  /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
-  WorkModel work_model_;
-    
-  /// @brief Tolerance for convergence
-  double converge_tolerance_ = 0.01;
-};
-
-template <typename T, typename CommT>
-struct TemperedLB : baselb::BaseLB<T> {
-
-  // Assert that CommT conforms to the communication interface we expect
-  //static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
-
-  /**
-   * @brief Construct a new TemperedLB object
-   * 
-   * @param comm Communication interface
-   * @param config Configuration parameters
-   */
-  TemperedLB(CommT& comm, Configuration config = Configuration())
-      : comm_(comm),
-        config_(config)
-  { }
-
-private:
-  /// @brief Communication interface
-  CommT& comm_;
-    /// @brief Configuration parameters
-  Configuration config_;
-};
-
-} /* end namespace vt_lb::algo::temperedlb */
-
-#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H*/
+#endif /*INCLUDED_VT_LB_COMM_TERMINATION_H*/

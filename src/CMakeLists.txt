@@ -88,9 +88,16 @@ turn_on_warnings(${VT_LB_LIBRARY})
 #   ${VT_LB_LIBRARY} PUBLIC ${BROTLI_LIBRARY}
 # )
 
-# target_link_libraries(
-#   ${VT_LB_LIBRARY} PUBLIC ${YAML_LIBRARY}
-# )
+target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC MPI::MPI_CXX
+)
+
+target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC vt::lib::magistrate
+)
+target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC vt::runtime::vt
+)
 
 target_include_directories(
   ${VT_LB_LIBRARY} PUBLIC

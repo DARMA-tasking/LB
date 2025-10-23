@@ -1,0 +1,36 @@
+#include <vt-lb/comm/comm_mpi.h>
+#include <vt-lb/comm/comm_vt.h>
+
+struct MyClass {
+  void myHandler(int a, double b) {
+    // Handler implementation
+    printf("handler says: a=%d, b=%f\n", a, b);
+  }
+  void myHandler2(std::string msg) {
+    // Another handler implementation
+    printf("string is %s\n", msg.c_str());
+  }
+};
+
+int main(int argc, char** argv) {
+  auto comm = vt_lb::comm::CommVT();
+  comm.init(argc, argv);
+
+  auto cls = std::make_unique<MyClass>();
+  auto handle = comm.registerInstanceCollective(cls.get());
+  auto rank = comm.getRank();
+  if (rank == 0) {
+    handle[1].send<&MyClass::myHandler2>(std::string{"hello from rank 0"});
+  }
+  if (rank == 1) {
+    handle[0].send<&MyClass::myHandler>(2, 10.3);
+  }
+
+  while (comm.poll()) {
+  }
+
+  printf("out of poll\n");
+
+  comm.finalize();
+  return 0;
+}

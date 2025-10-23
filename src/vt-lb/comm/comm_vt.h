@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                 temperedlb.h
+//                                comm_vt.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * Redistributions in binary form, must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,68 +41,79 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
-#define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
+#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
+#define INCLUDED_VT_LB_COMM_COMM_VT_H
 
-#include <vt-lb/comm/comm_traits.h>
-#include <vt-lb/algo/baselb/baselb.h>
+#include <cstdint>
+#include <memory>
+#include <tuple>
+#include <unordered_map>
 
-#include <limits>
+#include <vt/transport.h>
 
-namespace vt_lb::algo::temperedlb {
+namespace vt_lb::comm {
 
-struct WorkModel {
-  /// @brief  Coefficient for load component (per rank)
-  double rank_alpha = 1.0;
-  /// @brief  Coefficient for inter-node communication component
-  double beta = 0.0;
-  /// @brief  Coefficient for intra-node communication component
-  double gamma = 0.0;
-  /// @brief  Coefficient for shared-memory communication component
-  double delta = 0.0;
-};
-
-struct Configuration {
-  /// @brief  Number of trials to perform
-  int num_trials_ = 1;
-  /// @brief  Number of iterations per trial
-  int num_iters_ = 10;
-  /// @brief  Fanout for information propagation
-  int f_ = 2;
-  /// @brief  Number of rounds of information propagation
-  int k_max_ = 0;
-
-  /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
-  WorkModel work_model_;
-    
-  /// @brief Tolerance for convergence
-  double converge_tolerance_ = 0.01;
-};
-
-template <typename T, typename CommT>
-struct TemperedLB : baselb::BaseLB<T> {
-
-  // Assert that CommT conforms to the communication interface we expect
-  //static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
+struct CommVT {
+  CommVT() = default;
 
   /**
-   * @brief Construct a new TemperedLB object
-   * 
-   * @param comm Communication interface
-   * @param config Configuration parameters
+   * \brief Initialize the VT runtime
+   * \param argc Pointer to argument count
+   * \param argv Pointer to argument array
    */
-  TemperedLB(CommT& comm, Configuration config = Configuration())
-      : comm_(comm),
-        config_(config)
-  { }
+  void init(int& argc, char**& argv) {
+    vt::initialize(argc, argv);
+    vt::theTerm()->addDefaultAction([this]{ terminated_ = true; });
+  }
 
+  /**
+   * \brief Finalize the VT runtime
+   */
+  void finalize() {
+    vt::finalize();
+  }
+
+  template <typename T>
+  auto registerInstanceCollective(T* obj) {
+    return vt::theObjGroup()->makeCollective<T>(
+      obj, "CommVT_ObjGroup"
+    );
+  }
+
+  template <auto fn, typename ProxyT, typename... Args>
+  void send(vt::NodeType dest, ProxyT proxy, Args&&... args) {
+    proxy[dest].template send<fn>(std::forward<Args>(args)...);
+  }
+
+  /**
+   * \brief Get the number of ranks
+   * \return Number of ranks
+   */
+  int numRanks() const {
+    return static_cast<int>(vt::theContext()->getNumNodes());
+  }
+
+  /**
+   * \brief Get this process's rank
+   * \return Current rank
+   */
+  int getRank() const {
+    return static_cast<int>(vt::theContext()->getNode());
+  }
+
+  /**
+   * \brief Poll for incoming messages and process them
+   *
+   * Triggers VT's scheduler to process pending events
+   */
+  bool poll() {
+    vt::theSched()->runSchedulerOnceImpl();
+    return !terminated_;
+  }
 private:
-  /// @brief Communication interface
-  CommT& comm_;
-    /// @brief Configuration parameters
-  Configuration config_;
+  bool terminated_ = false;
 };
 
-} /* end namespace vt_lb::algo::temperedlb */
+} /* end namespace vt_lb::comm */
 
-#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H*/
+#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/

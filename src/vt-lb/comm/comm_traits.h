@@ -45,46 +45,56 @@
 #define INCLUDED_VT_LB_COMM_COMM_TRAITS_H
 
 #include <cstddef>
+#include <type_traits>
 #include <utility>
 
 namespace vt_lb::comm {
 
-// Traits to check for required comm interface
+// Trait helpers for SFINAE
 namespace detail {
-  template <typename T>
+  // Checks for send(MsgType*, int, HandlerType)
+  template <typename T, typename Msg, typename Handler>
   using send_t = decltype(std::declval<T>().send(
-    std::declval<typename T::MsgType>(),
-    std::declval<int>(),
-    std::declval<typename T::TagType>()
-  ));
+    std::declval<Msg*>(), std::declval<int>(), std::declval<Handler>()));
 
-  template <typename T>
-  using recv_t = decltype(std::declval<T>().recv(
-    std::declval<typename T::MsgType>(),
-    std::declval<int>(),
-    std::declval<typename T::TagType>()
-  ));
+  // Checks for registerHandler(HandlerType, ClassType*)
+  template <typename T, typename Handler, typename Class>
+  using register_handler_t = decltype(std::declval<T>().registerHandler(
+    std::declval<Handler>(), std::declval<Class*>()));
 
+  // Checks for numRanks()
   template <typename T>
   using numRanks_t = decltype(std::declval<T>().numRanks());
 
+  // Checks for getRank()
   template <typename T>
   using getRank_t = decltype(std::declval<T>().getRank());
-} /* end namespace detail */
 
-template <typename T, typename = void>
+  // Checks for progress()
+  template <typename T>
+  using progress_t = decltype(std::declval<T>().progress());
+}
+
+// Main trait: checks for required communicator interface
+// Usage: is_comm_conformant<Comm, MsgType, HandlerType, ClassType>::value
+// HandlerType is typically a pointer to member function or function pointer
+// ClassType is the class on which the handler is registered
+// MsgType is the message type
+
+template <typename Comm, typename Msg, typename Handler, typename Class, typename = void>
 struct is_comm_conformant : std::false_type {};
 
-template <typename T>
-struct is_comm_conformant<T, std::void_t<
-  detail::send_t<T>,
-  detail::recv_t<T>,
-  detail::numRanks_t<T>,
-  detail::getRank_t<T>
+template <typename Comm, typename Msg, typename Handler, typename Class>
+struct is_comm_conformant<Comm, Msg, Handler, Class, std::void_t<
+  detail::send_t<Comm, Msg, Handler>,
+  detail::register_handler_t<Comm, Handler, Class>,
+  detail::numRanks_t<Comm>,
+  detail::getRank_t<Comm>,
+  detail::progress_t<Comm>
 >> : std::true_type {};
 
-// Usage:
-// static_assert(is_comm_conformant<MyCommClass>::value, "Comm class does not conform to required interface");
+// Example usage:
+// static_assert(is_comm_conformant<MyComm, MyMsg, MyHandler, MyClass>::value, "Comm does not conform");
 
 } /* end namespace vt_lb::comm */
 

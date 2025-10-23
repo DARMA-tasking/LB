@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                 temperedlb.h
+//                                class_handle.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * Redistributions in binary form, must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,68 +41,55 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
-#define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
+#if !defined INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
+#define INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
 
-#include <vt-lb/comm/comm_traits.h>
-#include <vt-lb/algo/baselb/baselb.h>
+namespace vt_lb::comm {
 
-#include <limits>
+struct CommMPI;
 
-namespace vt_lb::algo::temperedlb {
+template <typename T>
+struct ClassHandle;
 
-struct WorkModel {
-  /// @brief  Coefficient for load component (per rank)
-  double rank_alpha = 1.0;
-  /// @brief  Coefficient for inter-node communication component
-  double beta = 0.0;
-  /// @brief  Coefficient for intra-node communication component
-  double gamma = 0.0;
-  /// @brief  Coefficient for shared-memory communication component
-  double delta = 0.0;
-};
-
-struct Configuration {
-  /// @brief  Number of trials to perform
-  int num_trials_ = 1;
-  /// @brief  Number of iterations per trial
-  int num_iters_ = 10;
-  /// @brief  Fanout for information propagation
-  int f_ = 2;
-  /// @brief  Number of rounds of information propagation
-  int k_max_ = 0;
-
-  /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
-  WorkModel work_model_;
-    
-  /// @brief Tolerance for convergence
-  double converge_tolerance_ = 0.01;
-};
-
-template <typename T, typename CommT>
-struct TemperedLB : baselb::BaseLB<T> {
-
-  // Assert that CommT conforms to the communication interface we expect
-  //static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
-
-  /**
-   * @brief Construct a new TemperedLB object
-   * 
-   * @param comm Communication interface
-   * @param config Configuration parameters
-   */
-  TemperedLB(CommT& comm, Configuration config = Configuration())
-      : comm_(comm),
-        config_(config)
-  { }
+template <typename T>
+struct ClassHandleRank {
+  ClassHandleRank(ClassHandle<T> in_handle, int in_rank);
+  
+  template <auto fn, typename... Args>
+  void send(Args&&... args);
+  
+  template <auto fn, typename... Args>
+  void sendTerm(Args&&... args);
 
 private:
-  /// @brief Communication interface
-  CommT& comm_;
-    /// @brief Configuration parameters
-  Configuration config_;
+  ClassHandle<T> handle_;
+  int rank_ = -1;
 };
 
-} /* end namespace vt_lb::algo::temperedlb */
+template <typename T>
+struct ClassHandle {
+  ClassHandle() = default;
+  ClassHandle(int in_index, CommMPI* in_comm);
+  ClassHandle(ClassHandle const&) = default;
+  ClassHandle& operator=(ClassHandle const&) = default;
 
-#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H*/
+  void unregister();
+  T* get();
+  ClassHandleRank<T> operator[](int rank);
+
+  template <auto fn, typename... Args>
+  void send(int dest, Args&&... args);
+
+  template <auto fn, typename... Args>
+  void sendTerm(int dest, Args&&... args);
+
+  friend struct ClassHandleRank<T>;
+
+private:
+  int index_ = 0;
+  CommMPI* comm_;
+};
+
+} // namespace vt_lb::comm
+
+#endif /*INCLUDED_VT_LB_COMM_CLASS_HANDLE_H*/

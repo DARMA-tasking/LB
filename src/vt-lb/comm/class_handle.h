@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
 #define INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
 
+#include <mpi.h>
+
 namespace vt_lb::comm {
 
 struct CommMPI;
@@ -60,6 +62,9 @@ struct ClassHandleRank {
   
   template <auto fn, typename... Args>
   void sendTerm(Args&&... args);
+
+  template <typename U, typename V>
+  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
 
 private:
   ClassHandle<T> handle_;

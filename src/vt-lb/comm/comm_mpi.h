@@ -228,6 +228,13 @@ struct CommMPI {
     return class_map_.at(idx);
   }
 
+  template <typename U, typename V>
+  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
+    // @todo finish this
+    MPI_Request request;
+    MPI_IReduce(&sendbuf, &recvbuf, count, datatype, op, root, comm_, &request);
+  }
+
   /**
    * \brief Send data to a destination rank
    * \param dest Destination rank

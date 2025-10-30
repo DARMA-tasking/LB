@@ -53,6 +53,31 @@
 
 namespace vt_lb::comm {
 
+template <typename U>
+void reduceCb(U value) {
+
+}
+
+template <typename ProxyT>
+struct ProxyWrapper : ProxyT {
+  ProxyWrapper(ProxyT proxy) : ProxyT(proxy) { }
+
+  template <typename U, typename V>
+  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
+    // @todo finish this??
+    // if (op == MPI_MAX) {
+    //   auto cb = vt::theCB()->makeSend<reduceCb>(vt::pipe::LifetimeEnum::Once, reduceCb);
+    //   this->template reduce<vt::collective::MaxOp>();
+    // } else if (op == MPI_MIN) {
+
+    // } else if (op == MPI_SUM) {
+
+    // }
+
+  }
+
+};
+
 struct CommVT {
   CommVT() = default;
 
@@ -75,9 +100,9 @@ struct CommVT {
 
   template <typename T>
   auto registerInstanceCollective(T* obj) {
-    return vt::theObjGroup()->makeCollective<T>(
+    return ProxyWrapper{vt::theObjGroup()->makeCollective<T>(
       obj, "CommVT_ObjGroup"
-    );
+    )};
   }
 
   template <auto fn, typename ProxyT, typename... Args>

@@ -13,7 +13,7 @@ struct MyClass {
 };
 
 int main(int argc, char** argv) {
-  auto comm = vt_lb::comm::CommVT();
+  auto comm = vt_lb::comm::CommMPI();
   comm.init(argc, argv);
 
   auto cls = std::make_unique<MyClass>();

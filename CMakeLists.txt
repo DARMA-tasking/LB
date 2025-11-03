@@ -10,8 +10,12 @@ if (ccache_binary)
 endif()
 
 find_package(MPI REQUIRED)
-find_package(magistrate)
 find_package(vt)
+
+# vt includes magistrate
+if(NOT vt_FOUND)
+  find_package(magistrate REQUIRED)
+endif()
 
 file(
   GLOB

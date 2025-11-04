@@ -48,20 +48,72 @@
 
 namespace vt_lb::model {
 
-    struct TaskMemory {
-        Bytes working = 0.0;
-        Bytes footprint = 0.0;
-        Bytes serialized = 0.0;
-    };
+struct TaskMemory {
+    TaskMemory() = default;
+    TaskMemory(BytesType working, BytesType footprint, BytesType serialized)
+      : working_(working), footprint_(footprint), serialized_(serialized)
+    {}
 
-    struct Task {
-        TaskId id;
-        NodeId home = InvalidNode;
-        NodeId current = InvalidNode;
-        bool migratable = true;
-        TaskMemory memory;
-        Load load = 0.0;
-    };
+    BytesType getWorking() const { return working_; }
+    BytesType getFootprint() const { return footprint_; }
+    BytesType getSerialized() const { return serialized_; }
+
+    template <typename Serializer>
+    void serialize(Serializer& s) {
+      s | working_;
+      s | footprint_;
+      s | serialized_;
+    }
+
+private:
+    BytesType working_ = 0.0;
+    BytesType footprint_ = 0.0;
+    BytesType serialized_ = 0.0;
+};
+
+struct Task {
+    Task() = default;
+    Task(TaskType id, RankType home, RankType current, bool migratable,
+         TaskMemory const& memory, LoadType load)
+      : id_(id),
+        home_(home),
+        current_(current),
+        migratable_(migratable),
+        memory_(memory),
+        load_(load)
+    {}
+
+    TaskType getId() const { return id_; }
+    RankType getHome() const { return home_; }
+    RankType getCurrent() const { return current_; }
+    bool isMigratable() const { return migratable_; }
+    TaskMemory const& getMemory() const { return memory_; }
+    LoadType getLoad() const { return load_; }
+
+    template <typename Serializer>
+    void serialize(Serializer& s) {
+      s | id_;
+      s | home_;
+      s | current_;
+      s | migratable_;
+      s | memory_;
+      s | load_;
+      s | shared_blocks_;
+    }
+
+private:
+    TaskType id_ = invalid_task;
+    NodeType home_ = invalid_node;
+    NodeType current_ = invalid_node;
+    bool migratable_ = true;
+    TaskMemory memory_;
+    LoadType load_ = 0.0;
+    std::unordered_set<SharedBlockType> shared_blocks_;
+
+public:
+    bool operator==(const Task& other) const { return id_ == other.id_; }
+    bool operator!=(const Task& other) const { return !(*this == other); }
+};
 
 } /* end namespace vt_lb::model */
 

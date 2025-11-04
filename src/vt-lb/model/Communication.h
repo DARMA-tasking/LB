@@ -48,7 +48,28 @@
 
 namespace vt_lb::model {
 
-    // todo
+struct Edge {
+    Edge() = default;
+    Edge(TaskType from, TaskType to, BytesType volume)
+      : from_(from), to_(to), volume_(volume)
+    {}
+
+    TaskType getFrom() const { return from_; }
+    TaskType getTo() const { return to_; }
+    BytesType getVolume() const { return volume_; }
+
+    template <typename Serializer>
+    void serialize(Serializer& s) {
+      s | from_;
+      s | to_;
+      s | volume_;
+    }
+
+private:
+    TaskType from_ = invalid_task;
+    TaskType to_ = invalid_task;
+    BytesType volume_ = 0.0;
+};
 
 } /* end namespace vt_lb::model */
 

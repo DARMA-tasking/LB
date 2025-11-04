@@ -48,32 +48,202 @@
 #include <memory>
 #include <tuple>
 #include <unordered_map>
+#include <atomic>
+#include <cstring>
+#include <vector>
+#include <type_traits>
+#include <algorithm>
 
+#include <vt/collective/reduce/operators/default_msg.h>
 #include <vt/transport.h>
 
 namespace vt_lb::comm {
-
-template <typename U>
-void reduceCb(U value) {
-
-}
 
 template <typename ProxyT>
 struct ProxyWrapper : ProxyT {
   ProxyWrapper(ProxyT proxy) : ProxyT(proxy) { }
 
+  struct ReduceCtx {
+    void* out_ptr = nullptr;
+    std::atomic<bool> done{false};
+    std::size_t count = 0;
+  };
+
+  template <typename T>
+  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, ReduceCtx* ctx) {
+    auto const& val = msg->getVal();
+
+     printf("%d: callback invoked\n", vt::theContext()->getNode());
+
+    if constexpr (
+      std::is_same_v<std::decay_t<T>, int> || std::is_same_v<std::decay_t<T>, double> ||
+      std::is_same_v<std::decay_t<T>, float> || std::is_same_v<std::decay_t<T>, long> ||
+      std::is_same_v<std::decay_t<T>, long long>
+    ) {
+      // scalar case
+      *static_cast<std::decay_t<T>*>(ctx->out_ptr) = val;
+    } else {
+      // vector case
+      using ValT = typename T::value_type;
+      static_assert(
+        std::is_trivially_copyable_v<ValT> || std::is_arithmetic_v<ValT>,
+        "Reduce value must be trivially copyable for this helper"
+      );
+      std::memcpy(ctx->out_ptr, std::addressof(val), sizeof(ValT) * std::max<std::size_t>(1, ctx->count));
+    }
+
+    // Publish completion after writing result.
+    ctx->done.store(true, std::memory_order_release);
+  }
+
+  // Runtime-dispatch wrapper: map a few common MPI datatypes to C++ types.
   template <typename U, typename V>
   void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
-    // @todo finish this??
-    // if (op == MPI_MAX) {
-    //   auto cb = vt::theCB()->makeSend<reduceCb>(vt::pipe::LifetimeEnum::Once, reduceCb);
-    //   this->template reduce<vt::collective::MaxOp>();
-    // } else if (op == MPI_MIN) {
+    switch (datatype) {
+      case MPI_INT:
+        if constexpr (std::is_same_v<U, int*>) {
+          reduce_impl<int>(root, op, sendbuf, recvbuf, count);
+        }
+        break;
+      case MPI_DOUBLE:
+        if constexpr (std::is_same_v<U, double*>) {
+          reduce_impl<double>(root, op, sendbuf, recvbuf, count);
+        }
+        break;
+      case MPI_FLOAT:
+        if constexpr (std::is_same_v<U, float*>) {
+          reduce_impl<float>(root, op, sendbuf, recvbuf, count);
+        }
+        break;
+      case MPI_LONG:
+        if constexpr (std::is_same_v<U, long*>) {
+          reduce_impl<long>(root, op, sendbuf, recvbuf, count);
+        }
+        break;
+      case MPI_LONG_LONG:
+        if constexpr (std::is_same_v<U, long long*>) {
+          reduce_impl<long long>(root, op, sendbuf, recvbuf, count);
+        }
+        break;
+      default:
+        vtAbort("ProxyWrapper::reduce: unsupported MPI_Datatype");
+    }
+  }
 
-    // } else if (op == MPI_SUM) {
+private:
+  // Map a few MPI_Op values to VT operator choices.
+  // Extend as needed.
+  enum class VTOp { Plus, Max, Min };
 
-    // }
+  inline static VTOp mapOp(MPI_Op mpio) {
+    if (mpio == MPI_SUM) return VTOp::Plus;
+    if (mpio == MPI_MAX) return VTOp::Max;
+    if (mpio == MPI_MIN) return VTOp::Min;
+    return VTOp::Plus;
+  }
 
+  // Concrete implementation for element type T.
+  template <typename T, typename SendBufT, typename RecvBufT>
+  void reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count) {
+    VTOp vk = mapOp(op);
+
+    auto ctx = std::make_unique<ReduceCtx>();
+    ctx->out_ptr = static_cast<void*>(recvbuf);
+    ctx->count = static_cast<std::size_t>(std::max(1, count));
+    ctx->done.store(false);
+
+    printf("%d: initiating reduce\n", vt::theContext()->getNode());
+
+    if (count == 1) {
+      // scalar path
+      T value = *static_cast<T const*>(sendbuf);
+
+      using MsgT = vt::collective::ReduceTMsg<T>;
+      auto cb = vt::theCB()->makeCallbackSingleAnon<MsgT, ReduceCtx>(
+        vt::pipe::LifetimeEnum::Once, ctx.get(), &ProxyWrapper::reduceAnonCb<T>
+      );
+      auto msg = vt::makeMessage<MsgT>(value);
+      if (vt::theContext()->getNode() == root) {
+        msg->setCallback(cb);
+      }
+      ProxyT proxy = ProxyT(*this);
+
+      if (vk == VTOp::Plus) {
+        vt::theObjGroup()->template reduce<
+          typename ProxyT::ObjGroupType,
+          MsgT,
+          &MsgT::template msgHandler<
+            MsgT, vt::collective::PlusOp<T>, vt::collective::reduce::operators::ReduceCallback<MsgT>
+          >
+        >(proxy, msg, vt::collective::reduce::ReduceStamp{});
+      } else if (vk == VTOp::Max) {
+        vt::theObjGroup()->template reduce<
+          typename ProxyT::ObjGroupType,
+          MsgT,
+          &MsgT::template msgHandler<
+            MsgT, vt::collective::MaxOp<T>, vt::collective::reduce::operators::ReduceCallback<MsgT>
+          >
+        >(proxy, msg, vt::collective::reduce::ReduceStamp{});
+      } else if (vk == VTOp::Min) {
+        vt::theObjGroup()->template reduce<
+          typename ProxyT::ObjGroupType,
+          MsgT,
+          &MsgT::template msgHandler<
+            MsgT, vt::collective::MinOp<T>, vt::collective::reduce::operators::ReduceCallback<MsgT>
+          >
+        >(proxy, msg, vt::collective::reduce::ReduceStamp{});
+      } else {
+        throw new std::runtime_error("Unsupported VTOp in reduce_impl");
+      }
+
+    } else {
+      // array path -> reduce a vector<T>
+      std::vector<T> v(static_cast<std::size_t>(count));
+      std::memcpy(v.data(), static_cast<void const*>(sendbuf), sizeof(T) * static_cast<std::size_t>(count));
+
+      using MsgT = vt::collective::ReduceTMsg<std::vector<T>>;
+      auto cb = vt::theCB()->makeCallbackSingleAnon<MsgT, ReduceCtx>(
+        vt::pipe::LifetimeEnum::Once, ctx.get(), &ProxyWrapper::reduceAnonCb<std::vector<T>>
+      );
+      auto msg = vt::makeMessage<MsgT>(std::move(v));
+      if (vt::theContext()->getNode() == root) {
+        msg->setCallback(cb);
+      }
+
+      ProxyT proxy = ProxyT(*this);
+      if (vk == VTOp::Plus) {
+        vt::theObjGroup()->template reduce<
+          typename ProxyT::ObjGroupType,
+          MsgT,
+          &MsgT::template msgHandler<
+            MsgT, vt::collective::PlusOp<std::vector<T>>, vt::collective::reduce::operators::ReduceCallback<MsgT>
+          >
+        >(proxy, msg, vt::collective::reduce::ReduceStamp{});
+      } else if (vk == VTOp::Max) {
+        vt::theObjGroup()->template reduce<
+          typename ProxyT::ObjGroupType,
+          MsgT,
+          &MsgT::template msgHandler<
+            MsgT, vt::collective::MaxOp<std::vector<T>>, vt::collective::reduce::operators::ReduceCallback<MsgT>
+          >
+        >(proxy, msg, vt::collective::reduce::ReduceStamp{});
+      } else if (vk == VTOp::Min) {
+        vt::theObjGroup()->template reduce<
+          typename ProxyT::ObjGroupType,
+          MsgT,
+          &MsgT::template msgHandler<
+            MsgT, vt::collective::MinOp<std::vector<T>>, vt::collective::reduce::operators::ReduceCallback<MsgT>
+          >
+        >(proxy, msg, vt::collective::reduce::ReduceStamp{});
+      } else {
+        throw new std::runtime_error("Unsupported VTOp in reduce_impl");
+      }
+    }
+
+    // Blocking wait: make VT progress until callback marks done on root rank.
+    while (vt::theContext()->getNode() == root && !ctx->done.load(std::memory_order_acquire)) {
+      vt::theSched()->runSchedulerOnceImpl();
+    }
   }
 
 };

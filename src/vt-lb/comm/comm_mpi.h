@@ -230,9 +230,14 @@ struct CommMPI {
 
   template <typename U, typename V>
   void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
-    // @todo finish this
     MPI_Request request;
-    MPI_IReduce(&sendbuf, &recvbuf, count, datatype, op, root, comm_, &request);
+    MPI_Ireduce(sendbuf, recvbuf, count, datatype, op, root, comm_, &request);
+    int flag = 0;
+    while (not flag) {
+      MPI_Status status;
+      MPI_Test(&request, &flag, &status);
+      poll();
+    }
   }
 
   /**

@@ -68,12 +68,6 @@ void ClassHandleRank<T>::sendTerm(Args&&... args) {
 }
 
 template <typename T>
-template <typename U, typename V>
-void ClassHandleRank<T>::reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
-  handle_.reduce(root, datatype, op, sendbuf, recvbuf, count);
-}
-
-template <typename T>
 ClassHandle<T>::ClassHandle(int in_index, CommMPI* in_comm)
   : index_(in_index),
     comm_(in_comm)
@@ -104,6 +98,12 @@ template <typename T>
 template <auto fn, typename... Args>
 void ClassHandle<T>::sendTerm(int dest, Args&&... args) {
   comm_->template sendImpl<fn>(dest, index_, true, std::forward<Args>(args)...);
+}
+
+template <typename T>
+template <typename U, typename V>
+void ClassHandle<T>::reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
+  comm_->reduce(root, datatype, op, sendbuf, recvbuf, count);
 }
 
 } // namespace vt_lb::comm

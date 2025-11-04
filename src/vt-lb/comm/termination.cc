@@ -44,6 +44,8 @@
 #include "termination.h"
 #include "vt-lb/comm/comm_mpi.h"
 
+#define DEBUG_TERMINATION 0
+
 namespace vt_lb::comm::detail {
 
 void TerminationDetector::init(CommMPI& comm, ClassHandle<TerminationDetector> handle) {
@@ -65,21 +67,27 @@ void TerminationDetector::startFirstWave() {
 }
 
 void TerminationDetector::sendControlToChildren() {
+#if DEBUG_TERMINATION
   printf("Rank %d: sending control to %d children\n", rank_, num_children_);
+#endif
   for (int i = 0; i < num_children_; i++) {
     handle_[first_child_ + i].sendTerm<&TerminationDetector::onControl>();
   }
 }
 
 void TerminationDetector::sendResponseToParent(uint64_t in_sent, uint64_t in_recv) {
+#if DEBUG_TERMINATION
   printf("Rank %d: sending response to parent %d: sent=%lld, recv=%lld\n",
          rank_, parent_, in_sent, in_recv);
+#endif
   handle_[parent_].sendTerm<&TerminationDetector::onResponse>(in_sent, in_recv);
 }
 
 void TerminationDetector::onControl() {
+#if DEBUG_TERMINATION
   printf("Rank %d: received control message, num_children_=%d\n",
          rank_, num_children_);
+#endif
   waiting_children_ = num_children_;
   // Forward control to children
   if (num_children_ > 0) {
@@ -91,9 +99,11 @@ void TerminationDetector::onControl() {
 }
 
 void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
-  printf("Rank %d: received response: sent=%lld, recv=%lld, waiting_children=%d\n",
-         rank_, in_sent, in_recv, waiting_children_);
- 
+#if DEBUG_TERMINATION
+  printf("Rank %d: received response: sent=%lld, recv=%lld, global_sent1=%lld, global_recv1_=%lld waiting_children=%d\n",
+         rank_, in_sent, in_recv, global_sent1_, global_recv1_, waiting_children_);
+#endif
+
   global_sent1_ += in_sent;
   global_recv1_ += in_recv;
   
@@ -101,14 +111,18 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
 
   if (waiting_children_ == 0) {
 
+#if DEBUG_TERMINATION
     printf("Rank %d: aggregated total: sent=%lld, recv=%lld\n",
            rank_, global_sent1_, global_recv1_);
+#endif
 
     if (rank_ == 0) {
       // Root checks for termination
       
-      printf("Root total: s1=%lld, r1=%lld, s2=%lld, r2=%lld\n", 
+#if DEBUG_TERMINATION
+      printf("Root total: s1=%lld, r1=%lld, s2=%lld, r2=%lld\n",
              global_sent1_, global_recv1_, global_sent2_, global_recv2_);
+#endif
 
       if (global_sent1_ == global_recv1_ && 
           global_sent2_ == global_recv2_ &&
@@ -125,7 +139,7 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
       }
     } else {
       // Send response up
-      sendResponseToParent(global_sent1_, global_recv1_);
+      sendResponseToParent(global_sent1_ + sent_, global_recv1_ + recv_);
       global_sent1_ = global_recv1_ = 0;
       waiting_children_ = num_children_;
     }
@@ -135,16 +149,20 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
 void TerminationDetector::notifyMessageSend() {
   if (!terminated_) {
     sent_++;
+#if DEBUG_TERMINATION
     printf("Rank %d: notified send, counter: sent_=%lld, recv_=%lld\n",
            rank_, sent_, recv_);
+#endif
   }
 }
 
 void TerminationDetector::notifyMessageReceive() {
   if (!terminated_) {
     recv_++;
+#if DEBUG_TERMINATION
     printf("Rank %d: notified receive, counter: sent=%lld, recv=%lld\n",
            rank_, sent_, recv_);
+#endif
   }
 }
 

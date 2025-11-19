@@ -1,8 +1,9 @@
 set(
   TOP_LEVEL_SUBDIRS
-  algo algo/baselb algo/temperedlb
+  algo algo/baselb algo/temperedlb algo/driver
   comm
   input
+  model
 )
 
 set(VT_LB_INSTALL_DESTINATION "include/vt-lb")
@@ -64,6 +65,8 @@ foreach(SUB_DIR ${TOP_LEVEL_SUBDIRS})
     "${${SUB_DIR}_SOURCE_FILES}"
   )
 endforeach()
+
+message(STATUS "VT_LB_HEADER_FILES: ${HEADER_FILES}")
 
 add_library(
   ${VT_LB_LIBRARY}

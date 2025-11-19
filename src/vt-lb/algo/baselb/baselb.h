@@ -44,10 +44,19 @@
 #if !defined INCLUDED_VT_LB_ALGO_BASELB_BASELB_H
 #define INCLUDED_VT_LB_ALGO_BASELB_BASELB_H
 
+#include <memory>
+#include <vt-lb/model/PhaseData.h>
+
 namespace vt_lb::algo::baselb {
 
-template <typename T>
 struct BaseLB {
+  void inputData(std::unique_ptr<model::PhaseData> phase_data) {
+    phase_data_ = std::move(phase_data);
+  }
+
+protected:
+  /// @brief Phase data for load balancing
+  std::unique_ptr<model::PhaseData> phase_data_;
 };
 
 } /* end namespace vt_lb::algo::baselb */

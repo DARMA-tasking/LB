@@ -74,20 +74,20 @@ struct Configuration {
 
   /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
   WorkModel work_model_;
-    
+
   /// @brief Tolerance for convergence
   double converge_tolerance_ = 0.01;
 };
 
-template <typename T, typename CommT>
-struct TemperedLB : baselb::BaseLB<T> {
+template <typename CommT>
+struct TemperedLB : baselb::BaseLB {
 
   // Assert that CommT conforms to the communication interface we expect
-  //static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
+  static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
 
   /**
    * @brief Construct a new TemperedLB object
-   * 
+   *
    * @param comm Communication interface
    * @param config Configuration parameters
    */
@@ -96,11 +96,21 @@ struct TemperedLB : baselb::BaseLB<T> {
         config_(config)
   { }
 
+  void makeHandle() {
+    handle_ = comm_.template registerInstanceCollective<TemperedLB<CommT>>(this);
+  }
+
+  void run() {
+    // Implementation of the TemperedLB algorithm would go here
+  }
+
 private:
   /// @brief Communication interface
   CommT& comm_;
-    /// @brief Configuration parameters
+  /// @brief Configuration parameters
   Configuration config_;
+  /// @brief Handle to this load balancer instance
+  typename CommT::template HandleType<TemperedLB<CommT>> handle_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

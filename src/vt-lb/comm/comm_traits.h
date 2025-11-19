@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * Redistributions in binary form, must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -47,54 +47,107 @@
 #include <cstddef>
 #include <type_traits>
 #include <utility>
+#include <concepts>
 
 namespace vt_lb::comm {
 
-// Trait helpers for SFINAE
+// New concept helpers capturing common communicator API across CommMPI and CommVT
 namespace detail {
-  // Checks for send(MsgType*, int, HandlerType)
-  template <typename T, typename Msg, typename Handler>
-  using send_t = decltype(std::declval<T>().send(
-    std::declval<Msg*>(), std::declval<int>(), std::declval<Handler>()));
 
-  // Checks for registerHandler(HandlerType, ClassType*)
-  template <typename T, typename Handler, typename Class>
-  using register_handler_t = decltype(std::declval<T>().registerHandler(
-    std::declval<Handler>(), std::declval<Class*>()));
+  // Dummy class and member-function pointer used to instantiate templated send<fn>(...)
+  struct DummyClass {
+    void dummyMethod();
+  };
+  inline constexpr auto dummyMemFn = &DummyClass::dummyMethod;
 
-  // Checks for numRanks()
+  // Concepts for required member functions
+
+  template <typename Comm>
+  concept HasInit = requires(Comm c, int& argc, char**& argv) {
+    { c.init(argc, argv) };
+  };
+
+  template <typename Comm>
+  concept HasFinalize = requires(Comm c) {
+    { c.finalize() };
+  };
+
+  template <typename Comm>
+  concept HasNumRanks = requires(Comm const& c) {
+    { c.numRanks() } -> std::integral;
+  };
+
+  template <typename Comm>
+  concept HasGetRank = requires(Comm const& c) {
+    { c.getRank() } -> std::integral;
+  };
+
+  template <typename Comm>
+  concept HasPoll = requires(Comm c) {
+    { c.poll() } -> std::convertible_to<bool>;
+  };
+
+  // registerInstanceCollective<T>(T*)
+  template <typename Comm, typename T>
+  concept HasRegisterInstanceCollective = requires(Comm c, T* t) {
+    { c.template registerInstanceCollective<T>(t) };
+  };
+
+  // Resolve instance handle type returned by registerInstanceCollective<T>(T*)
+  template <typename Comm, typename T>
+  using instance_handle_t =
+    decltype(std::declval<Comm&>().template registerInstanceCollective<T>(std::declval<T*>()));
+
+  // Unified send pattern: send<fn>(int dest, Handle proxy, ...)
+  template <typename Comm>
+  concept HasSendUnified =
+    HasRegisterInstanceCollective<Comm, DummyClass> &&
+    requires(Comm c) {
+      { c.template send<dummyMemFn>(
+          std::declval<int>(),
+          std::declval<instance_handle_t<Comm, DummyClass>>()
+        )
+      };
+    };
+
+} // namespace detail
+
+// Primary concept that a communicator must satisfy
+template <typename Comm>
+concept Communicator =
+  detail::HasInit<Comm> &&
+  detail::HasFinalize<Comm> &&
+  detail::HasNumRanks<Comm> &&
+  detail::HasGetRank<Comm> &&
+  detail::HasPoll<Comm> &&
+  detail::HasRegisterInstanceCollective<Comm, detail::DummyClass> &&
+  detail::HasSendUnified<Comm>;
+
+// Backward-compatible traits shim implemented in terms of concepts
+template <typename Comm>
+struct CommunicatorTraits {
+  static constexpr bool has_init = detail::HasInit<Comm>;
+  static constexpr bool has_finalize = detail::HasFinalize<Comm>;
+  static constexpr bool has_num_ranks = detail::HasNumRanks<Comm>;
+  static constexpr bool has_get_rank = detail::HasGetRank<Comm>;
+  static constexpr bool has_poll = detail::HasPoll<Comm>;
+
   template <typename T>
-  using numRanks_t = decltype(std::declval<T>().numRanks());
+  using instance_handle_t = detail::instance_handle_t<Comm, T>;
 
-  // Checks for getRank()
   template <typename T>
-  using getRank_t = decltype(std::declval<T>().getRank());
+  static constexpr bool has_register_instance =
+    detail::HasRegisterInstanceCollective<Comm, T>;
 
-  // Checks for progress()
-  template <typename T>
-  using progress_t = decltype(std::declval<T>().progress());
-}
+  static constexpr bool has_send_unified =
+    detail::HasSendUnified<Comm>;
 
-// Main trait: checks for required communicator interface
-// Usage: is_comm_conformant<Comm, MsgType, HandlerType, ClassType>::value
-// HandlerType is typically a pointer to member function or function pointer
-// ClassType is the class on which the handler is registered
-// MsgType is the message type
+  static constexpr bool is_valid = Communicator<Comm>;
+};
 
-template <typename Comm, typename Msg, typename Handler, typename Class, typename = void>
-struct is_comm_conformant : std::false_type {};
-
-template <typename Comm, typename Msg, typename Handler, typename Class>
-struct is_comm_conformant<Comm, Msg, Handler, Class, std::void_t<
-  detail::send_t<Comm, Msg, Handler>,
-  detail::register_handler_t<Comm, Handler, Class>,
-  detail::numRanks_t<Comm>,
-  detail::getRank_t<Comm>,
-  detail::progress_t<Comm>
->> : std::true_type {};
-
-// Example usage:
-// static_assert(is_comm_conformant<MyComm, MyMsg, MyHandler, MyClass>::value, "Comm does not conform");
+// Convenience alias to check conformance at compile time
+template <typename Comm>
+using is_comm_conformant = std::bool_constant<Communicator<Comm>>;
 
 } /* end namespace vt_lb::comm */
 

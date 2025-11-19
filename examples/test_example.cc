@@ -1,5 +1,6 @@
 #include <vt-lb/comm/comm_mpi.h>
 #include <vt-lb/comm/comm_vt.h>
+#include <vt-lb/algo/driver/driver.h>
 
 struct MyClass {
   void myHandler(int a, double b) {
@@ -13,7 +14,7 @@ struct MyClass {
 };
 
 int main(int argc, char** argv) {
-  auto comm = vt_lb::comm::CommVT();
+  auto comm = vt_lb::comm::CommMPI();
   comm.init(argc, argv);
 
   auto cls = std::make_unique<MyClass>();
@@ -37,6 +38,13 @@ int main(int argc, char** argv) {
   }
 
   printf("out of poll\n");
+
+  vt_lb::runLB(
+    vt_lb::DriverAlgoEnum::TemperedLB,
+    comm,
+    vt_lb::algo::temperedlb::Configuration{},
+    nullptr
+  );
 
   comm.finalize();
   return 0;

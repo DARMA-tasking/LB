@@ -41,7 +41,7 @@
 //@HEADER
 */
 
-#include "termination.h"
+#include "vt-lb/comm/termination.h"
 #include "vt-lb/comm/comm_mpi.h"
 
 #define DEBUG_TERMINATION 0
@@ -55,7 +55,7 @@ void TerminationDetector::init(CommMPI& comm, ClassHandle<TerminationDetector> h
   parent_ = (rank_ == 0) ? -1 : (rank_ - 1) / kArity;
   first_child_ = rank_ * kArity + 1;
   num_children_ = std::min(kArity, std::max(0, size_ - first_child_));
-  
+
   startFirstWave();
 }
 
@@ -106,7 +106,7 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
 
   global_sent1_ += in_sent;
   global_recv1_ += in_recv;
-  
+
   waiting_children_--;
 
   if (waiting_children_ == 0) {
@@ -118,13 +118,13 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
 
     if (rank_ == 0) {
       // Root checks for termination
-      
+
 #if DEBUG_TERMINATION
       printf("Root total: s1=%lld, r1=%lld, s2=%lld, r2=%lld\n",
              global_sent1_, global_recv1_, global_sent2_, global_recv2_);
 #endif
 
-      if (global_sent1_ == global_recv1_ && 
+      if (global_sent1_ == global_recv1_ &&
           global_sent2_ == global_recv2_ &&
           global_sent1_ == global_sent2_ &&
           global_sent1_ > 0) { // Only terminate after some activity

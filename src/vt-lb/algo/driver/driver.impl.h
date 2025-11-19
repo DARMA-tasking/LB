@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                class_handle.h
+//                                  driver.cc
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form, must reproduce the above copyright notice,
+// * Redistributions in binary form must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,62 +41,34 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
-#define INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
+#if !defined INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_IMPL_H
+#define INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_IMPL_H
 
-#include <mpi.h>
+#include <vt-lb/algo/temperedlb/temperedlb.h>
+#include "vt-lb/algo/driver/driver.h"
 
-namespace vt_lb::comm {
+namespace vt_lb {
 
-struct CommMPI;
+template <typename CommT, typename ConfigT>
+void runLB(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<model::PhaseData> phase_data) {
+  switch (algo) {
+  case DriverAlgoEnum::None:
+    // No load balancing
+    break;
+  case DriverAlgoEnum::TemperedLB:
+    {
+    // Run TemperedLB algorithm
+    auto lb = std::make_unique<algo::temperedlb::TemperedLB<CommT>>(comm, config);
+    lb->makeHandle();
+    lb->inputData(std::move(phase_data));
+    lb->run();
+    }
+    break;
+  default:
+    throw std::runtime_error("Invalid load balancer algorithm");
+  }
+}
 
-template <typename T>
-struct ClassHandle;
+} /* end namespace vt_lb */
 
-template <typename T>
-struct ClassHandleRank {
-  ClassHandleRank(ClassHandle<T> in_handle, int in_rank);
-  
-  template <auto fn, typename... Args>
-  void send(Args&&... args);
-  
-  template <auto fn, typename... Args>
-  void sendTerm(Args&&... args);
-
-private:
-  ClassHandle<T> handle_;
-  int rank_ = -1;
-};
-
-template <typename T>
-struct ClassHandle {
-  ClassHandle() = default;
-  ClassHandle(int in_index, CommMPI* in_comm);
-  ClassHandle(ClassHandle const&) = default;
-  ClassHandle& operator=(ClassHandle const&) = default;
-
-  void unregister();
-  T* get();
-  ClassHandleRank<T> operator[](int rank);
-
-  template <auto fn, typename... Args>
-  void send(int dest, Args&&... args);
-
-  template <auto fn, typename... Args>
-  void sendTerm(int dest, Args&&... args);
-
-  template <typename U, typename V>
-  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
-
-  friend struct ClassHandleRank<T>;
-
-  int getIndex() const { return index_; }
-
-private:
-  int index_ = 0;
-  CommMPI* comm_;
-};
-
-} // namespace vt_lb::comm
-
-#endif /*INCLUDED_VT_LB_COMM_CLASS_HANDLE_H*/
+#endif /*INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_IMPL_H*/

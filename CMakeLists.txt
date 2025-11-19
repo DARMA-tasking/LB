@@ -13,9 +13,9 @@ find_package(MPI REQUIRED)
 find_package(vt)
 
 # vt includes magistrate
-if(NOT vt_FOUND)
+#if(NOT vt_FOUND)
   find_package(magistrate REQUIRED)
-endif()
+#endif()
 
 file(
   GLOB
@@ -34,6 +34,7 @@ set(
 # Specify the C++ standard
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")

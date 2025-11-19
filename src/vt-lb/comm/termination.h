@@ -46,7 +46,7 @@
 
 #include <cstdint>
 #include <memory>
-#include "class_handle.h"
+#include "vt-lb/comm/class_handle.h"
 
 namespace vt_lb::comm {
 

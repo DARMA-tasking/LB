@@ -249,6 +249,9 @@ private:
 };
 
 struct CommVT {
+  template <typename T>
+  using HandleType = ProxyWrapper<T>;
+
   CommVT() = default;
 
   /**

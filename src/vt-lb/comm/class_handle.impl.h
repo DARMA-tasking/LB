@@ -91,7 +91,7 @@ ClassHandleRank<T> ClassHandle<T>::operator[](int rank) {
 template <typename T>
 template <auto fn, typename... Args>
 void ClassHandle<T>::send(int dest, Args&&... args) {
-  comm_->template send<fn>(dest, index_, std::forward<Args>(args)...);
+  comm_->template send<fn>(dest, *this, std::forward<Args>(args)...);
 }
 
 template <typename T>

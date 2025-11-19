@@ -55,8 +55,8 @@
 
 #include <checkpoint/checkpoint.h>
 
-#include "termination.h"
-#include "class_handle.h"
+#include "vt-lb/comm/termination.h"
+#include "vt-lb/comm/class_handle.h"
 
 /**
  * \namespace vt_lb::comm
@@ -167,6 +167,9 @@ struct CommMPI {
   using SizeType = std::size_t;
   using RequestType = MPI_Request;
 
+  template <typename T>
+  using HandleType = ClassHandle<T>;
+
   /**
    * \brief Construct a new CommMPI instance
    * \param comm The MPI communicator to use (defaults to MPI_COMM_WORLD)
@@ -247,9 +250,9 @@ struct CommMPI {
    * \param args Arguments to serialize and send
    * \throws std::runtime_error if destination rank is invalid
    */
-  template <auto fn, typename... Args>
-  void send(int dest, int idx, Args&&... args) {
-    sendImpl<fn>(dest, idx, false, std::forward<Args>(args)...);
+  template <auto fn, typename ProxyT, typename... Args>
+  void send(int dest, ProxyT proxy, Args&&... args) {
+    sendImpl<fn>(dest, proxy.getIndex(), false, std::forward<Args>(args)...);
   }
 
   template <auto fn, typename... Args>

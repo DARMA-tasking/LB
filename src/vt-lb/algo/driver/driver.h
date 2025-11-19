@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                class_handle.h
+//                                  driver.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form, must reproduce the above copyright notice,
+// * Redistributions in binary form must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,62 +41,25 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
-#define INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
+#if !defined INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_H
+#define INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_H
 
-#include <mpi.h>
+#include "vt-lb/model/PhaseData.h"
 
-namespace vt_lb::comm {
+#include <memory>
 
-struct CommMPI;
+namespace vt_lb {
 
-template <typename T>
-struct ClassHandle;
-
-template <typename T>
-struct ClassHandleRank {
-  ClassHandleRank(ClassHandle<T> in_handle, int in_rank);
-  
-  template <auto fn, typename... Args>
-  void send(Args&&... args);
-  
-  template <auto fn, typename... Args>
-  void sendTerm(Args&&... args);
-
-private:
-  ClassHandle<T> handle_;
-  int rank_ = -1;
+enum class DriverAlgoEnum {
+  None,
+  TemperedLB,
 };
 
-template <typename T>
-struct ClassHandle {
-  ClassHandle() = default;
-  ClassHandle(int in_index, CommMPI* in_comm);
-  ClassHandle(ClassHandle const&) = default;
-  ClassHandle& operator=(ClassHandle const&) = default;
+template <typename CommT, typename ConfigT>
+void runLB(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<model::PhaseData> phase_data);
 
-  void unregister();
-  T* get();
-  ClassHandleRank<T> operator[](int rank);
+} /* end namespace vt_lb */
 
-  template <auto fn, typename... Args>
-  void send(int dest, Args&&... args);
+#include "vt-lb/algo/driver/driver.impl.h"
 
-  template <auto fn, typename... Args>
-  void sendTerm(int dest, Args&&... args);
-
-  template <typename U, typename V>
-  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
-
-  friend struct ClassHandleRank<T>;
-
-  int getIndex() const { return index_; }
-
-private:
-  int index_ = 0;
-  CommMPI* comm_;
-};
-
-} // namespace vt_lb::comm
-
-#endif /*INCLUDED_VT_LB_COMM_CLASS_HANDLE_H*/
+#endif /*INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_H*/

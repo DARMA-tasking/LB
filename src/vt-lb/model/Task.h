@@ -46,6 +46,8 @@
 
 #include "types.h"
 
+#include <unordered_set>
+
 namespace vt_lb::model {
 
 struct TaskMemory {
@@ -103,8 +105,8 @@ struct Task {
 
 private:
     TaskType id_ = invalid_task;
-    NodeType home_ = invalid_node;
-    NodeType current_ = invalid_node;
+    int home_ = invalid_node;
+    int current_ = invalid_node;
     bool migratable_ = true;
     TaskMemory memory_;
     LoadType load_ = 0.0;

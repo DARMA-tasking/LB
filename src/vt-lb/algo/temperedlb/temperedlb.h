@@ -48,6 +48,7 @@
 #include <vt-lb/algo/baselb/baselb.h>
 
 #include <limits>
+#include <random>
 
 namespace vt_lb::algo::temperedlb {
 
@@ -63,6 +64,12 @@ struct WorkModel {
 };
 
 struct Configuration {
+  Configuration() = default;
+  Configuration(int num_ranks) {
+    f_ = 2;
+    k_max_ = std::ceil(std::sqrt(std::log(num_ranks)/std::log(2.0)));
+  }
+
   /// @brief  Number of trials to perform
   int num_trials_ = 1;
   /// @brief  Number of iterations per trial
@@ -70,13 +77,80 @@ struct Configuration {
   /// @brief  Fanout for information propagation
   int f_ = 2;
   /// @brief  Number of rounds of information propagation
-  int k_max_ = 0;
+  int k_max_ = 1;
+
+  bool async_ip_ = true;
 
   /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
   WorkModel work_model_;
 
   /// @brief Tolerance for convergence
   double converge_tolerance_ = 0.01;
+};
+
+template <typename CommT, typename DataT, typename JoinT>
+struct InformationPropagation {
+  using ThisType = InformationPropagation<CommT, DataT, JoinT>;
+  using JoinedDataType = std::unordered_map<int, DataT>;
+
+  InformationPropagation(CommT& comm, int f, int k_max)
+    : comm_(comm.clone()), f_(f), k_max_(k_max)
+  {
+    handle_ = comm_.template registerInstanceCollective<ThisType>(this);
+  }
+
+  void run(DataT initial_data) {
+    // Insert my own rank to avoid self-selection
+    already_selected_.insert(comm_.getRank());
+
+    local_data_[comm_.getRank()] = initial_data;
+
+    sendToFanout(1, local_data_);
+
+    while (comm_.poll()) {
+      // do nothing
+    }
+
+    printf("%d: done with poll: local_data size=%zu\n", comm_.getRank(), local_data_.size());
+  }
+
+  void sendToFanout(int round, JoinedDataType const& data) {
+    int num_ranks = comm_.numRanks();
+
+    for (int i = 1; i <= f_; ++i) {
+      if (already_selected_.size() >= static_cast<size_t>(num_ranks)) {
+        return;
+      }
+
+      std::uniform_int_distribution<int> dist(0, num_ranks - 1);
+      int target = -1;
+      do {
+        target = dist(gen_select_);
+      } while (already_selected_.find(target) != already_selected_.end());
+
+      already_selected_.insert(target);
+
+      //printf("rank %d sending to rank %d\n", comm_.getRank(), target);
+      handle_[target].template send<&ThisType::infoPropagateHandler>(round, data);
+    }
+  }
+
+  void infoPropagateHandler(int round, JoinedDataType incoming_data) {
+    // Process incoming data and add to local data
+     local_data_.insert(incoming_data.begin(), incoming_data.end());
+    if (round < k_max_) {
+      sendToFanout(round + 1, local_data_);
+    }
+  }
+
+private:
+  CommT comm_;
+  int f_ = 2;
+  int k_max_ = 0;
+  std::unordered_set<int> already_selected_;
+  std::unordered_map<int, DataT> local_data_;
+  std::mt19937 gen_select_{std::random_device{}()};
+  typename CommT::template HandleType<ThisType> handle_;
 };
 
 template <typename CommT>
@@ -97,11 +171,22 @@ struct TemperedLB : baselb::BaseLB {
   { }
 
   void makeHandle() {
+    // printf("makeHandle\n");
     handle_ = comm_.template registerInstanceCollective<TemperedLB<CommT>>(this);
   }
 
   void run() {
     // Implementation of the TemperedLB algorithm would go here
+    auto& wm = config_.work_model_;
+    if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
+      using LoadType = double;
+      printf("start InformationPropagation\n");
+      auto ip = InformationPropagation<CommT, LoadType, TemperedLB<CommT>>(
+        comm_, config_.f_, config_.k_max_
+      );
+      ip.run(10.0);
+    }
+
   }
 
 private:

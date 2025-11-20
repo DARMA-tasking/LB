@@ -174,8 +174,21 @@ struct CommMPI {
    * \brief Construct a new CommMPI instance
    * \param comm The MPI communicator to use (defaults to MPI_COMM_WORLD)
    */
-  CommMPI(MPI_Comm comm = MPI_COMM_WORLD) : comm_(comm) {}
+  explicit CommMPI(MPI_Comm comm = MPI_COMM_WORLD) : comm_(comm) { }
 
+  CommMPI(CommMPI const&) = delete;
+  CommMPI(CommMPI&&) = delete;
+  CommMPI& operator=(CommMPI const&) = delete;
+  CommMPI& operator=(CommMPI&&) = delete;
+
+private:
+  CommMPI(MPI_Comm comm, int rank, int size)
+    : comm_(comm), cached_rank_(rank), cached_size_(size)
+  {
+    initTermination();
+  }
+
+public:
  /**
    * \brief Initialize MPI
    * \param argc Pointer to argument count
@@ -183,14 +196,29 @@ struct CommMPI {
    */
   void init(int& argc, char**& argv) {
     MPI_Init(&argc, &argv);
+    MPI_Comm_rank(comm_, &cached_rank_);
+    MPI_Comm_size(comm_, &cached_size_);
     initTermination();
+    // printf("%d: Initialized MPI with %d ranks\n", cached_rank_, cached_size_);
+  }
+
+  CommMPI clone() const {
+    MPI_Comm new_comm;
+    MPI_Comm_dup(comm_, &new_comm);
+    return CommMPI{new_comm, cached_rank_, cached_size_};
   }
 
   /**
    * \brief Finalize MPI
    */
   void finalize() {
+    // printf("%d: Finalizing MPI\n", cached_rank_);
     MPI_Finalize();
+    comm_ = MPI_COMM_NULL;
+  }
+
+  void barrier() {
+    MPI_Barrier(comm_);
   }
 
   /**
@@ -287,6 +315,13 @@ struct CommMPI {
     buf_interpreter.classIndex() = idx;
     buf_interpreter.isTermination() = is_termination_msg ? 1 : 0;
 
+    // printf("%d: MPI_Send to %d handler_index=%d class_index=%d is_termination=%d\n",
+    //   cached_rank_,
+    //   dest,
+    //   buf_interpreter.handlerIndex(),
+    //   buf_interpreter.classIndex(),
+    //   buf_interpreter.isTermination()
+    // );
     MPI_Request req;
     MPI_Isend(
       send_ptr, send_ptr_size, MPI_BYTE, dest, 0, comm_,
@@ -310,6 +345,7 @@ struct CommMPI {
     {
       int flag = 0;
       MPI_Status status;
+      // printf("%d: MPI_Iprobe\n", cached_rank_);
       MPI_Iprobe(MPI_ANY_SOURCE, 0, comm_, &flag, &status);
       if (flag) {
         int count = 0;
@@ -326,12 +362,19 @@ struct CommMPI {
           throw std::runtime_error("Buffer alignment error");
         }
 
+        // printf("%d: MPI_Recv from %d of size %d\n", cached_rank_, status.MPI_SOURCE, count);
         MPI_Recv(buf.data(), count, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG, comm_, MPI_STATUS_IGNORE);
         BufferIntInterpreter buf_interpreter(buf.data());
         int handler_index = buf_interpreter.handlerIndex();
         int class_index = buf_interpreter.classIndex();
         bool is_termination = buf_interpreter.isTermination() != 0;
 
+        // printf("%d: Received message: handler_index=%d class_index=%d is_termination=%d\n",
+        //   cached_rank_,
+        //   handler_index,
+        //   class_index,
+        //   is_termination ? 1 : 0
+        // );
         auto mem_fn = detail::getMember(handler_index);
         assert(class_map_.find(class_index) != class_map_.end() && "Class index not found");
         mem_fn->dispatch(
@@ -367,6 +410,10 @@ struct CommMPI {
    */
   int numRanks() const {
     int size = 0;
+    // printf("%d: numRanks\n", cached_rank_);
+    if (comm_ == MPI_COMM_NULL) {
+      throw std::runtime_error("Communicator is not initialized");
+    }
     MPI_Comm_size(comm_, &size);
     return size;
   }
@@ -377,6 +424,10 @@ struct CommMPI {
    */
   int getRank() const {
     int rank = 0;
+    // printf("%d: getRank\n", cached_rank_);
+    if (comm_ == MPI_COMM_NULL) {
+      throw std::runtime_error("Communicator is not initialized");
+    }
     MPI_Comm_rank(comm_, &rank);
     return rank;
   }
@@ -384,11 +435,14 @@ struct CommMPI {
 private:
   void initTermination();
 
-  MPI_Comm comm_;
+  MPI_Comm comm_ = MPI_COMM_NULL;
   std::list<std::tuple<MPI_Request, std::unique_ptr<char[]>>> pending_;
   int next_class_index_ = 0;
   std::unordered_map<int, void*> class_map_;
   std::unique_ptr<detail::TerminationDetector> termination_detector_;
+
+  int cached_rank_ = -1;
+  int cached_size_ = -1;
 };
 
 inline void CommMPI::initTermination() {

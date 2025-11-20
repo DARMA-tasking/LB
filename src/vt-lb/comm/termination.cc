@@ -119,6 +119,9 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
     if (rank_ == 0) {
       // Root checks for termination
 
+      global_sent1_ += sent_;
+      global_recv1_ += recv_;
+
 #if DEBUG_TERMINATION
       printf("Root total: s1=%lld, r1=%lld, s2=%lld, r2=%lld\n",
              global_sent1_, global_recv1_, global_sent2_, global_recv2_);
@@ -167,7 +170,9 @@ void TerminationDetector::notifyMessageReceive() {
 }
 
 void TerminationDetector::terminated() {
+#if DEBUG_TERMINATION
   printf("%d: Terminated!\n", rank_);
+#endif
   terminated_ = true;
   for (int i = 0; i < num_children_; i++) {
     handle_[first_child_ + i].sendTerm<&TerminationDetector::terminated>();

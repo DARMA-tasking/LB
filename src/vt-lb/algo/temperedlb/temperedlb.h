@@ -92,7 +92,12 @@ template <typename CommT, typename DataT, typename JoinT>
 struct InformationPropagation {
   using ThisType = InformationPropagation<CommT, DataT, JoinT>;
   using JoinedDataType = std::unordered_map<int, DataT>;
+  using HandleType = typename CommT::template HandleType<ThisType>;
 
+  /// @brief Construct information propagation instance
+  /// @param comm Communication interface -- n.b., we clone comm to create a new termination scope
+  /// @param f Fanout parameter
+  /// @param k_max Maximum number of rounds
   InformationPropagation(CommT& comm, int f, int k_max)
     : comm_(comm.clone()), f_(f), k_max_(k_max)
   {
@@ -100,13 +105,14 @@ struct InformationPropagation {
   }
 
   void run(DataT initial_data) {
-    // Insert my own rank to avoid self-selection
+    // Insert this rank to avoid self-selection
     already_selected_.insert(comm_.getRank());
 
     local_data_[comm_.getRank()] = initial_data;
 
     sendToFanout(1, local_data_);
 
+    // Wait for termination to happen
     while (comm_.poll()) {
       // do nothing
     }
@@ -137,7 +143,7 @@ struct InformationPropagation {
 
   void infoPropagateHandler(int round, JoinedDataType incoming_data) {
     // Process incoming data and add to local data
-     local_data_.insert(incoming_data.begin(), incoming_data.end());
+    local_data_.insert(incoming_data.begin(), incoming_data.end());
     if (round < k_max_) {
       sendToFanout(round + 1, local_data_);
     }
@@ -150,11 +156,13 @@ private:
   std::unordered_set<int> already_selected_;
   std::unordered_map<int, DataT> local_data_;
   std::mt19937 gen_select_{std::random_device{}()};
-  typename CommT::template HandleType<ThisType> handle_;
+  HandleType handle_;
 };
 
 template <typename CommT>
 struct TemperedLB : baselb::BaseLB {
+  using HandleType = typename CommT::template HandleType<TemperedLB<CommT>>;
+
 
   // Assert that CommT conforms to the communication interface we expect
   static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
@@ -195,7 +203,7 @@ private:
   /// @brief Configuration parameters
   Configuration config_;
   /// @brief Handle to this load balancer instance
-  typename CommT::template HandleType<TemperedLB<CommT>> handle_;
+  HandleType handle_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

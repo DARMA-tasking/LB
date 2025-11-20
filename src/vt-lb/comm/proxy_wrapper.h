@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                comm_vt.h
+//                              proxy_wrapper.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,50 +41,42 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
-#define INCLUDED_VT_LB_COMM_COMM_VT_H
+#ifndef INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
+#define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 
-#include <vt/configs/types/types_type.h>
-#include <vt/objgroup/proxy/proxy_objgroup.h>
+#include <atomic>
+#include <vt/transport.h>
+#include <mpi.h>
 
 namespace vt_lb::comm {
 
 template <typename ProxyT>
-struct ProxyWrapper;
+struct ProxyWrapper : ProxyT {
+  struct ReduceCtx {
+    void* out_ptr = nullptr;
+    std::atomic<bool> done{false};
+    std::size_t count = 0;
+  };
 
-struct CommVT {
-  template <typename T>
-  using HandleType = ProxyWrapper<vt::objgroup::proxy::Proxy<T>>;
-
-  CommVT() = default;
-  CommVT(CommVT const&) = delete;
-  CommVT(CommVT&&) = delete;
-  ~CommVT();
-
-private:
-  CommVT(vt::EpochType epoch);
-
-public:
-  void init(int& argc, char**& argv);
-  void finalize();
-  int numRanks() const;
-  int getRank() const;
-  bool poll() const;
-  CommVT clone();
+  ProxyWrapper() = default;
+  ProxyWrapper(ProxyT proxy);
 
   template <typename T>
-  ProxyWrapper<vt::objgroup::proxy::Proxy<T>> registerInstanceCollective(T* obj);
+  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, ReduceCtx* ctx);
 
-  template <auto fn, typename ProxyT, typename... Args>
-  void send(vt::NodeType dest, ProxyT proxy, Args&&... args);
+  template <typename U, typename V>
+  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
 
 private:
-  bool terminated_ = false;
-  vt::EpochType epoch_ = vt::no_epoch;
+  enum class VTOp { Plus, Max, Min };
+  static VTOp mapOp(MPI_Op mpio);
+
+  template <typename T, typename SendBufT, typename RecvBufT>
+  void reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count);
 };
 
-} /* end namespace vt_lb::comm */
+} // namespace vt_lb::comm
 
-#include "vt-lb/comm/comm_vt.impl.h"
+#include "vt-lb/comm/proxy_wrapper.impl.h"
 
-#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/
+#endif /* INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H */

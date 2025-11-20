@@ -202,9 +202,13 @@ public:
     // printf("%d: Initialized MPI with %d ranks\n", cached_rank_, cached_size_);
   }
 
-  CommMPI clone() const {
+  CommMPI clone(bool dup_comm = true) const {
     MPI_Comm new_comm;
-    MPI_Comm_dup(comm_, &new_comm);
+    if (dup_comm) {
+      MPI_Comm_dup(comm_, &new_comm);
+    } else {
+      new_comm = comm_;
+    }
     return CommMPI{new_comm, cached_rank_, cached_size_};
   }
 

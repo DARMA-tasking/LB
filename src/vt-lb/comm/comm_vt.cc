@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                comm_vt.h
+//                                comm_vt.cc
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,50 +41,49 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
-#define INCLUDED_VT_LB_COMM_COMM_VT_H
+#include "vt-lb/comm/comm_vt.h"
 
-#include <vt/configs/types/types_type.h>
-#include <vt/objgroup/proxy/proxy_objgroup.h>
+#include <vt/transport.h>
 
 namespace vt_lb::comm {
 
-template <typename ProxyT>
-struct ProxyWrapper;
+void CommVT::init(int& argc, char**& argv) {
+  vt::initialize(argc, argv);
+  vt::theTerm()->addDefaultAction([this]{ terminated_ = true; });
+}
 
-struct CommVT {
-  template <typename T>
-  using HandleType = ProxyWrapper<vt::objgroup::proxy::Proxy<T>>;
+void CommVT::finalize() {
+  vt::finalize();
+}
 
-  CommVT() = default;
-  CommVT(CommVT const&) = delete;
-  CommVT(CommVT&&) = delete;
-  ~CommVT();
+CommVT CommVT::clone() {
+  auto ep = vt::theTerm()->makeEpochCollective("vt-lb::comm::CommVT::clone");
+  return CommVT{ep};
+}
 
-private:
-  CommVT(vt::EpochType epoch);
+CommVT::CommVT(vt::EpochType epoch) : epoch_(epoch) {
+  vt::theTerm()->addAction(epoch_, [this]{ terminated_ = true; });
+  vt::theTerm()->pushEpoch(epoch_);
+  vt::theTerm()->finishedEpoch(epoch_);
+}
 
-public:
-  void init(int& argc, char**& argv);
-  void finalize();
-  int numRanks() const;
-  int getRank() const;
-  bool poll() const;
-  CommVT clone();
+CommVT::~CommVT() {
+  if (epoch_ != vt::no_epoch) {
+    vt::theTerm()->popEpoch(epoch_);
+  }
+}
 
-  template <typename T>
-  ProxyWrapper<vt::objgroup::proxy::Proxy<T>> registerInstanceCollective(T* obj);
+int CommVT::numRanks() const {
+  return static_cast<int>(vt::theContext()->getNumNodes());
+}
 
-  template <auto fn, typename ProxyT, typename... Args>
-  void send(vt::NodeType dest, ProxyT proxy, Args&&... args);
+int CommVT::getRank() const {
+  return static_cast<int>(vt::theContext()->getNode());
+}
 
-private:
-  bool terminated_ = false;
-  vt::EpochType epoch_ = vt::no_epoch;
-};
+bool CommVT::poll() const {
+  vt::theSched()->runSchedulerOnceImpl();
+  return !terminated_;
+}
 
-} /* end namespace vt_lb::comm */
-
-#include "vt-lb/comm/comm_vt.impl.h"
-
-#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/
+} // namespace vt_lb::comm

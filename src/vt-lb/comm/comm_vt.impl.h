@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                comm_vt.h
+//                                comm_vt.impl.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,50 +41,29 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
-#define INCLUDED_VT_LB_COMM_COMM_VT_H
+#if !defined INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H
+#define INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H
 
-#include <vt/configs/types/types_type.h>
-#include <vt/objgroup/proxy/proxy_objgroup.h>
+#include "vt-lb/comm/comm_vt.h"
+#include "vt-lb/comm/proxy_wrapper.h"
+#include <vt/transport.h>
 
 namespace vt_lb::comm {
 
-template <typename ProxyT>
-struct ProxyWrapper;
+template <typename T>
+ProxyWrapper<vt::objgroup::proxy::Proxy<T>> CommVT::registerInstanceCollective(T* obj) {
+  return ProxyWrapper{vt::theObjGroup()->makeCollective<T>(
+    obj, "CommVT_ObjGroup"
+  )};
+}
 
-struct CommVT {
-  template <typename T>
-  using HandleType = ProxyWrapper<vt::objgroup::proxy::Proxy<T>>;
+template <auto fn, typename ProxyT, typename... Args>
+void CommVT::send(vt::NodeType dest, ProxyT proxy, Args&&... args) {
+  proxy[dest].template send<fn>(std::forward<Args>(args)...);
+}
 
-  CommVT() = default;
-  CommVT(CommVT const&) = delete;
-  CommVT(CommVT&&) = delete;
-  ~CommVT();
+} // namespace vt_lb::comm
 
-private:
-  CommVT(vt::EpochType epoch);
+#include "vt-lb/comm/proxy_wrapper.impl.h"
 
-public:
-  void init(int& argc, char**& argv);
-  void finalize();
-  int numRanks() const;
-  int getRank() const;
-  bool poll() const;
-  CommVT clone();
-
-  template <typename T>
-  ProxyWrapper<vt::objgroup::proxy::Proxy<T>> registerInstanceCollective(T* obj);
-
-  template <auto fn, typename ProxyT, typename... Args>
-  void send(vt::NodeType dest, ProxyT proxy, Args&&... args);
-
-private:
-  bool terminated_ = false;
-  vt::EpochType epoch_ = vt::no_epoch;
-};
-
-} /* end namespace vt_lb::comm */
-
-#include "vt-lb/comm/comm_vt.impl.h"
-
-#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/
+#endif /* INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H */

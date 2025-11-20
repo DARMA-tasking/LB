@@ -37,10 +37,15 @@ int main(int argc, char** argv) {
   printf("Running runLB\n");
   //comm.barrier();
 
+  vt_lb::algo::temperedlb::Configuration config{comm.numRanks()};
+  config.deterministic_ = true;
+  config.seed_ = 97;
+  //config.k_max_ = 1;
+
   vt_lb::runLB(
     vt_lb::DriverAlgoEnum::TemperedLB,
     comm,
-    vt_lb::algo::temperedlb::Configuration{comm.numRanks()},
+    config,
     nullptr
   );
 

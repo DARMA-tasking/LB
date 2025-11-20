@@ -78,6 +78,10 @@ struct Configuration {
   int f_ = 2;
   /// @brief  Number of rounds of information propagation
   int k_max_ = 1;
+  /// @brief Whether to use deterministic selection
+  bool deterministic_ = true;
+  /// @brief Seed for random number generation when deterministic_ is true
+  int seed_ = 29;
 
   bool async_ip_ = true;
 
@@ -94,14 +98,26 @@ struct InformationPropagation {
   using JoinedDataType = std::unordered_map<int, DataT>;
   using HandleType = typename CommT::template HandleType<ThisType>;
 
-  /// @brief Construct information propagation instance
-  /// @param comm Communication interface -- n.b., we clone comm to create a new termination scope
-  /// @param f Fanout parameter
-  /// @param k_max Maximum number of rounds
-  InformationPropagation(CommT& comm, int f, int k_max)
-    : comm_(comm.clone()), f_(f), k_max_(k_max)
+  /**
+   * @brief Construct information propagation instance
+   *
+   * @param comm Communication interface -- n.b., we clone comm to create a new termination scope
+   * @param f Fanout parameter
+   * @param k_max Maximum number of rounds
+   * @param deterministic Whether to use deterministic selection
+   *
+   */
+  InformationPropagation(CommT& comm, int f, int k_max, bool deterministic, int seed)
+    : comm_(comm.clone()), // collective operation
+      f_(f),
+      k_max_(k_max),
+      deterministic_(deterministic)
   {
     handle_ = comm_.template registerInstanceCollective<ThisType>(this);
+
+    if (deterministic_) {
+      gen_select_.seed(seed + comm_.getRank());
+    }
   }
 
   void run(DataT initial_data) {
@@ -121,7 +137,11 @@ struct InformationPropagation {
   }
 
   void sendToFanout(int round, JoinedDataType const& data) {
-    int num_ranks = comm_.numRanks();
+    int const rank = comm_.getRank();
+    int const num_ranks = comm_.numRanks();
+
+    sent_count_ = 0;
+    recv_count_ = 0;
 
     for (int i = 1; i <= f_; ++i) {
       if (already_selected_.size() >= static_cast<size_t>(num_ranks)) {
@@ -137,22 +157,48 @@ struct InformationPropagation {
       already_selected_.insert(target);
 
       //printf("rank %d sending to rank %d\n", comm_.getRank(), target);
-      handle_[target].template send<&ThisType::infoPropagateHandler>(round, data);
+      sent_count_++;
+      handle_[target].template send<&ThisType::infoPropagateHandler>(rank, round, data);
+    }
+
+    if (deterministic_) {
+      // In deterministic mode, we expect an ack from each sent message
+      while (sent_count_ != recv_count_) {
+        comm_.poll();
+      }
+
+      if (round < k_max_) {
+        sendToFanout(round + 1, local_data_);
+      }
     }
   }
 
-  void infoPropagateHandler(int round, JoinedDataType incoming_data) {
+  void infoAckHandler() {
+    recv_count_++;
+    //printf("rank %d received ack %d/%d\n", comm_.getRank(), recv_count_, sent_count_);
+  }
+
+  void infoPropagateHandler(int from_rank, int round, JoinedDataType incoming_data) {
     // Process incoming data and add to local data
     local_data_.insert(incoming_data.begin(), incoming_data.end());
-    if (round < k_max_) {
-      sendToFanout(round + 1, local_data_);
+
+    if (deterministic_) {
+      // Acknowledge receipt of message to sender before we go to the next round
+      handle_[from_rank].template send<&ThisType::infoAckHandler>();
+    } else {
+      if (round < k_max_) {
+        sendToFanout(round + 1, local_data_);
+      }
     }
   }
 
 private:
   CommT comm_;
   int f_ = 2;
-  int k_max_ = 0;
+  int k_max_ = 2;
+  bool deterministic_ = false;
+  int sent_count_ = 0;
+  int recv_count_ = 0;
   std::unordered_set<int> already_selected_;
   std::unordered_map<int, DataT> local_data_;
   std::mt19937 gen_select_{std::random_device{}()};
@@ -190,7 +236,11 @@ struct TemperedLB : baselb::BaseLB {
       using LoadType = double;
       printf("start InformationPropagation\n");
       auto ip = InformationPropagation<CommT, LoadType, TemperedLB<CommT>>(
-        comm_, config_.f_, config_.k_max_
+        comm_,
+        config_.f_,
+        config_.k_max_,
+        config_.deterministic_,
+        config_.seed_
       );
       ip.run(10.0);
     }

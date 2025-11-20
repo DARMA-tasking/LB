@@ -230,11 +230,12 @@ struct TemperedLB : baselb::BaseLB {
   }
 
   void run() {
-    // Implementation of the TemperedLB algorithm would go here
+    auto total_load = computeLoad();
+    printf("%d: initial total load: %f\n", comm_.getRank(), total_load);
+
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
       using LoadType = double;
-      printf("start InformationPropagation\n");
       auto ip = InformationPropagation<CommT, LoadType, TemperedLB<CommT>>(
         comm_,
         config_.f_,
@@ -242,7 +243,7 @@ struct TemperedLB : baselb::BaseLB {
         config_.deterministic_,
         config_.seed_
       );
-      ip.run(10.0);
+      ip.run(total_load);
     }
 
   }

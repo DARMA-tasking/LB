@@ -54,6 +54,14 @@ struct BaseLB {
     phase_data_ = std::move(phase_data);
   }
 
+  double computeLoad() const {
+    double load = 0.0;
+    for (auto const& [id, task] : phase_data_->getTasksMap()) {
+      load += task.getLoad();
+    }
+    return load;
+  }
+
 protected:
   /// @brief Phase data for load balancing
   std::unique_ptr<model::PhaseData> phase_data_;

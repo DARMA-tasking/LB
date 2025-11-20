@@ -34,19 +34,31 @@ int main(int argc, char** argv) {
   //   handle[0].send<&MyClass::myHandler>(2, 10.3);
   // }
 
-  printf("Running runLB\n");
-  //comm.barrier();
+  printf("%d: Running runLB\n", comm.getRank());
 
   vt_lb::algo::temperedlb::Configuration config{comm.numRanks()};
   config.deterministic_ = true;
   config.seed_ = 97;
   //config.k_max_ = 1;
 
+  vt_lb::model::PhaseData phase_data{comm.getRank()};
+  for (int i = 0; i < 5; ++i) {
+    vt_lb::model::Task task{
+      (uint64_t)(i + comm.getRank() * 10),
+      comm.getRank(),
+      comm.getRank(),
+      true,
+      vt_lb::model::TaskMemory{1024, 512, 256},
+      10.0 + i + comm.getRank()
+    };
+    phase_data.addTask(task);
+  }
+
   vt_lb::runLB(
     vt_lb::DriverAlgoEnum::TemperedLB,
     comm,
     config,
-    nullptr
+    std::make_unique<vt_lb::model::PhaseData>(phase_data)
   );
 
   while (comm.poll()) {

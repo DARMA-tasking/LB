@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                termination.h
+//                                comm_vt.cc
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,50 +41,49 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_TERMINATION_H
-#define INCLUDED_VT_LB_COMM_TERMINATION_H
+#include "vt-lb/comm/VT/comm_vt.h"
 
-#include <cstdint>
-#include <memory>
-#include "vt-lb/comm/class_handle.h"
+#include <vt/transport.h>
 
 namespace vt_lb::comm {
 
-struct CommMPI;
-template <typename T>
-struct ClassHandle;
+void CommVT::init(int& argc, char**& argv) {
+  vt::initialize(argc, argv);
+  vt::theTerm()->addDefaultAction([this]{ terminated_ = true; });
+}
 
-namespace detail {
+void CommVT::finalize() {
+  vt::finalize();
+}
 
-struct TerminationDetector {
-  static constexpr int kArity = 4;
+CommVT CommVT::clone() {
+  auto ep = vt::theTerm()->makeEpochCollective("vt-lb::comm::CommVT::clone");
+  return CommVT{ep};
+}
 
-  void init(CommMPI& comm, ClassHandle<TerminationDetector> handle);
-  void startFirstWave();
-  void onControl();
-  void onResponse(uint64_t in_sent, uint64_t in_recv);
-  void notifyMessageSend();
-  void notifyMessageReceive();
-  bool isTerminated() const { return terminated_; }
-  void sendControlToChildren();
-  void sendResponseToParent(uint64_t in_sent, uint64_t in_recv);
-  void terminated();
+CommVT::CommVT(vt::EpochType epoch) : epoch_(epoch) {
+  vt::theTerm()->addAction(epoch_, [this]{ terminated_ = true; });
+  vt::theTerm()->pushEpoch(epoch_);
+  vt::theTerm()->finishedEpoch(epoch_);
+}
 
-  int rank_ = 0;
-  int size_ = 0;
-  int parent_ = -1;
-  int first_child_ = 0;
-  int num_children_ = 0;
-  int waiting_children_ = 0;
-  bool terminated_ = false;
-  uint64_t sent_ = 0;
-  uint64_t recv_ = 0;
-  uint64_t global_sent1_ = 0, global_recv1_ = 0;
-  uint64_t global_sent2_ = 0, global_recv2_ = 0;
-  ClassHandle<TerminationDetector> handle_;
-};
+CommVT::~CommVT() {
+  if (epoch_ != vt::no_epoch) {
+    vt::theTerm()->popEpoch(epoch_);
+  }
+}
 
-} // namespace detail
+int CommVT::numRanks() const {
+  return static_cast<int>(vt::theContext()->getNumNodes());
+}
+
+int CommVT::getRank() const {
+  return static_cast<int>(vt::theContext()->getNode());
+}
+
+bool CommVT::poll() const {
+  vt::theSched()->runSchedulerOnceImpl();
+  return !terminated_;
+}
+
 } // namespace vt_lb::comm
-
-#endif /*INCLUDED_VT_LB_COMM_TERMINATION_H*/

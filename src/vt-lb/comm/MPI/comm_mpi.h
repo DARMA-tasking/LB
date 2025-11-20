@@ -55,8 +55,8 @@
 
 #include <checkpoint/checkpoint.h>
 
-#include "vt-lb/comm/termination.h"
-#include "vt-lb/comm/class_handle.h"
+#include "vt-lb/comm/MPI/termination.h"
+#include "vt-lb/comm/MPI/class_handle.h"
 
 /**
  * \namespace vt_lb::comm
@@ -456,6 +456,6 @@ inline void CommMPI::initTermination() {
 
 } /* end namespace vt_lb::comm */
 
-#include "class_handle.impl.h"
+#include "vt-lb/comm/MPI/class_handle.impl.h"
 
 #endif /*INCLUDED_VT_LB_COMM_COMM_MPI_H*/

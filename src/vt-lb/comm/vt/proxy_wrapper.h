@@ -77,6 +77,6 @@ private:
 
 } // namespace vt_lb::comm
 
-#include "vt-lb/comm/proxy_wrapper.impl.h"
+#include "vt-lb/comm/VT/proxy_wrapper.impl.h"
 
 #endif /* INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H */

@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                comm_vt.h
+//                                termination.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,50 +41,52 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
-#define INCLUDED_VT_LB_COMM_COMM_VT_H
+#if !defined INCLUDED_VT_LB_COMM_TERMINATION_H
+#define INCLUDED_VT_LB_COMM_TERMINATION_H
 
-#include <vt/configs/types/types_type.h>
-#include <vt/objgroup/proxy/proxy_objgroup.h>
+#include "vt-lb/comm/MPI/class_handle.h"
+
+#include <cstdint>
+#include <memory>
 
 namespace vt_lb::comm {
 
-template <typename ProxyT>
-struct ProxyWrapper;
+struct CommMPI;
 
-struct CommVT {
-  template <typename T>
-  using HandleType = ProxyWrapper<vt::objgroup::proxy::Proxy<T>>;
+template <typename T>
+struct ClassHandle;
 
-  CommVT() = default;
-  CommVT(CommVT const&) = delete;
-  CommVT(CommVT&&) = delete;
-  ~CommVT();
+namespace detail {
 
-private:
-  CommVT(vt::EpochType epoch);
+struct TerminationDetector {
+  static constexpr int kArity = 4;
 
-public:
-  void init(int& argc, char**& argv);
-  void finalize();
-  int numRanks() const;
-  int getRank() const;
-  bool poll() const;
-  CommVT clone();
+  void init(CommMPI& comm, ClassHandle<TerminationDetector> handle);
+  void startFirstWave();
+  void onControl();
+  void onResponse(uint64_t in_sent, uint64_t in_recv);
+  void notifyMessageSend();
+  void notifyMessageReceive();
+  bool isTerminated() const { return terminated_; }
+  void sendControlToChildren();
+  void sendResponseToParent(uint64_t in_sent, uint64_t in_recv);
+  void terminated();
 
-  template <typename T>
-  ProxyWrapper<vt::objgroup::proxy::Proxy<T>> registerInstanceCollective(T* obj);
-
-  template <auto fn, typename ProxyT, typename... Args>
-  void send(vt::NodeType dest, ProxyT proxy, Args&&... args);
-
-private:
+  int rank_ = 0;
+  int size_ = 0;
+  int parent_ = -1;
+  int first_child_ = 0;
+  int num_children_ = 0;
+  int waiting_children_ = 0;
   bool terminated_ = false;
-  vt::EpochType epoch_ = vt::no_epoch;
+  uint64_t sent_ = 0;
+  uint64_t recv_ = 0;
+  uint64_t global_sent1_ = 0, global_recv1_ = 0;
+  uint64_t global_sent2_ = 0, global_recv2_ = 0;
+  ClassHandle<TerminationDetector> handle_;
 };
 
-} /* end namespace vt_lb::comm */
+} // namespace detail
+} // namespace vt_lb::comm
 
-#include "vt-lb/comm/comm_vt.impl.h"
-
-#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/
+#endif /*INCLUDED_VT_LB_COMM_TERMINATION_H*/

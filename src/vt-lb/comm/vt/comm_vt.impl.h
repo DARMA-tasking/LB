@@ -44,8 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H
 #define INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H
 
-#include "vt-lb/comm/comm_vt.h"
-#include "vt-lb/comm/proxy_wrapper.h"
+#include "vt-lb/comm/VT/comm_vt.h"
+#include "vt-lb/comm/VT/proxy_wrapper.h"
 #include <vt/transport.h>
 
 namespace vt_lb::comm {
@@ -64,6 +64,6 @@ void CommVT::send(vt::NodeType dest, ProxyT proxy, Args&&... args) {
 
 } // namespace vt_lb::comm
 
-#include "vt-lb/comm/proxy_wrapper.impl.h"
+#include "vt-lb/comm/VT/proxy_wrapper.impl.h"
 
 #endif /* INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H */

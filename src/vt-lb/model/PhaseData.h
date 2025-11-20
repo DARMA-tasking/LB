@@ -48,7 +48,9 @@
 #include "SharedBlock.h"
 #include "Task.h"
 #include "Communication.h"
+
 #include <unordered_map>
+#include <vector>
 
 namespace vt_lb::model {
 

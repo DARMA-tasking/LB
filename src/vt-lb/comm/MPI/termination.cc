@@ -41,8 +41,8 @@
 //@HEADER
 */
 
-#include "vt-lb/comm/termination.h"
-#include "vt-lb/comm/comm_mpi.h"
+#include "vt-lb/comm/MPI/termination.h"
+#include "vt-lb/comm/MPI/comm_mpi.h"
 
 #define DEBUG_TERMINATION 0
 

@@ -1,7 +1,9 @@
 set(
   TOP_LEVEL_SUBDIRS
-  algo algo/baselb algo/temperedlb algo/driver
+  algo
+    algo/baselb algo/temperedlb algo/driver
   comm
+    comm/MPI comm/VT
   input
   model
 )

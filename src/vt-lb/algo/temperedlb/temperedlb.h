@@ -69,6 +69,17 @@ struct WorkModel {
   double gamma = 0.0;
   /// @brief  Coefficient for shared-memory communication component
   double delta = 0.0;
+
+  double applyWorkFormula(
+    double compute, double inter_comm_bytes, double intra_comm_bytes,
+    double shared_comm_bytes
+  ) const {
+    return
+      rank_alpha * compute +
+      beta  * inter_comm_bytes +
+      gamma * intra_comm_bytes +
+      delta * shared_comm_bytes;
+  }
 };
 
 struct Configuration {
@@ -223,10 +234,21 @@ private:
   HandleType handle_;
 };
 
-struct TaskClusterInfo {
+struct TaskClusterSummaryInfo {
   int cluster_id = -1;
+  int num_tasks_ = 0;
   double cluster_load = 0.0;
-  double cluster_inter_bytes = 0.0;
+  double cluster_intra_send_bytes = 0.0;
+  double cluster_intra_recv_bytes = 0.0;
+  std::unordered_set<model::Edge> inter_edges_;
+
+  // Memory info
+  std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
+  model::BytesType max_object_working_bytes = 0;
+  model::BytesType max_object_working_bytes_outside = 0;
+  model::BytesType max_object_serialized_bytes = 0;
+  model::BytesType max_object_serialized_bytes_outside = 0;
+  model::BytesType cluster_footprint = 0;
 };
 
 template <typename CommT>
@@ -282,10 +304,6 @@ struct TemperedLB : baselb::BaseLB {
     if (ofs.good()) {
       ofs << dot;
     }
-  }
-
-  double computeWork() const {
-
   }
 
   void run() {

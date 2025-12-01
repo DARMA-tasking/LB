@@ -62,6 +62,13 @@ struct BaseLB {
     return load;
   }
 
+  std::size_t numTasks() const {
+    return phase_data_->getTasksMap().size();
+  }
+
+  auto const& getPhaseData() const { return *phase_data_; }
+  auto& getPhaseData() { return *phase_data_; }
+
 protected:
   /// @brief Phase data for load balancing
   std::unique_ptr<model::PhaseData> phase_data_;

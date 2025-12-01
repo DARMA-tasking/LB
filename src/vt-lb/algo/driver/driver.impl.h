@@ -59,7 +59,6 @@ void runLB(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<mod
     {
     // Run TemperedLB algorithm
     auto lb = std::make_unique<algo::temperedlb::TemperedLB<CommT>>(comm, config);
-    lb->makeHandle();
     lb->inputData(std::move(phase_data));
     lb->run();
     }

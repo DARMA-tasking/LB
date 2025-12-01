@@ -46,9 +46,17 @@
 
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/algo/baselb/baselb.h>
+#include <vt-lb/model/PhaseData.h>
+#include <vt-lb/algo/temperedlb/clustering.h>
+#include <vt-lb/algo/temperedlb/symmetrize_comm.h>
+#include <vt-lb/algo/temperedlb/visualize.h>
 
 #include <limits>
 #include <random>
+#include <ostream>
+#include <fstream>
+
+#include <mpi.h>
 
 namespace vt_lb::algo::temperedlb {
 
@@ -65,7 +73,8 @@ struct WorkModel {
 
 struct Configuration {
   Configuration() = default;
-  Configuration(int num_ranks) {
+
+  explicit Configuration(int num_ranks) {
     f_ = 2;
     k_max_ = std::ceil(std::sqrt(std::log(num_ranks)/std::log(2.0)));
   }
@@ -83,10 +92,17 @@ struct Configuration {
   /// @brief Seed for random number generation when deterministic_ is true
   int seed_ = 29;
 
-  bool async_ip_ = true;
-
   /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
   WorkModel work_model_;
+
+  /// @brief Whether to cluster based on shared blocks
+  bool cluster_based_on_shared_blocks_ = false;
+  /// @brief Whether to cluster based on communication
+  bool cluster_based_on_communication_ = false;
+  /// @brief Whether to visualize the task graph
+  bool visualize_task_graph_ = false;
+  /// @brief Whether to visualize the clusters
+  bool visualize_clusters_ = false;
 
   /// @brief Tolerance for convergence
   double converge_tolerance_ = 0.01;
@@ -120,7 +136,7 @@ struct InformationPropagation {
     }
   }
 
-  void run(DataT initial_data) {
+  JoinedDataType run(DataT initial_data) {
     // Insert this rank to avoid self-selection
     already_selected_.insert(comm_.getRank());
 
@@ -134,6 +150,8 @@ struct InformationPropagation {
     }
 
     printf("%d: done with poll: local_data size=%zu\n", comm_.getRank(), local_data_.size());
+
+    return local_data_;
   }
 
   void sendToFanout(int round, JoinedDataType const& data) {
@@ -205,10 +223,15 @@ private:
   HandleType handle_;
 };
 
+struct TaskClusterInfo {
+  int cluster_id = -1;
+  double cluster_load = 0.0;
+  double cluster_inter_bytes = 0.0;
+};
+
 template <typename CommT>
 struct TemperedLB : baselb::BaseLB {
   using HandleType = typename CommT::template HandleType<TemperedLB<CommT>>;
-
 
   // Assert that CommT conforms to the communication interface we expect
   static_assert(comm::is_comm_conformant<CommT>::value, "CommT must be comm conformant");
@@ -221,17 +244,67 @@ struct TemperedLB : baselb::BaseLB {
    */
   TemperedLB(CommT& comm, Configuration config = Configuration())
       : comm_(comm),
-        config_(config)
+        config_(config),
+        handle_(comm_.template registerInstanceCollective<TemperedLB<CommT>>(this))
   { }
 
-  void makeHandle() {
-    // printf("makeHandle\n");
-    handle_ = comm_.template registerInstanceCollective<TemperedLB<CommT>>(this);
+  void clusterBasedOnCommunication() {
+    auto& pd = this->getPhaseData();
+    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd);
+    clusterer_->compute();
+  }
+
+  void clusterBasedOnSharedBlocks() {
+    auto& pd = this->getPhaseData();
+    clusterer_ = std::make_unique<SharedBlockClusterer>(pd);
+    clusterer_->compute();
+  }
+
+  void makeCommunicationsSymmetric() {
+    CommunicationsSymmetrizer<CommT> symm(comm_, this->getPhaseData());
+    symm.run();
+  }
+
+  void visualizeGraph(const std::string& prefix) const {
+    if (!config_.visualize_task_graph_ && !config_.visualize_clusters_) {
+      return;
+    }
+    std::string base = prefix + "_rank" + std::to_string(comm_.getRank());
+    auto const& pd = this->getPhaseData();
+    const Clusterer* cl = getClusterer();
+    std::string dot = vt_lb::algo::temperedlb::buildTaskGraphDOT(
+      pd,
+      cl,
+      config_.visualize_clusters_,
+      /*show_loads*/true
+    );
+    std::ofstream ofs(base + ".dot");
+    if (ofs.good()) {
+      ofs << dot;
+    }
+  }
+
+  double computeWork() const {
+
   }
 
   void run() {
     auto total_load = computeLoad();
-    printf("%d: initial total load: %f\n", comm_.getRank(), total_load);
+    printf("%d: initial total load: %f, num tasks: %zu\n", comm_.getRank(), total_load, numTasks());
+
+    // Make communications symmetric before distributed decisions
+    makeCommunicationsSymmetric();
+
+    if (config_.cluster_based_on_communication_ || config_.cluster_based_on_shared_blocks_) {
+      if (config_.cluster_based_on_communication_) {
+        clusterBasedOnCommunication();
+      } else if (config_.cluster_based_on_shared_blocks_) {
+        clusterBasedOnSharedBlocks();
+      }
+    }
+
+    // Generate visualization after symmetrization/clustering
+    visualizeGraph("temperedlb2");
 
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
@@ -243,9 +316,46 @@ struct TemperedLB : baselb::BaseLB {
         config_.deterministic_,
         config_.seed_
       );
-      ip.run(total_load);
+      auto info = ip.run(total_load);
+      //printf("%d: gathered load info from %zu ranks\n", comm_.getRank(), info.size());
+    } else {
+#if 0
+      computeGlobalMaxClusters();
+#endif
+    }
+  }
+
+  Clusterer const* getClusterer() const { return clusterer_.get(); }
+
+private:
+  void computeGlobalMaxClusters() {
+    // compute max number of clusters on any rank
+    int local_clusters = 0;
+    if (clusterer_) {
+      // assume Clusterer provides numClusters(); if not, set appropriately
+      local_clusters = static_cast<int>(clusterer_->clusters().size());
     }
 
+    int const root = 0;
+    comm_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
+
+    if (comm_.getRank() == root) {
+      printf("%d: global max clusters across ranks: %d\n", root, global_max_clusters_);
+    }
+  }
+
+  int localToGlobalClusterID(int cluster_id) const {
+    // Map local cluster IDs to global cluster IDs based on global_max_clusters_
+    // Implementation depends on how clusters are represented and communicated
+    return cluster_id + comm_.getRank() * global_max_clusters_;
+  }
+
+  int globalToLocalClusterID(int global_cluster_id) const {
+    return global_cluster_id % global_max_clusters_;
+  }
+
+  int globalClusterToRank(int global_cluster_id) const {
+    return global_cluster_id / global_max_clusters_;
   }
 
 private:
@@ -255,6 +365,10 @@ private:
   Configuration config_;
   /// @brief Handle to this load balancer instance
   HandleType handle_;
+  /// @brief Computed communication-based clusters for current phase
+  std::unique_ptr<Clusterer> clusterer_;
+  /// @brief Global maximum number of clusters across all ranks
+  int global_max_clusters_ = 1000;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

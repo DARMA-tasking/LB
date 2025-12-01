@@ -92,6 +92,10 @@ struct Task {
     TaskMemory const& getMemory() const { return memory_; }
     LoadType getLoad() const { return load_; }
 
+    // Add accessors for shared blocks
+    void addSharedBlock(SharedBlockType sb) { shared_blocks_.insert(sb); }
+    std::unordered_set<SharedBlockType> const& getSharedBlocks() const { return shared_blocks_; }
+
     template <typename Serializer>
     void serialize(Serializer& s) {
       s | id_;

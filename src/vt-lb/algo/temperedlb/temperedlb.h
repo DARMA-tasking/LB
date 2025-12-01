@@ -321,6 +321,8 @@ struct TemperedLB : baselb::BaseLB {
     } else {
 #if 0
       computeGlobalMaxClusters();
+#else
+      // Just assume max of 1000 clusters per rank for now, until we have bcast
 #endif
     }
   }
@@ -342,6 +344,7 @@ private:
     if (comm_.getRank() == root) {
       printf("%d: global max clusters across ranks: %d\n", root, global_max_clusters_);
     }
+    // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
   }
 
   int localToGlobalClusterID(int cluster_id) const {

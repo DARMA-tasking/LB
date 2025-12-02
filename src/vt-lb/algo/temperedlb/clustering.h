@@ -57,6 +57,8 @@
 #include <random>
 #include <deque>
 
+namespace vt_lb::algo::temperedlb {
+
 // Common clustering artifacts
 struct Cluster {
   int id = -1;
@@ -64,6 +66,7 @@ struct Cluster {
   vt_lb::model::LoadType load = 0.0;
 };
 
+// Assumption: all tasks much exist to at least one cluster
 struct Clusterer {
   using TaskType = vt_lb::model::TaskType;
   using BytesType = vt_lb::model::BytesType;
@@ -763,5 +766,19 @@ private:
     }
   }
 };
+
+// Utility: verify that all tasks in pd are present in the cluster mapping
+inline bool allTasksClustered(Clusterer const& clusterer, vt_lb::model::PhaseData const& pd) {
+  auto const& t2c = clusterer.taskToCluster();
+  for (auto const& kv : pd.getTasksMap()) {
+    auto const task_id = kv.first;
+    if (t2c.find(task_id) == t2c.end()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+} // namespace vt_lb::algo::temperedlb
 
 #endif // INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTERING_H

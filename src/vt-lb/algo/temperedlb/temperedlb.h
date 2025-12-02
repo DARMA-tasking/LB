@@ -52,6 +52,7 @@
 #include <vt-lb/algo/temperedlb/clustering.h>
 #include <vt-lb/algo/temperedlb/symmetrize_comm.h>
 #include <vt-lb/algo/temperedlb/visualize.h>
+#include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 
 #include <limits>
 #include <random>
@@ -178,41 +179,6 @@ private:
   HandleType handle_;
 };
 
-struct TaskClusterSummaryInfo {
-  TaskClusterSummaryInfo() = default;
-
-  int cluster_id = -1;
-  int num_tasks_ = 0;
-  double cluster_load = 0.0;
-  double cluster_intra_send_bytes = 0.0;
-  double cluster_intra_recv_bytes = 0.0;
-  std::vector<model::Edge> inter_edges_;
-
-  // Memory info
-  std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
-  model::BytesType max_object_working_bytes = 0;
-  model::BytesType max_object_working_bytes_outside = 0;
-  model::BytesType max_object_serialized_bytes = 0;
-  model::BytesType max_object_serialized_bytes_outside = 0;
-  model::BytesType cluster_footprint = 0;
-
-  template <typename SerializerT>
-  void serializer(SerializerT& s) {
-    s | cluster_id;
-    s | num_tasks_;
-    s | cluster_load;
-    s | cluster_intra_send_bytes;
-    s | cluster_intra_recv_bytes;
-    s | inter_edges_;
-    s | shared_block_bytes_;
-    s | max_object_working_bytes;
-    s | max_object_working_bytes_outside;
-    s | max_object_serialized_bytes;
-    s | max_object_serialized_bytes_outside;
-    s | cluster_footprint;
-  }
-};
-
 template <typename CommT>
 struct TemperedLB : baselb::BaseLB {
   using HandleType = typename CommT::template HandleType<TemperedLB<CommT>>;
@@ -254,89 +220,10 @@ struct TemperedLB : baselb::BaseLB {
     }
   }
 
-  void buildClusterSummaries() {
-    assert(clusterer_ != nullptr && "Clusterer must be initialized to build summaries");
-    auto const& pd = this->getPhaseData();
-    int const rank = comm_.getRank();
-
-    // Task -> local cluster id
-    auto const& t2c = clusterer_->taskToCluster();
-
-    // Prepare summary per local cluster id
-    std::unordered_map<int, TaskClusterSummaryInfo> summary_by_local;
-    for (auto const& cl : clusterer_->clusters()) {
-      TaskClusterSummaryInfo info;
-      info.cluster_id = localToGlobalClusterID(cl.id);
-      info.num_tasks_ = static_cast<int>(cl.members.size());
-      info.cluster_load = cl.load;
-      summary_by_local.emplace(cl.id, std::move(info));
-    }
-
-    // Walk communications: accumulate intra send/recv; collect broadened inter edges starting in a cluster
-    for (auto const& e : pd.getCommunications()) {
-      // Only consider edges that involve this rank
-      if (e.getFromRank() != rank && e.getToRank() != rank) continue;
-
-      auto u = e.getFrom();
-      auto v = e.getTo();
-      if (!pd.hasTask(u) || !pd.hasTask(v)) continue;
-
-      auto itu = t2c.find(u);
-      auto itv = t2c.find(v);
-      int cu = (itu != t2c.end()) ? itu->second : -1; // local cluster id or -1 if unclustered
-      int cv = (itv != t2c.end()) ? itv->second : -1;
-      auto vol = e.getVolume();
-
-      // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
-      if (cu != -1 && cv != -1 && cu == cv) {
-        auto& sum = summary_by_local.at(cu);
-        if (e.getFromRank() == rank) {
-          sum.cluster_intra_send_bytes += vol;
-        }
-        if (e.getToRank() == rank) {
-          sum.cluster_intra_recv_bytes += vol;
-        }
-        continue;
-      }
-
-      // Broadened "inter" edges: if the edge starts in a cluster on this rank, add to that cluster
-      // Conditions:
-      //  - source endpoint (u) is clustered locally (cu != -1)
-      //  - source is on this rank (e.getFromRank() == rank)
-      //  - destination is:
-      //      * in a different local cluster (cv == -1 or cv != cu), or
-      //      * on a different rank (e.getToRank() != rank)
-      if (e.getFromRank() == rank && cu != -1) {
-        bool dest_is_external =
-          (cv == -1) || (cv != cu) || (e.getToRank() != rank);
-        if (dest_is_external) {
-          summary_by_local.at(cu).inter_edges_.push_back(e);
-        }
-      }
-
-      // Enable vice-versa logic to capture edges entering a cluster
-      // Conditions:
-      //  - destination endpoint (v) is clustered locally (cv != -1)
-      //  - destination is on this rank (e.getToRank() == rank)
-      //  - source is:
-      //      * in a different local cluster (cu == -1 or cu != cv), or
-      //      * on a different rank (e.getFromRank() != rank)
-      if (e.getToRank() == rank && cv != -1) {
-        bool src_is_external = (cu == -1) || (cu != cv) || (e.getFromRank() != rank);
-        if (src_is_external) {
-          summary_by_local.at(cv).inter_edges_.push_back(e);
-        }
-      }
-    }
-
-    // Emit summaries
-    for (auto const& cl : clusterer_->clusters()) {
-      auto const& sum = summary_by_local.at(cl.id);
-      printf("%d: buildClusterSummaries cluster %d size=%zu load=%.2f intra_send=%.2f intra_recv=%.2f inter_edges=%zu\n",
-             rank, cl.id, cl.members.size(), cl.load,
-             sum.cluster_intra_send_bytes, sum.cluster_intra_recv_bytes,
-             sum.inter_edges_.size());
-    }
+  std::unordered_map<int, TaskClusterSummaryInfo> buildClusterSummaries() {
+    return ClusterSummarizer::buildClusterSummaries(
+      this->getPhaseData(), getClusterer(), global_max_clusters_
+    );
   }
 
   void makeCommunicationsSymmetric() {
@@ -441,20 +328,6 @@ private:
       printf("%d: global max clusters across ranks: %d\n", root, global_max_clusters_);
     }
     // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
-  }
-
-  int localToGlobalClusterID(int cluster_id) const {
-    // Map local cluster IDs to global cluster IDs based on global_max_clusters_
-    // Implementation depends on how clusters are represented and communicated
-    return cluster_id + comm_.getRank() * global_max_clusters_;
-  }
-
-  int globalToLocalClusterID(int global_cluster_id) const {
-    return global_cluster_id % global_max_clusters_;
-  }
-
-  int globalClusterToRank(int global_cluster_id) const {
-    return global_cluster_id / global_max_clusters_;
   }
 
 private:

@@ -55,6 +55,7 @@
 #include <random>
 #include <ostream>
 #include <fstream>
+#include <cassert>
 
 #include <mpi.h>
 
@@ -69,6 +70,17 @@ struct WorkModel {
   double gamma = 0.0;
   /// @brief  Coefficient for shared-memory communication component
   double delta = 0.0;
+
+  /// @brief Whether memory information is available
+  bool has_memory_info = true;
+  /// @brief Has task serialized memory info
+  bool has_task_serialized_memory_info = true;
+  /// @brief Has task working memory info
+  bool has_task_working_memory_info = true;
+  /// @brief Has task footprint memory info
+  bool has_task_footprint_memory_info = true;
+  /// @brief Has shared block memory info
+  bool has_shared_block_memory_info = true;
 
   double applyWorkFormula(
     double compute, double inter_comm_bytes, double intra_comm_bytes,
@@ -88,6 +100,20 @@ struct Configuration {
   explicit Configuration(int num_ranks) {
     f_ = 2;
     k_max_ = std::ceil(std::sqrt(std::log(num_ranks)/std::log(2.0)));
+  }
+
+  bool hasMemoryInfo() const { return work_model_.has_memory_info; }
+  bool hasTaskSerializedMemoryInfo() const {
+    return hasMemoryInfo() && work_model_.has_task_serialized_memory_info;
+  }
+  bool hasTaskWorkingMemoryInfo() const {
+    return hasMemoryInfo() && work_model_.has_task_working_memory_info;
+  }
+  bool hasTaskFootprintMemoryInfo() const {
+    return hasMemoryInfo() && work_model_.has_task_footprint_memory_info;
+  }
+  bool hasSharedBlockMemoryInfo() const {
+    return hasMemoryInfo() && work_model_.has_shared_block_memory_info;
   }
 
   /// @brief  Number of trials to perform
@@ -249,6 +275,31 @@ struct TaskClusterSummaryInfo {
   model::BytesType max_object_serialized_bytes = 0;
   model::BytesType max_object_serialized_bytes_outside = 0;
   model::BytesType cluster_footprint = 0;
+
+  template <typename SerializerT>
+  void serializer(SerializerT& s) {
+    s | cluster_id;
+    s | num_tasks_;
+    s | cluster_load;
+    s | cluster_intra_send_bytes;
+    s | cluster_intra_recv_bytes;
+    s | inter_edges_;
+    s | shared_block_bytes_;
+    s | max_object_working_bytes;
+    s | max_object_working_bytes_outside;
+    s | max_object_serialized_bytes;
+    s | max_object_serialized_bytes_outside;
+    s | cluster_footprint;
+  }
+};
+
+struct WorkBreakdown {
+  double compute = 0.0;
+  double inter_node_recv_comm = 0.0;
+  double inter_node_send_comm = 0.0;
+  double intra_node_recv_comm = 0.0;
+  double intra_node_send_comm = 0.0;
+  double shared_mem_comm = 0.0;
 };
 
 template <typename CommT>
@@ -346,6 +397,102 @@ struct TemperedLB : baselb::BaseLB {
   }
 
   Clusterer const* getClusterer() const { return clusterer_.get(); }
+
+private:
+  WorkBreakdown computeWorkBreakdown() const {
+    WorkBreakdown breakdown;
+    std::unordered_set<model::SharedBlockType> shared_blocks_here;
+
+    // Rank-alpha term
+    for (auto const& [id, task] : this->getPhaseData().getTasksMap()) {
+      breakdown.compute += task.getLoad();
+      for (auto const& sb : task.getSharedBlocks()) {
+        shared_blocks_here.insert(sb);
+      }
+    }
+
+    // Communication terms
+    for (auto const& e : this->getPhaseData().getCommunications()) {
+      assert(
+        (e.getFromRank() == comm_.getRank() || e.getToRank() == comm_.getRank()) &&
+        "Edge does not belong to this rank"
+      );
+      if (e.getFromRank() != e.getToRank()) {
+        if (e.getToRank() == comm_.getRank()) {
+          breakdown.inter_node_recv_comm += e.getVolume();
+        } else {
+          breakdown.inter_node_send_comm += e.getVolume();
+        }
+      } else {
+        if (e.getToRank() == comm_.getRank()) {
+          breakdown.intra_node_recv_comm += e.getVolume();
+        } else {
+          breakdown.intra_node_send_comm += e.getVolume();
+        }
+      }
+    }
+
+    // Shared-memory communication term
+    for (auto const& sb : shared_blocks_here) {
+      assert(getPhaseData().hasSharedBlock(sb) && "Shared block information missing");
+      auto info = getPhaseData().getSharedBlock(sb);
+      if (info->getHome() != comm_.getRank()) {
+        breakdown.shared_mem_comm += info->getSize();
+      }
+    }
+
+    return breakdown;
+  }
+
+  double computeWork(WorkBreakdown breakdown) const {
+    return config_.work_model_.applyWorkFormula(
+      breakdown.compute,
+      std::max(breakdown.inter_node_recv_comm, breakdown.inter_node_send_comm),
+      std::max(breakdown.intra_node_recv_comm, breakdown.intra_node_send_comm),
+      breakdown.shared_mem_comm
+    );
+  }
+
+  double computeMemoryUsage() const {
+    if (!config_.hasMemoryInfo()) {
+      return 0.0;
+    }
+
+    double task_footprint_bytes_ = 0.0;
+    double task_max_working_bytes_ = 0.0;
+    double task_max_serialized_bytes_ = 0.0;
+    double shared_blocks_bytes_ = 0.0;
+    std::unordered_set<model::SharedBlockType> shared_blocks_here;
+    for (auto const& [id, task] : this->getPhaseData().getTasksMap()) {
+      if (config_.hasTaskFootprintMemoryInfo()) {
+        task_footprint_bytes_ += task.getMemory().footprint_bytes;
+      }
+      if (config_.hasTaskWorkingMemoryInfo()) {
+        task_max_working_bytes_ = std::max(
+          task_max_working_bytes_, task.getMemory().working_bytes
+        );
+      }
+      if (config_.hasTaskSerializedMemoryInfo()) {
+        task_max_serialized_bytes_ = std::max(
+          task_max_serialized_bytes_, task.getMemory().serialized_bytes
+        );
+      }
+      if (config_.hasSharedBlockMemoryInfo()) {
+        for (auto const& sb : task.getSharedBlocks()) {
+          shared_blocks_here.insert(sb);
+        }
+      }
+    }
+    for (auto const& sb : shared_blocks_here) {
+      assert(getPhaseData().hasSharedBlock(sb) && "Shared block information missing");
+      auto info = getPhaseData().getSharedBlock(sb);
+      shared_blocks_bytes_ += info->getSize();
+    }
+    return this->getPhaseData().getRankFootprintBytes() +
+      task_footprint_bytes_ +
+      task_max_working_bytes_ +
+      shared_blocks_bytes_;
+  }
 
 private:
   void computeGlobalMaxClusters() {

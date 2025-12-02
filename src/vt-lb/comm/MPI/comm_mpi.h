@@ -383,7 +383,7 @@ public:
         assert(class_map_.find(class_index) != class_map_.end() && "Class index not found");
         mem_fn->dispatch(
           buf.data() + 3*sizeof(int),
-          class_map_[class_index], 
+          class_map_[class_index],
           true
         );
 

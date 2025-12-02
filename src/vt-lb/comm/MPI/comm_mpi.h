@@ -83,9 +83,9 @@ template <typename ObjT>
 struct RegisteredInfo final : BaseRegisteredInfo {
   using FnType = decltype(ObjT::getFunc());
   FnType fn_ptr;
-  
+
   explicit RegisteredInfo(FnType in_fn_ptr) : fn_ptr(in_fn_ptr) {}
-  
+
   void dispatch(void* data, void* object, bool deserialize) const override {
     typename ObjT::TupleType tup;
     if (deserialize) {
@@ -95,7 +95,7 @@ struct RegisteredInfo final : BaseRegisteredInfo {
     } else {
       tup = *reinterpret_cast<typename ObjT::TupleType*>(data);
     }
-    
+
     auto obj = reinterpret_cast<typename ObjT::ObjectType*>(object);
     std::apply(
       fn_ptr,
@@ -354,12 +354,12 @@ public:
       if (flag) {
         int count = 0;
         MPI_Get_count(&status, MPI_BYTE, &count);
-        
+
         // Validate message size
         if (count < static_cast<int>(3 * sizeof(int))) {
           throw std::runtime_error("Received message is too small");
         }
-        
+
         std::vector<char> buf(count);
         // Ensure buffer is properly aligned
         if (reinterpret_cast<std::uintptr_t>(buf.data()) % alignof(int) != 0) {
@@ -383,7 +383,7 @@ public:
         assert(class_map_.find(class_index) != class_map_.end() && "Class index not found");
         mem_fn->dispatch(
           buf.data() + 3*sizeof(int),
-          class_map_[class_index], 
+          class_map_[class_index],
           true
         );
 

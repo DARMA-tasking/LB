@@ -85,6 +85,6 @@ private:
 
 } /* end namespace vt_lb::comm */
 
-#include "vt-lb/comm/VT/comm_vt.impl.h"
+#include "vt-lb/comm/vt/comm_vt.impl.h"
 
 #endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/

@@ -41,7 +41,7 @@
 //@HEADER
 */
 
-#include "vt-lb/comm/VT/comm_vt.h"
+#include "vt-lb/comm/vt/comm_vt.h"
 
 #include <vt/transport.h>
 

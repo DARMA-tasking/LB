@@ -1,5 +1,5 @@
 #include <vt-lb/comm/MPI/comm_mpi.h>
-#include <vt-lb/comm/VT/comm_vt.h>
+#include <vt-lb/comm/vt/comm_vt.h>
 #include <vt-lb/algo/driver/driver.h>
 #include <random>
 

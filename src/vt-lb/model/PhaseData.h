@@ -92,6 +92,8 @@ struct PhaseData {
     tasks_.clear();
     communications_.clear();
     shared_blocks_.clear();
+    rank_footprint_bytes_ = 0.0;
+    rank_max_memory_available_ = 0.0;
   }
 
   template <typename Serializer>

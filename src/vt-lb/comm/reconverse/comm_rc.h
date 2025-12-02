@@ -2,6 +2,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
 #define INCLUDED_VT_LB_COMM_COMM_VT_H
 
+#include "converse.h"
+
 namespace vt_lb::comm {
 
 struct CommReconverse {

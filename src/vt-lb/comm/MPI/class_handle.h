@@ -56,10 +56,10 @@ struct ClassHandle;
 template <typename T>
 struct ClassHandleRank {
   ClassHandleRank(ClassHandle<T> in_handle, int in_rank);
-  
+
   template <auto fn, typename... Args>
   void send(Args&&... args);
-  
+
   template <auto fn, typename... Args>
   void sendTerm(Args&&... args);
 

@@ -52,19 +52,10 @@
 #include <vector>
 #include <memory>
 #include <cmath>
-#include <cstdio> // added for debug prints
+#include <cstdio>
 #include <limits>
 #include <random>
 #include <deque>
-
-#if VT_LB_HAS_LIBLEIDENALG
-#  include <igraph/igraph.h>
-#  include <Optimiser.h>
-#  include <ModularityVertexPartition.h>
-#  include <CPMVertexPartition.h>
-#  include <SurpriseVertexPartition.h>
-#  include <SignificanceVertexPartition.h>
-#endif /*VT_LB_HAS_LIBLEIDENALG*/
 
 // Common clustering artifacts
 struct Cluster {

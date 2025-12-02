@@ -38,14 +38,17 @@ inline std::string buildTaskGraphDOT(
   // Compute per-cluster boundary bytes (sum of edges crossing cluster boundary)
   // Use integer accumulation to avoid FP off-by-one when printing.
   std::unordered_map<int, unsigned long long> cluster_boundary_bytes;
+  // New: intra-cluster total bytes (sum of edges where both endpoints in same cluster)
+  std::unordered_map<int, unsigned long long> cluster_intra_bytes;
   if (show_clusters && !clusters.empty()) {
     // Build fast membership sets per cluster
     std::unordered_map<int, std::unordered_set<TaskType>> cluster_members;
     for (auto const& cl : clusters) {
       cluster_members[cl.id] = std::unordered_set<TaskType>(cl.members.begin(), cl.members.end());
       cluster_boundary_bytes[cl.id] = 0ULL;
+      cluster_intra_bytes[cl.id] = 0ULL; // initialize intra
     }
-    // Iterate communications and add volume when exactly one endpoint is in the cluster
+    // Iterate communications and add volume to intra or boundary
     for (auto const& e : pd.getCommunications()) {
       auto f = e.getFrom();
       auto t = e.getTo();
@@ -58,11 +61,14 @@ inline std::string buildTaskGraphDOT(
       auto cf_it = cluster_map.find(f);
       auto ct_it = cluster_map.find(t);
       if (cf_it != cluster_map.end() || ct_it != cluster_map.end()) {
-        // If both endpoints have cluster ids, check crossing
         if (cf_it != cluster_map.end() && ct_it != cluster_map.end()) {
           int cf = cf_it->second;
           int ct = ct_it->second;
-          if (cf != ct) {
+          if (cf == ct) {
+            // Intra-cluster communication
+            cluster_intra_bytes[cf] += vol;
+          } else {
+            // Crossing cluster boundary
             cluster_boundary_bytes[cf] += vol;
             cluster_boundary_bytes[ct] += vol;
           }
@@ -91,9 +97,11 @@ inline std::string buildTaskGraphDOT(
     for (auto const& cl : clusters) {
       auto color = palette[cl.id % palette.size()];
       unsigned long long bytes_boundary = cluster_boundary_bytes.count(cl.id) ? cluster_boundary_bytes[cl.id] : 0ULL;
+      unsigned long long bytes_intra    = cluster_intra_bytes.count(cl.id)    ? cluster_intra_bytes[cl.id]    : 0ULL;
       out << "  subgraph cluster_" << cl.id << " {\n";
       out << "    label=\"cluster " << cl.id
           << "\\nload=" << std::fixed << std::setprecision(2) << cl.load
+          << "\\nbytes_intra=" << bytes_intra
           << "\\nbytes_boundary=" << bytes_boundary << "\";\n";
       out << "    color=\"" << color << "\";\n";
       for (auto t : cl.members) {

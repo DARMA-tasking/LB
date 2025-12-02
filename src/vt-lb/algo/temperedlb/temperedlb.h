@@ -179,12 +179,14 @@ private:
 };
 
 struct TaskClusterSummaryInfo {
+  TaskClusterSummaryInfo() = default;
+
   int cluster_id = -1;
   int num_tasks_ = 0;
   double cluster_load = 0.0;
   double cluster_intra_send_bytes = 0.0;
   double cluster_intra_recv_bytes = 0.0;
-  std::unordered_set<model::Edge> inter_edges_;
+  std::vector<model::Edge> inter_edges_;
 
   // Memory info
   std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
@@ -232,7 +234,7 @@ struct TemperedLB : baselb::BaseLB {
 
   void clusterBasedOnCommunication() {
     auto& pd = this->getPhaseData();
-    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd);
+    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 80.0);
     clusterer_->compute();
   }
 
@@ -240,6 +242,101 @@ struct TemperedLB : baselb::BaseLB {
     auto& pd = this->getPhaseData();
     clusterer_ = std::make_unique<SharedBlockClusterer>(pd);
     clusterer_->compute();
+  }
+
+  void doClustering() {
+    if (config_.cluster_based_on_communication_ || config_.cluster_based_on_shared_blocks_) {
+      if (config_.cluster_based_on_communication_) {
+        clusterBasedOnCommunication();
+      } else if (config_.cluster_based_on_shared_blocks_) {
+        clusterBasedOnSharedBlocks();
+      }
+    }
+  }
+
+  void buildClusterSummaries() {
+    assert(clusterer_ != nullptr && "Clusterer must be initialized to build summaries");
+    auto const& pd = this->getPhaseData();
+    int const rank = comm_.getRank();
+
+    // Task -> local cluster id
+    auto const& t2c = clusterer_->taskToCluster();
+
+    // Prepare summary per local cluster id
+    std::unordered_map<int, TaskClusterSummaryInfo> summary_by_local;
+    for (auto const& cl : clusterer_->clusters()) {
+      TaskClusterSummaryInfo info;
+      info.cluster_id = localToGlobalClusterID(cl.id);
+      info.num_tasks_ = static_cast<int>(cl.members.size());
+      info.cluster_load = cl.load;
+      summary_by_local.emplace(cl.id, std::move(info));
+    }
+
+    // Walk communications: accumulate intra send/recv; collect broadened inter edges starting in a cluster
+    for (auto const& e : pd.getCommunications()) {
+      // Only consider edges that involve this rank
+      if (e.getFromRank() != rank && e.getToRank() != rank) continue;
+
+      auto u = e.getFrom();
+      auto v = e.getTo();
+      if (!pd.hasTask(u) || !pd.hasTask(v)) continue;
+
+      auto itu = t2c.find(u);
+      auto itv = t2c.find(v);
+      int cu = (itu != t2c.end()) ? itu->second : -1; // local cluster id or -1 if unclustered
+      int cv = (itv != t2c.end()) ? itv->second : -1;
+      auto vol = e.getVolume();
+
+      // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
+      if (cu != -1 && cv != -1 && cu == cv) {
+        auto& sum = summary_by_local.at(cu);
+        if (e.getFromRank() == rank) {
+          sum.cluster_intra_send_bytes += vol;
+        }
+        if (e.getToRank() == rank) {
+          sum.cluster_intra_recv_bytes += vol;
+        }
+        continue;
+      }
+
+      // Broadened "inter" edges: if the edge starts in a cluster on this rank, add to that cluster
+      // Conditions:
+      //  - source endpoint (u) is clustered locally (cu != -1)
+      //  - source is on this rank (e.getFromRank() == rank)
+      //  - destination is:
+      //      * in a different local cluster (cv == -1 or cv != cu), or
+      //      * on a different rank (e.getToRank() != rank)
+      if (e.getFromRank() == rank && cu != -1) {
+        bool dest_is_external =
+          (cv == -1) || (cv != cu) || (e.getToRank() != rank);
+        if (dest_is_external) {
+          summary_by_local.at(cu).inter_edges_.push_back(e);
+        }
+      }
+
+      // Enable vice-versa logic to capture edges entering a cluster
+      // Conditions:
+      //  - destination endpoint (v) is clustered locally (cv != -1)
+      //  - destination is on this rank (e.getToRank() == rank)
+      //  - source is:
+      //      * in a different local cluster (cu == -1 or cu != cv), or
+      //      * on a different rank (e.getFromRank() != rank)
+      if (e.getToRank() == rank && cv != -1) {
+        bool src_is_external = (cu == -1) || (cu != cv) || (e.getFromRank() != rank);
+        if (src_is_external) {
+          summary_by_local.at(cv).inter_edges_.push_back(e);
+        }
+      }
+    }
+
+    // Emit summaries
+    for (auto const& cl : clusterer_->clusters()) {
+      auto const& sum = summary_by_local.at(cl.id);
+      printf("%d: buildClusterSummaries cluster %d size=%zu load=%.2f intra_send=%.2f intra_recv=%.2f inter_edges=%zu\n",
+             rank, cl.id, cl.members.size(), cl.load,
+             sum.cluster_intra_send_bytes, sum.cluster_intra_recv_bytes,
+             sum.inter_edges_.size());
+    }
   }
 
   void makeCommunicationsSymmetric() {
@@ -267,19 +364,24 @@ struct TemperedLB : baselb::BaseLB {
   }
 
   void run() {
+    for (int trial = 0; trial < config_.num_trials_; ++trial) {
+      printf("%d: Starting trial %d/%d\n", comm_.getRank(), trial + 1, config_.num_trials_);
+      runTrial();
+    }
+  }
+
+  void runTrial() {
+    // Save a clone of the phase data before load balancing
+    savePhaseData();
+
     auto total_load = computeLoad();
     printf("%d: initial total load: %f, num tasks: %zu\n", comm_.getRank(), total_load, numTasks());
 
     // Make communications symmetric before distributed decisions
     makeCommunicationsSymmetric();
 
-    if (config_.cluster_based_on_communication_ || config_.cluster_based_on_shared_blocks_) {
-      if (config_.cluster_based_on_communication_) {
-        clusterBasedOnCommunication();
-      } else if (config_.cluster_based_on_shared_blocks_) {
-        clusterBasedOnSharedBlocks();
-      }
-    }
+    // Run the clustering algorithm if appropiate for the configuration
+    doClustering();
 
     // Generate visualization after symmetrization/clustering
     visualizeGraph("temperedlb2");
@@ -302,7 +404,23 @@ struct TemperedLB : baselb::BaseLB {
 #else
       // Just assume max of 1000 clusters per rank for now, until we have bcast
 #endif
+      if (clusterer_ != nullptr) {
+        buildClusterSummaries();
+      }
     }
+
+    // Before we restore phase data for the next trial, save the work and task distribution
+    // @todo: for now, we recompute work from scratch but we probably can use the breakdown
+    trial_work_distribution_.emplace_back(
+      WorkModelCalculator::computeWork(
+        config_.work_model_,
+        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData())
+      ),
+      this->getPhaseData().getTaskIds()
+    );
+
+    // Restore phase data
+    restorePhaseData();
   }
 
   Clusterer const* getClusterer() const { return clusterer_.get(); }
@@ -350,6 +468,8 @@ private:
   std::unique_ptr<Clusterer> clusterer_;
   /// @brief Global maximum number of clusters across all ranks
   int global_max_clusters_ = 1000;
+  /// @brief Task distribution and work for each trial
+  std::vector<std::tuple<double, std::unordered_set<model::TaskType>>> trial_work_distribution_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

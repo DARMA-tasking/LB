@@ -81,6 +81,13 @@ struct PhaseData {
   std::unordered_map<TaskType, Task> const& getTasksMap() const { return tasks_; }
   std::vector<Edge> const& getCommunications() const { return communications_; }
   std::unordered_map<SharedBlockType, SharedBlock> const& getSharedBlocksMap() const { return shared_blocks_; }
+  std::unordered_set<TaskType> getTaskIds() const {
+    std::unordered_set<TaskType> ids;
+    for (auto const& [id, task] : tasks_) {
+      ids.insert(id);
+    }
+    return ids;
+  }
 
   BytesType getRankFootprintBytes() const { return rank_footprint_bytes_; }
   void setRankFootprintBytes(BytesType bytes) { rank_footprint_bytes_ = bytes; }

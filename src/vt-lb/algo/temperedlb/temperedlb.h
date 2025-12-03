@@ -53,6 +53,7 @@
 #include <vt-lb/algo/temperedlb/symmetrize_comm.h>
 #include <vt-lb/algo/temperedlb/visualize.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
+#include <vt-lb/algo/temperedlb/full_graph_visualizer.h>
 
 #include <limits>
 #include <random>
@@ -250,6 +251,21 @@ struct TemperedLB final : baselb::BaseLB {
     }
   }
 
+  void visualizeFullGraphIfNeeded(
+    CommT& comm,
+    model::PhaseData const& pd,
+    Clusterer const* clusterer,
+    int global_max_clusters,
+    Configuration const& config,
+    const std::string& prefix
+  ) const {
+    if (!config.visualize_full_graph_) {
+      return;
+    }
+    FullGraphVisualizer<CommT> visualizer(comm, pd, clusterer, global_max_clusters, prefix);
+    visualizer.run();
+  }
+
   template <typename T>
   std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
     InformationPropagation<CommT, T, TemperedLB<CommT>> ip(comm_, config_);
@@ -295,6 +311,15 @@ struct TemperedLB final : baselb::BaseLB {
 
     // Generate visualization after clustering
     visualizeGraph("temperedlb_rank" + std::to_string(comm_.getRank()) + "_trial" + std::to_string(trial));
+
+    visualizeFullGraphIfNeeded(
+      comm_,
+      this->getPhaseData(),
+      getClusterer(),
+      global_max_clusters_,
+      config_,
+      "temperedlb_full_graph_trial" + std::to_string(trial)
+    );
 
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {

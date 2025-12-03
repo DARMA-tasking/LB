@@ -96,6 +96,8 @@ struct Configuration {
   bool visualize_task_graph_ = false;
   /// @brief Whether to visualize the clusters
   bool visualize_clusters_ = false;
+  /// @brief Whether to output full graph visualization: this is expensive
+  bool visualize_full_graph_ = false;
 
   /// @brief Tolerance for convergence
   double converge_tolerance_ = 0.01;

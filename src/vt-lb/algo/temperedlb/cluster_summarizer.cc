@@ -233,7 +233,7 @@ ClusterSummarizer::buildClusterSummaries(
       "max_ser_in=%.0f "
       "max_ser_out=%.0f "
       "shared_block_count=%zu\n",
-      rank, cl.id, cl.members.size(), cl.load,
+      rank, localToGlobalClusterID(cl.id, rank, global_max_clusters), cl.members.size(), cl.load,
       sum.cluster_intra_send_bytes, sum.cluster_intra_recv_bytes,
       sum.inter_edges_.size(),
       sum.cluster_footprint,

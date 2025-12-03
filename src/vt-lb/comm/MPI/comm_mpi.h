@@ -391,6 +391,11 @@ public:
           termination_detector_->notifyMessageReceive();
         }
       }
+
+      if (termination_detector_->singleRank()) {
+        // In single rank case, we need to progress the TD state machine
+        termination_detector_->startFirstWave();
+      }
     }
 
     // Process pending sends
@@ -452,6 +457,10 @@ private:
 inline void CommMPI::initTermination() {
   termination_detector_ = std::make_unique<detail::TerminationDetector>();
   termination_detector_->init(*this, registerInstanceCollective(termination_detector_.get()));
+  if (cached_rank_ == 0) {
+    termination_detector_->notifyMessageSend();
+    termination_detector_->notifyMessageReceive();
+  }
 }
 
 } /* end namespace vt_lb::comm */

@@ -46,6 +46,10 @@
 
 #define DEBUG_TERMINATION 0
 
+#if DEBUG_TERMINATION
+#include <cinttypes>
+#endif
+
 namespace vt_lb::comm::detail {
 
 void TerminationDetector::init(CommMPI& comm, ClassHandle<TerminationDetector> handle) {
@@ -73,11 +77,16 @@ void TerminationDetector::sendControlToChildren() {
   for (int i = 0; i < num_children_; i++) {
     handle_[first_child_ + i].sendTerm<&TerminationDetector::onControl>();
   }
+
+  if (singleRank()) {
+    // Devolved case with one rank, move forward
+    checkAllChildrenComplete();
+  }
 }
 
 void TerminationDetector::sendResponseToParent(uint64_t in_sent, uint64_t in_recv) {
 #if DEBUG_TERMINATION
-  printf("Rank %d: sending response to parent %d: sent=%lld, recv=%lld\n",
+  printf("Rank %d: sending response to parent %d: sent=%" PRIu64 ", recv=%" PRIu64 "\n",
          rank_, parent_, in_sent, in_recv);
 #endif
   handle_[parent_].sendTerm<&TerminationDetector::onResponse>(in_sent, in_recv);
@@ -100,7 +109,7 @@ void TerminationDetector::onControl() {
 
 void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
 #if DEBUG_TERMINATION
-  printf("Rank %d: received response: sent=%lld, recv=%lld, global_sent1=%lld, global_recv1_=%lld waiting_children=%d\n",
+  printf("Rank %d: received response: sent=%" PRIu64 ", recv=%" PRIu64 ", global_sent1=%" PRIu64 ", global_recv1=%" PRIu64 " waiting_children=%d\n",
          rank_, in_sent, in_recv, global_sent1_, global_recv1_, waiting_children_);
 #endif
 
@@ -109,10 +118,14 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
 
   waiting_children_--;
 
+  checkAllChildrenComplete();
+}
+
+void TerminationDetector::checkAllChildrenComplete() {
   if (waiting_children_ == 0) {
 
 #if DEBUG_TERMINATION
-    printf("Rank %d: aggregated total: sent=%lld, recv=%lld\n",
+    printf("Rank %d: aggregated total: sent=%" PRIu64 ", recv=%" PRIu64 "\n",
            rank_, global_sent1_, global_recv1_);
 #endif
 
@@ -123,7 +136,7 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
       global_recv1_ += recv_;
 
 #if DEBUG_TERMINATION
-      printf("Root total: s1=%lld, r1=%lld, s2=%lld, r2=%lld\n",
+      printf("Root total: s1=%" PRIu64 ", r1=%" PRIu64 ", s2=%" PRIu64 ", r2=%" PRIu64 "\n",
              global_sent1_, global_recv1_, global_sent2_, global_recv2_);
 #endif
 
@@ -137,8 +150,12 @@ void TerminationDetector::onResponse(uint64_t in_sent, uint64_t in_recv) {
         global_recv2_ = global_recv1_;
         global_sent1_ = global_recv1_ = 0;
 
-        // Start new wave
-        startFirstWave();
+        if (singleRank()) {
+          // do nothing...wait for poll to happen again
+        } else {
+          // Start new wave
+          startFirstWave();
+        }
       }
     } else {
       // Send response up
@@ -153,7 +170,7 @@ void TerminationDetector::notifyMessageSend() {
   if (!terminated_) {
     sent_++;
 #if DEBUG_TERMINATION
-    printf("Rank %d: notified send, counter: sent_=%lld, recv_=%lld\n",
+    printf("Rank %d: notified send, counter: sent_=%" PRIu64 ", recv_=%" PRIu64 "\n",
            rank_, sent_, recv_);
 #endif
   }
@@ -163,7 +180,7 @@ void TerminationDetector::notifyMessageReceive() {
   if (!terminated_) {
     recv_++;
 #if DEBUG_TERMINATION
-    printf("Rank %d: notified receive, counter: sent=%lld, recv=%lld\n",
+    printf("Rank %d: notified receive, counter: sent_=%" PRIu64 ", recv_=%" PRIu64 "\n",
            rank_, sent_, recv_);
 #endif
   }
@@ -171,7 +188,7 @@ void TerminationDetector::notifyMessageReceive() {
 
 void TerminationDetector::terminated() {
 #if DEBUG_TERMINATION
-  printf("%d: Terminated!\n", rank_);
+  printf("%d: %p Terminated!\n", rank_, this);
 #endif
   terminated_ = true;
   for (int i = 0; i < num_children_; i++) {

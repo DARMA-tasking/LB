@@ -273,8 +273,22 @@ struct TemperedLB final : baselb::BaseLB {
     // Save a clone of the phase data before load balancing
     savePhaseData();
 
-    auto total_load = computeLoad();
-    printf("%d: initial total load: %f, num tasks: %zu\n", comm_.getRank(), total_load, numTasks());
+    double total_load = computeLoad();
+    computeStatistics(total_load, "Compute Load");
+
+    double const total_work = WorkModelCalculator::computeWork(
+      config_.work_model_,
+      WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+    );
+    computeStatistics(total_work, "Work");
+
+    if (config_.hasMemoryInfo()) {
+      double const total_memory_usage = WorkModelCalculator::computeMemoryUsage(
+        config_,
+        this->getPhaseData()
+      ).current_memory_usage;
+      computeStatistics(total_memory_usage, "Memory Usage");
+    }
 
     // Run the clustering algorithm if appropiate for the configuration
     doClustering();
@@ -332,6 +346,23 @@ private:
       printf("%d: global max clusters across ranks: %d\n", root, global_max_clusters_);
     }
     // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
+  }
+
+  template <typename T>
+  void computeStatistics(T quantity, std::string const& name) {
+    // Compute min, max, avg of quantity across all ranks
+    double local_value = static_cast<double>(quantity);
+    double global_min = 0.0;
+    double global_max = 0.0;
+    double global_sum = 0.0;
+    comm_.reduce(0, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
+    comm_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
+    comm_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    double global_avg = global_sum / static_cast<double>(comm_.numRanks());
+    double I = (global_max / global_avg) - 1.0;
+    if (comm_.getRank() == 0) {
+      printf("%s statistics -- min: %f, max: %f, avg: %f, I: %f\n", name.c_str(), global_min, global_max, global_avg, I);
+    }
   }
 
 private:

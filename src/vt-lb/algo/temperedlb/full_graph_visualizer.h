@@ -435,4 +435,4 @@ private:
 
 } /* end namespace vt_lb::algo::temperedlb */
 
-#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_FULL_GRAPH_VISUALIZER_H */
+#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_FULL_GRAPH_VISUALIZER_H*/

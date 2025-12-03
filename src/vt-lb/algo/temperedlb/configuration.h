@@ -103,6 +103,6 @@ struct Configuration {
   double converge_tolerance_ = 0.01;
 };
 
-}
+} /* end namespace vt_lb::algo::temperedlb */
 
 #endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_CONFIGURATION_H*/

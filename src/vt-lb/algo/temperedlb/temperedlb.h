@@ -384,7 +384,10 @@ private:
     handle_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
     handle_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
     double global_avg = global_sum / static_cast<double>(comm_.numRanks());
-    double I = (global_max / global_avg) - 1.0;
+    double I = 0;
+    if (global_avg > 0.0) {
+      I = (global_max / global_avg) - 1.0;
+    }
     if (comm_.getRank() == 0) {
       printf("%s statistics -- min: %f, max: %f, avg: %f, I: %f\n", name.c_str(), global_min, global_max, global_avg, I);
     }

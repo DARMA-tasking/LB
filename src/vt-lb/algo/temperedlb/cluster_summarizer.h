@@ -111,16 +111,41 @@ struct ClusterSummarizer {
     int global_max_clusters
 );
 
+  /**
+   * @brief Convert local cluster ID to global cluster ID
+   *
+   * @param[in] cluster_id Local cluster ID
+   * @param[in] rank This rank
+   * @param[in] global_max_clusters Maximum number of clusters on any rank
+   *
+   * @return Global cluster ID
+   */
   static inline int localToGlobalClusterID(int cluster_id, int rank, int global_max_clusters) {
     // Map local cluster IDs to global cluster IDs based on global_max_clusters_
     // Implementation depends on how clusters are represented and communicated
     return cluster_id + rank * global_max_clusters;
   }
 
+  /**
+   * @brief Convert global cluster ID to local cluster ID
+   *
+   * @param[in] global_cluster_id Global cluster ID
+   * @param[in] global_max_clusters Maximum number of clusters on any rank
+   *
+   * @return Local cluster ID
+   */
   static inline int globalToLocalClusterID(int global_cluster_id, int global_max_clusters) {
     return global_cluster_id % global_max_clusters;
   }
 
+  /**
+   * @brief Convert global cluster ID to rank
+   *
+   * @param[in] global_cluster_id Global cluster ID
+   * @param[in] global_max_clusters Maximum number of clusters on any rank
+   *
+   * @return Rank
+   */
   static inline int globalClusterToRank(int global_cluster_id, int global_max_clusters) {
     return global_cluster_id / global_max_clusters;
   }

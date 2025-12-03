@@ -52,6 +52,8 @@
 namespace vt_lb::algo::temperedlb {
 
 struct Configuration;
+struct Clusterer;
+struct TaskClusterSummaryInfo;
 
 /**
  * @struct WorkModel
@@ -179,6 +181,49 @@ struct WorkModelCalculator {
     Configuration const& config,
     model::PhaseData const& phase_data
   );
+
+  /**
+   * @brief Check if the memory usage fits within available memory after updates
+   *
+   * @param config The configuration
+   * @param phase_data The phase data
+   * @param clusterer The clusterer
+   * @param global_max_clusters The global maximum number of clusters
+   * @param current_memory_usage The current memory usage
+   * @param current_max_working The current maximum task working memory usage
+   * @param current_max_serialized The current maximum task serialized memory usage
+   * @param to_add The cluster of tasks to add
+   * @param to_remove The cluster of tasks to remove
+   *
+   * @return True if it fits, false otherwise
+   */
+  static bool checkMemoryFitUpdate(
+    Configuration const& config,
+    model::PhaseData const& phase_data,
+    Clusterer const& clusterer,
+    int global_max_clusters,
+    double current_memory_usage,
+    double current_max_working,
+    double current_max_serialized,
+    TaskClusterSummaryInfo to_add,
+    TaskClusterSummaryInfo to_remove
+  );
+
+  /**
+   * @brief Check if the memory usage fits within available memory
+   *
+   * @param config The configuration
+   * @param phase_data The phase data
+   * @param total_memory_usage The total memory usage to check
+   *
+   * @return True if it fits, false otherwise
+   */
+  static bool checkMemoryFit(
+    Configuration const& config,
+    model::PhaseData const& phase_data,
+    double total_memory_usage
+  );
+
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

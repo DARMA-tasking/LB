@@ -54,8 +54,9 @@ add_subdirectory(examples)
 include(CTest) #adds option BUILD_TESTING (default ON)
 
 message(STATUS "VT_LB_TESTS_ENABLED: ${VT_LB_TESTS_ENABLED}")
-if (BUILD_TESTING AND VT_TV_TESTS_ENABLED)
+if (BUILD_TESTING AND VT_LB_TESTS_ENABLED)
   set(CTEST_SOURCE_DIRECTORY ${SOURCE_DIR}/src)
+  add_custom_target(unit_tests)
   add_subdirectory(tests)
 endif()
 

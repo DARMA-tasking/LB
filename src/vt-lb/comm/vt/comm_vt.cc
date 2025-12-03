@@ -47,8 +47,13 @@
 
 namespace vt_lb::comm {
 
-void CommVT::init(int& argc, char**& argv) {
-  vt::initialize(argc, argv);
+void CommVT::init(int& argc, char**& argv, MPI_Comm comm) {
+  if (comm == MPI_COMM_NULL) {
+    vt::initialize(argc, argv);
+  } else {
+    // interop mode
+    vt::initialize(argc, argv, &comm);
+  }
   vt::theTerm()->addDefaultAction([this]{ terminated_ = true; });
 }
 

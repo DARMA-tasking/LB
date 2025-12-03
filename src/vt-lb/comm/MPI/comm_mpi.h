@@ -170,12 +170,7 @@ struct CommMPI {
   template <typename T>
   using HandleType = ClassHandle<T>;
 
-  /**
-   * \brief Construct a new CommMPI instance
-   * \param comm The MPI communicator to use (defaults to MPI_COMM_WORLD)
-   */
-  explicit CommMPI(MPI_Comm comm = MPI_COMM_WORLD) : comm_(comm) { }
-
+  CommMPI() = default;
   CommMPI(CommMPI const&) = delete;
   CommMPI(CommMPI&&) = delete;
   CommMPI& operator=(CommMPI const&) = delete;
@@ -194,8 +189,14 @@ public:
    * \param argc Pointer to argument count
    * \param argv Pointer to argument array
    */
-  void init(int& argc, char**& argv) {
-    MPI_Init(&argc, &argv);
+  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL) {
+    if (comm == MPI_COMM_NULL) {
+      MPI_Init(&argc, &argv);
+      comm_ = MPI_COMM_WORLD;
+    } else {
+      interop_mode_ = true;
+      comm_ = comm;
+    }
     MPI_Comm_rank(comm_, &cached_rank_);
     MPI_Comm_size(comm_, &cached_size_);
     initTermination();
@@ -216,8 +217,10 @@ public:
    * \brief Finalize MPI
    */
   void finalize() {
-    // printf("%d: Finalizing MPI\n", cached_rank_);
-    MPI_Finalize();
+    if (!interop_mode_) {
+      // printf("%d: Finalizing MPI\n", cached_rank_);
+      MPI_Finalize();
+    }
     comm_ = MPI_COMM_NULL;
   }
 
@@ -444,6 +447,7 @@ public:
 private:
   void initTermination();
 
+  bool interop_mode_ = false;
   MPI_Comm comm_ = MPI_COMM_NULL;
   std::list<std::tuple<MPI_Request, std::unique_ptr<char[]>>> pending_;
   int next_class_index_ = 0;

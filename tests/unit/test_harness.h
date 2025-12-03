@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                comm_vt.h
+//                                test_harness.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form, must reproduce the above copyright notice,
+// * Redistributions in binary form must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,50 +41,35 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
-#define INCLUDED_VT_LB_COMM_COMM_VT_H
+#if !defined INCLUDED_VT_LB_UNIT_TEST_HARNESS_H
+#define INCLUDED_VT_LB_UNIT_TEST_HARNESS_H
 
-#include <vt/configs/types/types_type.h>
-#include <vt/objgroup/proxy/proxy_objgroup.h>
+#include <gtest/gtest.h>
 
-namespace vt_lb::comm {
+#include <vector>
+#include <string>
 
-template <typename ProxyT>
-struct ProxyWrapper;
+#include "test_config.h"
 
-struct CommVT {
-  template <typename T>
-  using HandleType = ProxyWrapper<vt::objgroup::proxy::Proxy<T>>;
+namespace vt_lb { namespace tests { namespace unit {
 
-  CommVT() = default;
-  CommVT(CommVT const&) = delete;
-  CommVT(CommVT&&) = delete;
-  ~CommVT();
+template <typename TestBase>
+struct TestHarnessAny : TestBase {
+  static void store_cmdline_args(int argc, char **argv) {
+    orig_args_ = std::vector<std::string>(argv, argv + argc);
+  }
 
-private:
-  CommVT(vt::EpochType epoch);
-
-public:
-  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL);
-  void finalize();
-  int numRanks() const;
-  int getRank() const;
-  bool poll() const;
-  CommVT clone();
-
-  template <typename T>
-  ProxyWrapper<vt::objgroup::proxy::Proxy<T>> registerInstanceCollective(T* obj);
-
-  template <auto fn, typename ProxyT, typename... Args>
-  void send(vt::NodeType dest, ProxyT proxy, Args&&... args);
-
-private:
-  bool terminated_ = false;
-  vt::EpochType epoch_ = vt::no_epoch;
+  static std::vector<std::string> orig_args_;
 };
 
-} /* end namespace vt_lb::comm */
+template <typename TestBase>
+std::vector<std::string> TestHarnessAny<TestBase>::orig_args_;
 
-#include "vt-lb/comm/vt/comm_vt.impl.h"
+using TestHarness = TestHarnessAny<testing::Test>;
 
-#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/
+template <typename ParamT>
+using TestHarnessParam = TestHarnessAny<testing::TestWithParam<ParamT>>;
+
+}}} // end namespace vt_lb::tests::unit
+
+#endif /*INCLUDED_VT_LB_UNIT_TEST_HARNESS_H*/

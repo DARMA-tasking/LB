@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                comm_vt.h
+//                                 test_dummy.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form, must reproduce the above copyright notice,
+// * Redistributions in binary form must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,50 +41,30 @@
 //@HEADER
 */
 
-#if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
-#define INCLUDED_VT_LB_COMM_COMM_VT_H
+#include <gtest/gtest.h>
 
-#include <vt/configs/types/types_type.h>
-#include <vt/objgroup/proxy/proxy_objgroup.h>
+#include "test_parallel_harness.h"
+#include "test_helpers.h"
 
-namespace vt_lb::comm {
+namespace vt_lb { namespace tests { namespace unit {
 
-template <typename ProxyT>
-struct ProxyWrapper;
-
-struct CommVT {
-  template <typename T>
-  using HandleType = ProxyWrapper<vt::objgroup::proxy::Proxy<T>>;
-
-  CommVT() = default;
-  CommVT(CommVT const&) = delete;
-  CommVT(CommVT&&) = delete;
-  ~CommVT();
-
-private:
-  CommVT(vt::EpochType epoch);
-
-public:
-  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL);
-  void finalize();
-  int numRanks() const;
-  int getRank() const;
-  bool poll() const;
-  CommVT clone();
-
-  template <typename T>
-  ProxyWrapper<vt::objgroup::proxy::Proxy<T>> registerInstanceCollective(T* obj);
-
-  template <auto fn, typename ProxyT, typename... Args>
-  void send(vt::NodeType dest, ProxyT proxy, Args&&... args);
-
-private:
-  bool terminated_ = false;
-  vt::EpochType epoch_ = vt::no_epoch;
+struct TestDummyVTOnly : TestParallelHarness<comm::CommVT> {
 };
 
-} /* end namespace vt_lb::comm */
+TEST_F(TestDummyVTOnly, test_dummy) {
+  auto const my_rank = comm.getRank();
+  EXPECT_GE( my_rank, 0 );
+}
 
-#include "vt-lb/comm/vt/comm_vt.impl.h"
+template <comm::Communicator CommType>
+struct TestDummyAnyComm : TestParallelHarness<CommType> {
+};
 
-#endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/
+TYPED_TEST_SUITE(TestDummyAnyComm, CommTypesForTesting, CommNameGenerator);
+
+TYPED_TEST(TestDummyAnyComm, test_dummy) {
+  auto const my_rank = this->comm.getRank();
+  EXPECT_GE( my_rank, 0 );
+};
+
+}}} // end namespace vt_lb::tests::unit

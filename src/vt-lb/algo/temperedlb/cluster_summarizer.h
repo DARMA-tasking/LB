@@ -73,7 +73,7 @@ struct TaskClusterSummaryInfo {
   model::BytesType cluster_footprint = 0;
 
   template <typename SerializerT>
-  void serializer(SerializerT& s) {
+  void serialize(SerializerT& s) {
     s | cluster_id;
     s | num_tasks_;
     s | cluster_load;

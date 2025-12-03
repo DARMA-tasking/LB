@@ -132,11 +132,6 @@ int main(int argc, char** argv) {
     std::make_unique<vt_lb::model::PhaseData>(phase_data)
   );
 
-  while (comm.poll()) {
-  }
-
-  printf("out of poll\n");
-
   comm.finalize();
   return 0;
 }

@@ -79,16 +79,16 @@ struct InformationPropagation {
    * @param deterministic Whether to use deterministic selection
    *
    */
-  InformationPropagation(CommT& comm, int f, int k_max, bool deterministic, int seed)
+  InformationPropagation(CommT& comm, Configuration const& config)
     : comm_(comm.clone()), // collective operation
-      f_(f),
-      k_max_(k_max),
-      deterministic_(deterministic)
+      f_(config.f_),
+      k_max_(config.k_max_),
+      deterministic_(config.deterministic_)
   {
     handle_ = comm_.template registerInstanceCollective<ThisType>(this);
 
     if (deterministic_) {
-      gen_select_.seed(seed + comm_.getRank());
+      gen_select_.seed(config.seed_ + comm_.getRank());
     }
   }
 
@@ -180,7 +180,7 @@ private:
 };
 
 template <typename CommT>
-struct TemperedLB : baselb::BaseLB {
+struct TemperedLB final : baselb::BaseLB {
   using HandleType = typename CommT::template HandleType<TemperedLB<CommT>>;
 
   // Assert that CommT conforms to the communication interface we expect
@@ -250,50 +250,54 @@ struct TemperedLB : baselb::BaseLB {
     }
   }
 
+  template <typename T>
+  std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
+    InformationPropagation<CommT, T, TemperedLB<CommT>> ip(comm_, config_);
+    auto gathered_info = ip.run(initial_data);
+    printf("%d: gathered load info size=%zu\n", comm_.getRank(), gathered_info.size());
+    return gathered_info;
+  }
+
   void run() {
+    // Make communications symmetric before running trials so we only have to done it once
+    makeCommunicationsSymmetric();
+
     for (int trial = 0; trial < config_.num_trials_; ++trial) {
       printf("%d: Starting trial %d/%d\n", comm_.getRank(), trial + 1, config_.num_trials_);
-      runTrial();
+      runTrial(trial);
+      printf("%d: Finished trial %d/%d\n", comm_.getRank(), trial + 1, config_.num_trials_);
     }
   }
 
-  void runTrial() {
+  void runTrial(int trial) {
     // Save a clone of the phase data before load balancing
     savePhaseData();
 
     auto total_load = computeLoad();
     printf("%d: initial total load: %f, num tasks: %zu\n", comm_.getRank(), total_load, numTasks());
 
-    // Make communications symmetric before distributed decisions
-    makeCommunicationsSymmetric();
-
     // Run the clustering algorithm if appropiate for the configuration
     doClustering();
 
     // Generate visualization after symmetrization/clustering
-    visualizeGraph("temperedlb2");
+    visualizeGraph("temperedlb_rank" + std::to_string(comm_.getRank()) + "_trial" + std::to_string(trial));
 
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
-      using LoadType = double;
-      auto ip = InformationPropagation<CommT, LoadType, TemperedLB<CommT>>(
-        comm_,
-        config_.f_,
-        config_.k_max_,
-        config_.deterministic_,
-        config_.seed_
-      );
-      auto info = ip.run(total_load);
-      //printf("%d: gathered load info from %zu ranks\n", comm_.getRank(), info.size());
+      auto info = runInformationPropagation(total_load);
+      printf("%d: runTrial: gathered load info from %zu ranks\n", comm_.getRank(), info.size());
     } else {
 #if 0
       computeGlobalMaxClusters();
 #else
       // Just assume max of 1000 clusters per rank for now, until we have bcast
 #endif
-      if (clusterer_ != nullptr) {
-        buildClusterSummaries();
-      }
+      // For now, we will assume that if beta/gemma/delta are non-zero, clustering must occur.
+      // Every task could be its own cluster, but clusters must exist
+      assert(clusterer_ != nullptr && "Clusterer must be valid");
+      auto local_summary = buildClusterSummaries();
+      auto info = runInformationPropagation(local_summary);
+      printf("%d: runTrial: gathered load info from %zu ranks\n", comm_.getRank(), info.size());
     }
 
     // Before we restore phase data for the next trial, save the work and task distribution

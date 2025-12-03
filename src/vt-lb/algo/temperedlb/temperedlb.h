@@ -305,7 +305,7 @@ struct TemperedLB final : baselb::BaseLB {
     trial_work_distribution_.emplace_back(
       WorkModelCalculator::computeWork(
         config_.work_model_,
-        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData())
+        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
       ),
       this->getPhaseData().getTaskIds()
     );

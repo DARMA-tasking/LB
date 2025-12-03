@@ -54,7 +54,8 @@
 namespace vt_lb::algo::temperedlb {
 
 /*static*/ WorkBreakdown WorkModelCalculator::computeWorkBreakdown(
-  model::PhaseData const& phase_data
+  model::PhaseData const& phase_data,
+  Configuration const& config
 ) {
   auto rank = phase_data.getRank();
   WorkBreakdown breakdown;
@@ -96,6 +97,13 @@ namespace vt_lb::algo::temperedlb {
     if (info->getHome() != rank) {
       breakdown.shared_mem_comm += info->getSize();
     }
+  }
+
+  if (config.hasMemoryInfo()) {
+    auto memory_bd = computeMemoryUsage(config, phase_data);
+    breakdown.current_memory_usage = memory_bd.current_memory_usage;
+    breakdown.current_max_task_working_bytes = memory_bd.current_max_task_working_bytes;
+    breakdown.current_max_task_serialized_bytes = memory_bd.current_max_task_serialized_bytes;
   }
 
   return breakdown;
@@ -225,12 +233,12 @@ namespace vt_lb::algo::temperedlb {
   );
 }
 
-/*static*/ double WorkModelCalculator::computeMemoryUsage(
+/*static*/ MemoryBreakdown WorkModelCalculator::computeMemoryUsage(
   Configuration const& config,
   model::PhaseData const& phase_data
 ) {
   if (!config.hasMemoryInfo()) {
-    return 0.0;
+    return MemoryBreakdown{0.0, 0.0, 0.0};
   }
 
   double task_footprint_bytes_ = 0.0;
@@ -263,11 +271,19 @@ namespace vt_lb::algo::temperedlb {
     auto info = phase_data.getSharedBlock(sb);
     shared_blocks_bytes_ += info->getSize();
   }
-  return phase_data.getRankFootprintBytes() +
+
+  double const total_usage =
+    phase_data.getRankFootprintBytes() +
     task_footprint_bytes_ +
     task_max_working_bytes_ +
     task_max_serialized_bytes_ +
     shared_blocks_bytes_;
+
+  return MemoryBreakdown{
+    total_usage,
+    task_max_working_bytes_,
+    task_max_serialized_bytes_
+  };
 }
 
 /*static*/ bool WorkModelCalculator::checkMemoryFit(
@@ -288,8 +304,8 @@ namespace vt_lb::algo::temperedlb {
   Clusterer const& clusterer,
   int global_max_clusters,
   double current_memory_usage,
-  double current_max_working,
-  double current_max_serialized,
+  double current_max_task_working_bytes,
+  double current_max_task_serialized_bytes,
   TaskClusterSummaryInfo to_add,
   TaskClusterSummaryInfo to_remove
 ) {
@@ -298,17 +314,17 @@ namespace vt_lb::algo::temperedlb {
   }
 
   // New maxima from add/remove summaries
-  double new_max_working    = current_max_working;
-  double new_max_serialized = current_max_serialized;
+  double new_max_task_working_bytes    = current_max_task_working_bytes;
+  double new_max_task_serialized_bytes = current_max_task_serialized_bytes;
 
   if (config.hasTaskWorkingMemoryInfo()) {
-    new_max_working = std::max(
+    new_max_task_working_bytes = std::max(
       (double)to_remove.max_object_working_bytes_outside,
       (double)to_add.max_object_working_bytes
     );
   }
   if (config.hasTaskSerializedMemoryInfo()) {
-    new_max_serialized = std::max(
+    new_max_task_serialized_bytes = std::max(
       (double)to_remove.max_object_serialized_bytes_outside,
       (double)to_add.max_object_serialized_bytes
     );
@@ -392,10 +408,10 @@ namespace vt_lb::algo::temperedlb {
   // Update memory usage
   double updated_usage = current_memory_usage;
   if (config.hasTaskWorkingMemoryInfo()) {
-    updated_usage += (new_max_working - current_max_working);
+    updated_usage += (new_max_task_working_bytes - current_max_task_working_bytes);
   }
   if (config.hasTaskSerializedMemoryInfo()) {
-    updated_usage += (new_max_serialized - current_max_serialized);
+    updated_usage += (new_max_task_serialized_bytes - current_max_task_serialized_bytes);
   }
   updated_usage += delta_footprint;
   updated_usage += delta_shared_blocks;

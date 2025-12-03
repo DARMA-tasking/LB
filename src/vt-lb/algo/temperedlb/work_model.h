@@ -109,12 +109,38 @@ struct WorkModel {
  * @brief Breakdown of work components for a task distribution
  */
 struct WorkBreakdown {
+  /// @brief Compute component
   double compute = 0.0;
+  /// @brief Inter-node receive communication component
   double inter_node_recv_comm = 0.0;
+  /// @brief Inter-node send communication component
   double inter_node_send_comm = 0.0;
+  /// @brief Intra-node receive communication component
   double intra_node_recv_comm = 0.0;
+  /// @brief Intra-node send communication component
   double intra_node_send_comm = 0.0;
+  /// @brief Shared-memory communication component
   double shared_mem_comm = 0.0;
+  /// @brief Current memory usage
+  double current_memory_usage = 0.0;
+  /// @brief Current maximum task working memory usage
+  double current_max_task_working_bytes = 0.0;
+  /// @brief Current maximum task serialized memory usage
+  double current_max_task_serialized_bytes = 0.0;
+};
+
+/**
+ * @struct Memory breakdown (for incremental updates)
+ *
+ * @brief Breakdown of memory components for a task distribution
+ */
+struct MemoryBreakdown {
+  /// @brief Current memory usage
+  double current_memory_usage = 0.0;
+  /// @brief Current maximum task working memory usage
+  double current_max_task_working_bytes = 0.0;
+  /// @brief Current maximum task serialized memory usage
+  double current_max_task_serialized_bytes = 0.0;
 };
 
 /**
@@ -128,11 +154,13 @@ struct WorkModelCalculator {
    * @brief Compute the work breakdown for the given phase data
    *
    * @param phase_data The phase data
+   * @param config The configuration
    *
    * @return The work breakdown
    */
   static WorkBreakdown computeWorkBreakdown(
-    model::PhaseData const& phase_data
+    model::PhaseData const& phase_data,
+    Configuration const& config
   );
 
   /**
@@ -175,9 +203,9 @@ struct WorkModelCalculator {
    * @param config The configuration
    * @param phase_data The phase data
    *
-   * @return The computed memory usage
+   * @return The computed memory usage with breakdown
    */
-  static double computeMemoryUsage(
+  static MemoryBreakdown computeMemoryUsage(
     Configuration const& config,
     model::PhaseData const& phase_data
   );
@@ -190,8 +218,8 @@ struct WorkModelCalculator {
    * @param clusterer The clusterer
    * @param global_max_clusters The global maximum number of clusters
    * @param current_memory_usage The current memory usage
-   * @param current_max_working The current maximum task working memory usage
-   * @param current_max_serialized The current maximum task serialized memory usage
+   * @param current_max_task_working_bytes The current maximum task working memory usage
+   * @param current_max_task_serialized_bytes The current maximum task serialized memory usage
    * @param to_add The cluster of tasks to add
    * @param to_remove The cluster of tasks to remove
    *
@@ -203,8 +231,8 @@ struct WorkModelCalculator {
     Clusterer const& clusterer,
     int global_max_clusters,
     double current_memory_usage,
-    double current_max_working,
-    double current_max_serialized,
+    double current_max_task_working_bytes,
+    double current_max_task_serialized_bytes,
     TaskClusterSummaryInfo to_add,
     TaskClusterSummaryInfo to_remove
   );

@@ -50,12 +50,16 @@
 #include "test_config.h"
 #include "test_harness.h"
 
-#include "vt/transport.h"
+#include <vt-lb/comm/vt/comm_vt.h>
+#include <vt-lb/comm/MPI/comm_mpi.h>
 
 namespace vt_lb { namespace tests { namespace unit {
 
 extern int test_argc;
 extern char** test_argv;
+
+using CommType = vt_lb::comm::CommVT;
+//using CommType = vt_lb::comm::CommMPI;
 
 template <typename TestBase>
 struct TestParallelHarnessAny : TestHarnessAny<TestBase> {
@@ -68,7 +72,7 @@ struct TestParallelHarnessAny : TestHarnessAny<TestBase> {
     if (!init) {
       MPI_Init(&test_argc, &test_argv);
     }
-    MPI_Comm comm = MPI_COMM_WORLD;
+    MPI_Comm mpi_comm = MPI_COMM_WORLD;
     auto const new_args = injectAdditionalArgs(test_argc, test_argv);
     auto custom_argc = new_args.first;
     auto custom_argv = new_args.second;
@@ -76,32 +80,35 @@ struct TestParallelHarnessAny : TestHarnessAny<TestBase> {
       custom_argv[custom_argc] == nullptr,
       "The value of argv[argc] should always be 0"
     );
-    // communicator is duplicated.
-    vt::initialize(custom_argc, custom_argv, &comm, nullptr, true);
+    comm.init(custom_argc, custom_argv, mpi_comm);
 
 #if DEBUG_TEST_HARNESS_PRINT
-    auto const& my_node = vt::theContext()->getNode();
-    auto const& num_nodes = vt::theContext()->getNumNodes();
-    fmt::print("my_node={}, num_nodes={}\n", my_node, num_nodes);
+    auto const& my_rank = comm.getRank();
+    auto const& num_ranks = comm.numRanks();
+    fmt::print("my_rank={}, num_ranks={}\n", my_rank, num_ranks);
 #endif
   }
 
   virtual void TearDown() override {
     try {
-      vt::theSched()->runSchedulerWhile([] { return !vt::rt->isTerminated(); });
+      while (comm.poll()) {
+      }
     } catch (std::exception& e) {
       ADD_FAILURE() << fmt::format("Caught an exception: {}\n", e.what());
     }
 
 #if DEBUG_TEST_HARNESS_PRINT
-    auto const& my_node = vt::theContext()->getNode();
-    fmt::print("my_node={}, tearing down runtime\n", my_node);
+    auto const& my_rank = comm.getRank();
+    fmt::print("my_rank={}, tearing down runtime\n", my_rank);
 #endif
 
-    vt::finalize();
+    comm.finalize();
 
     TestHarnessAny<TestBase>::TearDown();
   }
+
+public:
+  CommType comm;
 
 protected:
   template <typename Arg>

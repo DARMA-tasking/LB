@@ -65,7 +65,7 @@ private:
   CommVT(vt::EpochType epoch);
 
 public:
-  void init(int& argc, char**& argv);
+  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL);
   void finalize();
   int numRanks() const;
   int getRank() const;

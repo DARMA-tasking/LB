@@ -44,7 +44,6 @@
 #if !defined INCLUDED_VT_LB_UNIT_TEST_HELPERS_H
 #define INCLUDED_VT_LB_UNIT_TEST_HELPERS_H
 
-#include "vt/context/context.h"
 #include <mpi.h>
 #include <gtest/gtest.h>
 #include <sstream>
@@ -58,23 +57,23 @@ extern char** test_argv;
  * Maximum number of ranks/nodes detected by CMake on this machine.
  * Defaults to number of processors detected on the host system.
  */
-constexpr vt::NodeType CMAKE_DETECTED_MAX_NUM_NODES = vt_detected_max_num_nodes;
+//constexpr vt::NodeType CMAKE_DETECTED_MAX_NUM_NODES = vt_detected_max_num_nodes;
 
 /**
  * Check whether we're oversubscribing on the current execution.
  * This is using MPI because it can be used before vt initializes.
  */
-inline bool isOversubscribed() {
-  // be sure to only call this from parallel tests
-  int init = 0;
-  MPI_Initialized(&init);
-  if (!init) {
-    MPI_Init(&test_argc, &test_argv);
-  }
-  int num_ranks = 0;
-  MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-  return num_ranks > CMAKE_DETECTED_MAX_NUM_NODES;
-}
+//inline bool isOversubscribed() {
+//  // be sure to only call this from parallel tests
+//  int init = 0;
+//  MPI_Initialized(&init);
+//  if (!init) {
+//    MPI_Init(&test_argc, &test_argv);
+//  }
+//  int num_ranks = 0;
+//  MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+//  return num_ranks > CMAKE_DETECTED_MAX_NUM_NODES;
+//}
 
 /**
  * Get a unique filename based on the unit test name.
@@ -94,12 +93,12 @@ inline std::string getUniqueFilename(const std::string& ext = "") {
  * concurrently-running tests will not cause file system race conditions.
  * Do not call this from .nompi.cc tests or from addAdditionalArgs().
  */
-inline std::string getUniqueFilenameWithRanks(const std::string& ext = "") {
-  auto ranks = vt::theContext()->getNumNodes();
-  std::stringstream ss;
-  ss << getUniqueFilename() << "_" << ranks << ext;
-  return ss.str();
-}
+//inline std::string getUniqueFilenameWithRanks(const std::string& ext = "") {
+//  auto ranks = vt::theContext()->getNumNodes();
+//  std::stringstream ss;
+//  ss << getUniqueFilename() << "_" << ranks << ext;
+//  return ss.str();
+//}
 
 /**
  * The following helper macros (these have to be macros, because GTEST_SKIP
@@ -116,7 +115,7 @@ inline std::string getUniqueFilenameWithRanks(const std::string& ext = "") {
  */
 #define SET_MAX_NUM_NODES_CONSTRAINT(max_req_num_nodes)                   \
 {                                                                         \
-  auto const num_nodes = vt::theContext()->getNumNodes();                     \
+  auto const num_nodes = comm.numRanks();                                 \
   if (num_nodes > max_req_num_nodes) {                                    \
     GTEST_SKIP() << fmt::format(                                          \
       "Skipping the run on {} nodes. This test should run on at most {} " \
@@ -132,7 +131,7 @@ inline std::string getUniqueFilenameWithRanks(const std::string& ext = "") {
  */
 #define SET_MIN_NUM_NODES_CONSTRAINT(min_req_num_nodes)                   \
 {                                                                         \
-  auto const num_nodes = vt::theContext()->getNumNodes();                     \
+  auto const num_nodes = comm.numRanks();                                 \
   if (num_nodes < min_req_num_nodes) {                                    \
     GTEST_SKIP() << fmt::format(                                          \
       "Skipping the run on {} nodes. This test should run on at least {} "\
@@ -148,7 +147,7 @@ inline std::string getUniqueFilenameWithRanks(const std::string& ext = "") {
  */
 #define SET_NUM_NODES_CONSTRAINT(req_num_nodes)                           \
 {                                                                         \
-  auto const num_nodes = vt::theContext()->getNumNodes();                     \
+  auto const num_nodes = comm.numRanks();                                 \
   if (num_nodes != req_num_nodes) {                                       \
     GTEST_SKIP() << fmt::format(                                          \
       "Skipping the run on {} nodes. This test should run only on {} "    \

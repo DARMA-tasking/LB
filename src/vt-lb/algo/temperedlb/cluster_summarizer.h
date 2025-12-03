@@ -46,6 +46,7 @@
 
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Communication.h>
+#include <vt-lb/algo/temperedlb/configuration.h>
 
 #include <unordered_map>
 #include <vector>
@@ -98,12 +99,14 @@ struct ClusterSummarizer {
    * @param[in] pd Phase data
    * @param[in] clusterer_ Clusterer instance
    * @param[in] global_max_clusters Global maximum number of clusters
+   * @param[in] config Configuration object
    *
    * @return Map from global cluster ID to summary info
    */
   static std::unordered_map<int, TaskClusterSummaryInfo>
   buildClusterSummaries(
     model::PhaseData const& pd,
+    Configuration const& config,
     Clusterer const* clusterer_,
     int global_max_clusters
 );

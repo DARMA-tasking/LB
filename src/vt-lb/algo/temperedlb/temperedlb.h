@@ -222,7 +222,7 @@ struct TemperedLB final : baselb::BaseLB {
 
   std::unordered_map<int, TaskClusterSummaryInfo> buildClusterSummaries() {
     return ClusterSummarizer::buildClusterSummaries(
-      this->getPhaseData(), getClusterer(), global_max_clusters_
+      this->getPhaseData(), config_, getClusterer(), global_max_clusters_
     );
   }
 
@@ -279,7 +279,7 @@ struct TemperedLB final : baselb::BaseLB {
     // Run the clustering algorithm if appropiate for the configuration
     doClustering();
 
-    // Generate visualization after symmetrization/clustering
+    // Generate visualization after clustering
     visualizeGraph("temperedlb_rank" + std::to_string(comm_.getRank()) + "_trial" + std::to_string(trial));
 
     auto& wm = config_.work_model_;

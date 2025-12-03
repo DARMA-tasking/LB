@@ -45,6 +45,7 @@
 #include <vt-lb/model/Communication.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
+#include <vt-lb/algo/temperedlb/configuration.h>
 
 #include <unordered_map>
 #include <vector>
@@ -55,7 +56,10 @@ namespace vt_lb::algo::temperedlb {
 
 /*static*/ std::unordered_map<int, TaskClusterSummaryInfo>
 ClusterSummarizer::buildClusterSummaries(
-  model::PhaseData const& pd, Clusterer const* clusterer_, int global_max_clusters
+  model::PhaseData const& pd,
+  Configuration const& config,
+  Clusterer const* clusterer_,
+  int global_max_clusters
 ) {
   assert(clusterer_ != nullptr && "Clusterer must be initialized to build summaries");
   int const rank = pd.getRank();
@@ -133,13 +137,112 @@ ClusterSummarizer::buildClusterSummaries(
     }
   }
 
+  // Memory summaries per cluster (only if enabled)
+  if (config.hasMemoryInfo()) {
+    // Precompute a full set of task IDs for outside-cluster checks
+    std::unordered_set<model::TaskType> all_tasks;
+    for (auto const& kv : pd.getTasksMap()) {
+      all_tasks.insert(kv.first);
+    }
+
+    for (auto const& cl : clusterer_->clusters()) {
+      auto& sum = summary_by_local.at(cl.id);
+
+      // Build set of tasks in this cluster
+      std::unordered_set<model::TaskType> cluster_tasks(cl.members.begin(), cl.members.end());
+
+      // Initialize maxima and footprint
+      model::BytesType max_working_inside = 0;
+      model::BytesType max_serialized_inside = 0;
+      model::BytesType max_working_outside = 0;
+      model::BytesType max_serialized_outside = 0;
+      model::BytesType total_footprint = 0;
+
+      // Collect shared blocks used by cluster tasks
+      std::unordered_set<model::SharedBlockType> shared_blocks_in_cluster;
+
+      // Iterate tasks to compute inside values and shared blocks
+      for (auto t : cl.members) {
+        auto it = pd.getTasksMap().find(t);
+        if (it == pd.getTasksMap().end()) continue;
+        auto const& task = it->second;
+
+        // Footprint sum
+        if (config.hasTaskFootprintMemoryInfo()) {
+          total_footprint += task.getMemory().getFootprint();
+        }
+
+        // Max inside working/serialized
+        if (config.hasTaskWorkingMemoryInfo()) {
+          max_working_inside = std::max(max_working_inside, task.getMemory().getWorking());
+        }
+        if (config.hasTaskSerializedMemoryInfo()) {
+          max_serialized_inside = std::max(max_serialized_inside, task.getMemory().getSerialized());
+        }
+
+        // Shared blocks union
+        if (config.hasSharedBlockMemoryInfo()) {
+          for (auto const& sb : task.getSharedBlocks()) {
+            shared_blocks_in_cluster.insert(sb);
+          }
+        }
+      }
+
+      // Compute max outside values by scanning tasks not in this cluster
+      if (config.hasTaskWorkingMemoryInfo() || config.hasTaskSerializedMemoryInfo()) {
+        for (auto const& kv : pd.getTasksMap()) {
+          auto const& task = kv.second;
+          if (cluster_tasks.find(task.getId()) != cluster_tasks.end()) continue; // skip inside
+          if (config.hasTaskWorkingMemoryInfo()) {
+            max_working_outside = std::max(max_working_outside, task.getMemory().getWorking());
+          }
+          if (config.hasTaskSerializedMemoryInfo()) {
+            max_serialized_outside = std::max(max_serialized_outside, task.getMemory().getSerialized());
+          }
+        }
+      }
+
+      // Fill shared_block_bytes_ with sizes
+      if (config.hasSharedBlockMemoryInfo()) {
+        for (auto const& sb : shared_blocks_in_cluster) {
+          if (!pd.hasSharedBlock(sb)) continue;
+          auto info = pd.getSharedBlock(sb);
+          sum.shared_block_bytes_[sb] = info->getSize();
+        }
+      }
+
+      // Store computed values on summary
+      sum.max_object_working_bytes = max_working_inside;
+      sum.max_object_serialized_bytes = max_serialized_inside;
+      sum.max_object_working_bytes_outside = max_working_outside;
+      sum.max_object_serialized_bytes_outside = max_serialized_outside;
+      sum.cluster_footprint = total_footprint;
+    }
+  }
+
   // Emit summaries
   for (auto const& cl : clusterer_->clusters()) {
     auto const& sum = summary_by_local.at(cl.id);
-    printf("%d: buildClusterSummaries cluster %d size=%zu load=%.2f intra_send=%.2f intra_recv=%.2f inter_edges=%zu\n",
-            rank, cl.id, cl.members.size(), cl.load,
-            sum.cluster_intra_send_bytes, sum.cluster_intra_recv_bytes,
-            sum.inter_edges_.size());
+    printf(
+      "%d: buildClusterSummaries cluster %d size=%zu load=%.2f "
+      "intra_send=%.2f intra_recv=%.2f "
+      "inter_edges=%zu "
+      "footprint=%.0f "
+      "max_work_in=%.0f "
+      "max_work_out=%.0f "
+      "max_ser_in=%.0f "
+      "max_ser_out=%.0f "
+      "shared_block_count=%zu\n",
+      rank, cl.id, cl.members.size(), cl.load,
+      sum.cluster_intra_send_bytes, sum.cluster_intra_recv_bytes,
+      sum.inter_edges_.size(),
+      sum.cluster_footprint,
+      sum.max_object_working_bytes,
+      sum.max_object_working_bytes_outside,
+      sum.max_object_serialized_bytes,
+      sum.max_object_serialized_bytes_outside,
+      sum.shared_block_bytes_.size()
+    );
   }
 
   return summary_by_local;

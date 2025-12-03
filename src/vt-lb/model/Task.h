@@ -51,74 +51,74 @@
 namespace vt_lb::model {
 
 struct TaskMemory {
-    TaskMemory() = default;
-    TaskMemory(BytesType working, BytesType footprint, BytesType serialized)
-      : working_(working), footprint_(footprint), serialized_(serialized)
-    {}
+  TaskMemory() = default;
+  TaskMemory(BytesType working, BytesType footprint, BytesType serialized)
+    : working_(working), footprint_(footprint), serialized_(serialized)
+  {}
 
-    BytesType getWorking() const { return working_; }
-    BytesType getFootprint() const { return footprint_; }
-    BytesType getSerialized() const { return serialized_; }
+  BytesType getWorking() const { return working_; }
+  BytesType getFootprint() const { return footprint_; }
+  BytesType getSerialized() const { return serialized_; }
 
-    template <typename Serializer>
-    void serialize(Serializer& s) {
-      s | working_;
-      s | footprint_;
-      s | serialized_;
-    }
+  template <typename Serializer>
+  void serialize(Serializer& s) {
+    s | working_;
+    s | footprint_;
+    s | serialized_;
+  }
 
 private:
-    BytesType working_ = 0.0;
-    BytesType footprint_ = 0.0;
-    BytesType serialized_ = 0.0;
+  BytesType working_ = 0.0;
+  BytesType footprint_ = 0.0;
+  BytesType serialized_ = 0.0;
 };
 
 struct Task {
-    Task() = default;
-    Task(TaskType id, RankType home, RankType current, bool migratable,
-         TaskMemory const& memory, LoadType load)
-      : id_(id),
-        home_(home),
-        current_(current),
-        migratable_(migratable),
-        memory_(memory),
-        load_(load)
-    {}
+  Task() = default;
+  Task(TaskType id, RankType home, RankType current, bool migratable,
+        TaskMemory const& memory, LoadType load)
+    : id_(id),
+      home_(home),
+      current_(current),
+      migratable_(migratable),
+      memory_(memory),
+      load_(load)
+  {}
 
-    TaskType getId() const { return id_; }
-    RankType getHome() const { return home_; }
-    RankType getCurrent() const { return current_; }
-    bool isMigratable() const { return migratable_; }
-    TaskMemory const& getMemory() const { return memory_; }
-    LoadType getLoad() const { return load_; }
+  TaskType getId() const { return id_; }
+  RankType getHome() const { return home_; }
+  RankType getCurrent() const { return current_; }
+  bool isMigratable() const { return migratable_; }
+  TaskMemory const& getMemory() const { return memory_; }
+  LoadType getLoad() const { return load_; }
 
-    // Add accessors for shared blocks
-    void addSharedBlock(SharedBlockType sb) { shared_blocks_.insert(sb); }
-    std::unordered_set<SharedBlockType> const& getSharedBlocks() const { return shared_blocks_; }
+  // Add accessors for shared blocks
+  void addSharedBlock(SharedBlockType sb) { shared_blocks_.insert(sb); }
+  std::unordered_set<SharedBlockType> const& getSharedBlocks() const { return shared_blocks_; }
 
-    template <typename Serializer>
-    void serialize(Serializer& s) {
-      s | id_;
-      s | home_;
-      s | current_;
-      s | migratable_;
-      s | memory_;
-      s | load_;
-      s | shared_blocks_;
-    }
+  template <typename Serializer>
+  void serialize(Serializer& s) {
+    s | id_;
+    s | home_;
+    s | current_;
+    s | migratable_;
+    s | memory_;
+    s | load_;
+    s | shared_blocks_;
+  }
 
 private:
-    TaskType id_ = invalid_task;
-    int home_ = invalid_node;
-    int current_ = invalid_node;
-    bool migratable_ = true;
-    TaskMemory memory_;
-    LoadType load_ = 0.0;
-    std::unordered_set<SharedBlockType> shared_blocks_;
+  TaskType id_ = invalid_task;
+  int home_ = invalid_node;
+  int current_ = invalid_node;
+  bool migratable_ = true;
+  TaskMemory memory_;
+  LoadType load_ = 0.0;
+  std::unordered_set<SharedBlockType> shared_blocks_;
 
 public:
-    bool operator==(const Task& other) const { return id_ == other.id_; }
-    bool operator!=(const Task& other) const { return !(*this == other); }
+  bool operator==(const Task& other) const { return id_ == other.id_; }
+  bool operator!=(const Task& other) const { return !(*this == other); }
 };
 
 } /* end namespace vt_lb::model */

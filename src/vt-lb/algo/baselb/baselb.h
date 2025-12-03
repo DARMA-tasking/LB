@@ -69,9 +69,20 @@ struct BaseLB {
   auto const& getPhaseData() const { return *phase_data_; }
   auto& getPhaseData() { return *phase_data_; }
 
+  void savePhaseData() {
+    saved_phase_data_ = std::make_unique<model::PhaseData>(*phase_data_);
+  }
+  void restorePhaseData() {
+    if (saved_phase_data_) {
+      phase_data_ = std::move(saved_phase_data_);
+    }
+  }
+
 protected:
   /// @brief Phase data for load balancing
   std::unique_ptr<model::PhaseData> phase_data_;
+  /// @brief Saved phase data before load balancing
+  std::unique_ptr<model::PhaseData> saved_phase_data_;
 };
 
 } /* end namespace vt_lb::algo::baselb */

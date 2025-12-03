@@ -81,11 +81,26 @@ struct PhaseData {
   std::unordered_map<TaskType, Task> const& getTasksMap() const { return tasks_; }
   std::vector<Edge> const& getCommunications() const { return communications_; }
   std::unordered_map<SharedBlockType, SharedBlock> const& getSharedBlocksMap() const { return shared_blocks_; }
+  std::unordered_set<TaskType> getTaskIds() const {
+    std::unordered_set<TaskType> ids;
+    for (auto const& [id, task] : tasks_) {
+      ids.insert(id);
+    }
+    return ids;
+  }
+
+  BytesType getRankFootprintBytes() const { return rank_footprint_bytes_; }
+  void setRankFootprintBytes(BytesType bytes) { rank_footprint_bytes_ = bytes; }
+
+  BytesType getRankMaxMemoryAvailable() const { return rank_max_memory_available_; }
+  void setRankMaxMemoryAvailable(BytesType bytes) { rank_max_memory_available_ = bytes; }
 
   void clear() {
     tasks_.clear();
     communications_.clear();
     shared_blocks_.clear();
+    rank_footprint_bytes_ = 0.0;
+    rank_max_memory_available_ = 0.0;
   }
 
   template <typename Serializer>
@@ -94,6 +109,8 @@ struct PhaseData {
     s | tasks_;
     s | communications_;
     s | shared_blocks_;
+    s | rank_footprint_bytes_;
+    s | rank_max_memory_available_;
   }
 
 private:
@@ -101,6 +118,8 @@ private:
   std::unordered_map<TaskType, Task> tasks_;
   std::vector<Edge> communications_;
   std::unordered_map<SharedBlockType, SharedBlock> shared_blocks_;
+  BytesType rank_footprint_bytes_ = 0.0;
+  BytesType rank_max_memory_available_ = 0.0;
 };
 
 } /* end namespace vt_lb::model */

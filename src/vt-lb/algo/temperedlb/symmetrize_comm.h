@@ -40,6 +40,7 @@
 // *****************************************************************************
 //@HEADER
 */
+
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_SYMMETRIZE_COMM_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_SYMMETRIZE_COMM_H
 

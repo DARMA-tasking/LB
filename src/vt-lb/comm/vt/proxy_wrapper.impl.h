@@ -62,7 +62,7 @@ template <typename ProxyT>
 template <typename T>
 void ProxyWrapper<ProxyT>::reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, ReduceCtx* ctx) {
   auto const& val = msg->getVal();
-  printf("%d: callback invoked\n", vt::theContext()->getNode());
+  //printf("%d: callback invoked\n", vt::theContext()->getNode());
   if constexpr (
     std::is_same_v<std::decay_t<T>, int> || std::is_same_v<std::decay_t<T>, double> ||
     std::is_same_v<std::decay_t<T>, float> || std::is_same_v<std::decay_t<T>, long> ||
@@ -117,7 +117,7 @@ void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, Re
   ctx->out_ptr = static_cast<void*>(recvbuf);
   ctx->count = static_cast<std::size_t>(std::max(1, count));
   ctx->done.store(false);
-  printf("%d: initiating reduce\n", vt::theContext()->getNode());
+  //printf("%d: initiating reduce\n", vt::theContext()->getNode());
 
   if (count == 1) {
     T value = *static_cast<T const*>(sendbuf);

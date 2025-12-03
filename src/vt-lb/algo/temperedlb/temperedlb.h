@@ -340,7 +340,7 @@ private:
     }
 
     int const root = 0;
-    comm_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
+    handle_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
 
     if (comm_.getRank() == root) {
       printf("%d: global max clusters across ranks: %d\n", root, global_max_clusters_);
@@ -355,9 +355,9 @@ private:
     double global_min = 0.0;
     double global_max = 0.0;
     double global_sum = 0.0;
-    comm_.reduce(0, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
-    comm_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
-    comm_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    handle_.reduce(0, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
+    handle_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
+    handle_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
     double global_avg = global_sum / static_cast<double>(comm_.numRanks());
     double I = (global_max / global_avg) - 1.0;
     if (comm_.getRank() == 0) {

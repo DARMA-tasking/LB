@@ -66,7 +66,7 @@ struct Cluster {
   vt_lb::model::LoadType load = 0.0;
 };
 
-// Assumption: all tasks much exist to at least one cluster
+// Assumption: all tasks must exist to at least one cluster
 struct Clusterer {
   using TaskType = vt_lb::model::TaskType;
   using BytesType = vt_lb::model::BytesType;

@@ -275,7 +275,7 @@ struct TemperedLB final : baselb::BaseLB {
   }
 
   void run() {
-    // Make communications symmetric before running trials so we only have to done it once
+    // Make communications symmetric before running trials so we only have to do it once
     makeCommunicationsSymmetric();
 
     for (int trial = 0; trial < config_.num_trials_; ++trial) {
@@ -306,7 +306,7 @@ struct TemperedLB final : baselb::BaseLB {
       computeStatistics(total_memory_usage, "Memory Usage");
     }
 
-    // Run the clustering algorithm if appropiate for the configuration
+    // Run the clustering algorithm if appropriate for the configuration
     doClustering();
 
     // Generate visualization after clustering
@@ -331,7 +331,7 @@ struct TemperedLB final : baselb::BaseLB {
 #else
       // Just assume max of 1000 clusters per rank for now, until we have bcast
 #endif
-      // For now, we will assume that if beta/gemma/delta are non-zero, clustering must occur.
+      // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
       // Every task could be its own cluster, but clusters must exist
       assert(clusterer_ != nullptr && "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();

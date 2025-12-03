@@ -67,7 +67,7 @@ struct WorkModel {
   double beta = 0.0;
   /// @brief  Coefficient for intra-node communication component
   double gamma = 0.0;
-  /// @brief  Coefficient for shared-memory communication component
+  /// @brief  Coefficient for shared-memory off-home communication component
   double delta = 0.0;
 
   /// @brief Whether memory information is available
@@ -104,6 +104,20 @@ struct WorkModel {
 };
 
 /**
+ * @struct Memory breakdown (for incremental updates)
+ *
+ * @brief Breakdown of memory components for a task distribution
+ */
+struct MemoryBreakdown {
+  /// @brief Current memory usage
+  double current_memory_usage = 0.0;
+  /// @brief Current maximum task working memory usage
+  double current_max_task_working_bytes = 0.0;
+  /// @brief Current maximum task serialized memory usage
+  double current_max_task_serialized_bytes = 0.0;
+};
+
+/**
  * @struct WorkBreakdown (for incremental updates)
  *
  * @brief Breakdown of work components for a task distribution
@@ -121,26 +135,8 @@ struct WorkBreakdown {
   double intra_node_send_comm = 0.0;
   /// @brief Shared-memory communication component
   double shared_mem_comm = 0.0;
-  /// @brief Current memory usage
-  double current_memory_usage = 0.0;
-  /// @brief Current maximum task working memory usage
-  double current_max_task_working_bytes = 0.0;
-  /// @brief Current maximum task serialized memory usage
-  double current_max_task_serialized_bytes = 0.0;
-};
-
-/**
- * @struct Memory breakdown (for incremental updates)
- *
- * @brief Breakdown of memory components for a task distribution
- */
-struct MemoryBreakdown {
-  /// @brief Current memory usage
-  double current_memory_usage = 0.0;
-  /// @brief Current maximum task working memory usage
-  double current_max_task_working_bytes = 0.0;
-  /// @brief Current maximum task serialized memory usage
-  double current_max_task_serialized_bytes = 0.0;
+  /// @brief Memory breakdown
+  MemoryBreakdown memory_breakdown;
 };
 
 /**
@@ -217,9 +213,7 @@ struct WorkModelCalculator {
    * @param phase_data The phase data
    * @param clusterer The clusterer
    * @param global_max_clusters The global maximum number of clusters
-   * @param current_memory_usage The current memory usage
-   * @param current_max_task_working_bytes The current maximum task working memory usage
-   * @param current_max_task_serialized_bytes The current maximum task serialized memory usage
+   * @param breakdown The current work breakdown
    * @param to_add The cluster of tasks to add
    * @param to_remove The cluster of tasks to remove
    *
@@ -230,9 +224,7 @@ struct WorkModelCalculator {
     model::PhaseData const& phase_data,
     Clusterer const& clusterer,
     int global_max_clusters,
-    double current_memory_usage,
-    double current_max_task_working_bytes,
-    double current_max_task_serialized_bytes,
+    WorkBreakdown const& breakdown,
     TaskClusterSummaryInfo to_add,
     TaskClusterSummaryInfo to_remove
   );

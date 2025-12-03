@@ -100,10 +100,7 @@ namespace vt_lb::algo::temperedlb {
   }
 
   if (config.hasMemoryInfo()) {
-    auto memory_bd = computeMemoryUsage(config, phase_data);
-    breakdown.current_memory_usage = memory_bd.current_memory_usage;
-    breakdown.current_max_task_working_bytes = memory_bd.current_max_task_working_bytes;
-    breakdown.current_max_task_serialized_bytes = memory_bd.current_max_task_serialized_bytes;
+    breakdown.memory_breakdown = computeMemoryUsage(config, phase_data);
   }
 
   return breakdown;
@@ -303,9 +300,7 @@ namespace vt_lb::algo::temperedlb {
   model::PhaseData const& phase_data,
   Clusterer const& clusterer,
   int global_max_clusters,
-  double current_memory_usage,
-  double current_max_task_working_bytes,
-  double current_max_task_serialized_bytes,
+  WorkBreakdown const& breakdown,
   TaskClusterSummaryInfo to_add,
   TaskClusterSummaryInfo to_remove
 ) {
@@ -314,8 +309,8 @@ namespace vt_lb::algo::temperedlb {
   }
 
   // New maxima from add/remove summaries
-  double new_max_task_working_bytes    = current_max_task_working_bytes;
-  double new_max_task_serialized_bytes = current_max_task_serialized_bytes;
+  double new_max_task_working_bytes    = breakdown.memory_breakdown.current_max_task_working_bytes;
+  double new_max_task_serialized_bytes = breakdown.memory_breakdown.current_max_task_serialized_bytes;
 
   if (config.hasTaskWorkingMemoryInfo()) {
     new_max_task_working_bytes = std::max(
@@ -406,12 +401,12 @@ namespace vt_lb::algo::temperedlb {
   }
 
   // Update memory usage
-  double updated_usage = current_memory_usage;
+  double updated_usage = breakdown.memory_breakdown.current_memory_usage;
   if (config.hasTaskWorkingMemoryInfo()) {
-    updated_usage += (new_max_task_working_bytes - current_max_task_working_bytes);
+    updated_usage += (new_max_task_working_bytes - breakdown.memory_breakdown.current_max_task_working_bytes);
   }
   if (config.hasTaskSerializedMemoryInfo()) {
-    updated_usage += (new_max_task_serialized_bytes - current_max_task_serialized_bytes);
+    updated_usage += (new_max_task_serialized_bytes - breakdown.memory_breakdown.current_max_task_serialized_bytes);
   }
   updated_usage += delta_footprint;
   updated_usage += delta_shared_blocks;

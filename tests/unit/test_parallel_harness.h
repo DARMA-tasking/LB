@@ -50,18 +50,16 @@
 #include "test_config.h"
 #include "test_harness.h"
 
-#include <vt-lb/comm/vt/comm_vt.h>
+#include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/comm/MPI/comm_mpi.h>
+#include <vt-lb/comm/vt/comm_vt.h>
 
 namespace vt_lb { namespace tests { namespace unit {
 
 extern int test_argc;
 extern char** test_argv;
 
-using CommType = vt_lb::comm::CommVT;
-//using CommType = vt_lb::comm::CommMPI;
-
-template <typename TestBase>
+template <typename TestBase, comm::Communicator CommType>
 struct TestParallelHarnessAny : TestHarnessAny<TestBase> {
   virtual void SetUp() override {
     TestHarnessAny<TestBase>::SetUp();
@@ -164,14 +162,24 @@ private:
   std::vector<char*> additional_args_;
 };
 
-using TestParallelHarness = TestParallelHarnessAny<testing::Test>;
+template <comm::Communicator CommType>
+using TestParallelHarness = TestParallelHarnessAny<testing::Test, CommType>;
 
-template <typename ParamT>
+template <typename ParamT, comm::Communicator CommType>
 using TestParallelHarnessParam = TestParallelHarnessAny<
-  testing::TestWithParam<ParamT>
+  testing::TestWithParam<ParamT>, CommType
 >;
 
-using TestParameterHarnessNode = TestParallelHarnessParam<vt::NodeType>;
+struct CommNameGenerator {
+  template <comm::Communicator CommType>
+  static std::string GetName(int) {
+    if constexpr (std::is_same_v<CommType, comm::CommMPI>) return "CommMPI";
+    if constexpr (std::is_same_v<CommType, comm::CommVT>) return "CommVT";
+    return "Unrecognized";
+  }
+};
+
+using CommTypesForTesting = ::testing::Types<comm::CommMPI, comm::CommVT>;
 
 }}} // end namespace vt_lb::tests::unit
 

@@ -3,7 +3,7 @@ set(
   algo
     algo/baselb algo/temperedlb algo/driver
   comm
-    comm/MPI comm/VT
+    comm/MPI comm/vt
   input
   model
 )

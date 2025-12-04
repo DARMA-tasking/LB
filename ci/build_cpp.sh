@@ -120,7 +120,7 @@ export LB_BUILD=${build_dir}/LB
 mkdir -p "$LB_BUILD"
 cd "$LB_BUILD"
 rm -Rf ./*
-cmake -G "${CMAKE_GENERATOR:-Ninja}" \
+cmake -GNinja \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
       -Dvt_DIR="$VT_BUILD/install/cmake/" \
       -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Debug}" \
@@ -130,33 +130,21 @@ cmake_conf_ret=$?
 # Generate output file with compilation warnings and errors
 
 GENERATOR=$(cmake -L . | grep USED_CMAKE_GENERATOR:STRING | cut -d"=" -f2)
-OUTPUT="$VT_BUILD"/compilation_errors_warnings.out
+OUTPUT="$LB_BUILD"/compilation_errors_warnings.out
 OUTPUT_TMP="$OUTPUT".tmp
 WARNS_ERRS=""
 
-# Unfortunately Ninja doesn't output compilation warnings and errors to stderr
-# so it needs special treatment
-if test "$GENERATOR" = "Ninja"
-then
-    # To easily tell if compilation of given file succeeded special progress bar is used
-    # (controlled by variable NINJA_STATUS)
-    export NINJA_STATUS="[ninja][%f/%t] "
-    time cmake --build . ${dashj} --target "${target}" | tee "$OUTPUT_TMP"
-    compilation_ret=${PIPESTATUS[0]}
-    sed -i '/ninja: build stopped:/d' "$OUTPUT_TMP"
+# To easily tell if compilation of given file succeeded special progress bar is used
+# (controlled by variable NINJA_STATUS)
+export NINJA_STATUS="[ninja][%f/%t] "
+time cmake --build . ${dashj} --target "${target}" | tee "$OUTPUT_TMP"
+compilation_ret=${PIPESTATUS[0]}
+sed -i '/ninja: build stopped:/d' "$OUTPUT_TMP"
 
-    # Now every line that doesn't start with [ninja][number]/[number] is an error or a warning
-    WARNS_ERRS=$(grep -Ev '^(\[ninja\]\[[[:digit:]]+\/[[:digit:]]+\])|(--) .*$' "$OUTPUT_TMP" || true)
-elif test "$GENERATOR" = "Unix Makefiles"
-then
-    # Gcc outputs warnings and errors to stderr, so there's not much to do
-    time cmake --build . ${dashj} --target "${target}" 2> >(tee "$OUTPUT_TMP")
-    compilation_ret=$?
-    WARNS_ERRS=$(cat "$OUTPUT_TMP")
-fi
+# Now every line that doesn't start with [ninja][number]/[number] is an error or a warning
+WARNS_ERRS=$(grep -Ev '^(\[ninja\]\[[[:digit:]]+\/[[:digit:]]+\])|(--) .*$' "$OUTPUT_TMP" || true)
 
 echo "$WARNS_ERRS" > "$OUTPUT"
-
 
 if test "$use_ccache"
 then

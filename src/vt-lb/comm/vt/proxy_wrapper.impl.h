@@ -72,7 +72,7 @@ void ProxyWrapper<ProxyT>::reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, Redu
   } else {
     using ValT = typename T::value_type;
     static_assert(std::is_trivially_copyable_v<ValT> || std::is_arithmetic_v<ValT>, "Reduce value must be trivially copyable");
-    std::memcpy(ctx->out_ptr, std::addressof(val.at(0)), sizeof(ValT) * std::max<std::size_t>(1, ctx->count));
+    std::memcpy(ctx->out_ptr, val.data(), sizeof(ValT) * std::max<std::size_t>(1, ctx->count));
   }
   ctx->done.store(true, std::memory_order_release);
 }

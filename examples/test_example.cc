@@ -36,7 +36,7 @@ static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks)
   std::mt19937 gen(rank * 7937 + 17 + 9);
   std::uniform_real_distribution<double> uni(0.0, 1.0);
 
-  int const local_tasks = 20;
+  int const local_tasks = 20 - rank*2; // Varying number of tasks per rank
   std::vector<TaskType> local_ids;
   local_ids.reserve(local_tasks);
 
@@ -49,7 +49,7 @@ static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks)
       rank,
       rank,
       true,
-      TaskMemory{1024 + i * 10, 512, 256},
+      TaskMemory{(double)(1024 + i * 10), 512, 256},
       20.0 + i
     };
     pd.addTask(t);

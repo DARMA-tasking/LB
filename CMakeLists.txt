@@ -9,7 +9,7 @@ if (ccache_binary)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${ccache_binary}")
 endif()
 
-find_package(MPI REQUIRED)
+include(cmake/load_mpi_package.cmake)
 find_package(vt)
 
 # vt includes magistrate
@@ -52,6 +52,7 @@ add_subdirectory(src)
 add_subdirectory(examples)
 
 include(CTest) #adds option BUILD_TESTING (default ON)
+enable_testing()
 
 message(STATUS "VT_LB_TESTS_ENABLED: ${VT_LB_TESTS_ENABLED}")
 if (BUILD_TESTING AND VT_LB_TESTS_ENABLED)

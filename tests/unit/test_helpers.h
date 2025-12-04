@@ -131,7 +131,7 @@ inline std::string getUniqueFilename(const std::string& ext = "") {
  */
 #define SET_MIN_NUM_NODES_CONSTRAINT(min_req_num_nodes)                   \
 {                                                                         \
-  auto const num_nodes = comm.numRanks();                                 \
+  auto const num_nodes = this->comm.numRanks();                           \
   if (num_nodes < min_req_num_nodes) {                                    \
     GTEST_SKIP() << fmt::format(                                          \
       "Skipping the run on {} nodes. This test should run on at least {} "\

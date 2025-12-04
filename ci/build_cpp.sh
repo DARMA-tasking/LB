@@ -6,9 +6,6 @@ source_dir=${1}
 build_dir=${2}
 target=${3:-install}
 
-# Dump environment variables for easier debugging
-env | sort
-
 # Dependency versions, when fetched via git.
 vt_rev=develop
 checkpoint_rev=develop

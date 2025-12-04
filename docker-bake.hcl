@@ -101,9 +101,6 @@ target "lb-build-all" {
       },
       {
         image = "amd64-ubuntu-24.04-gcc-14-cpp"
-      },
-      {
-        image = "amd64-ubuntu-20.04-gcc-9-ldms-cpp"
       }
     ]
   }

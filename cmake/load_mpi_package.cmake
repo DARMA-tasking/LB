@@ -5,7 +5,7 @@
 
 find_package(MPI REQUIRED)
 if(MPI_FOUND)
-  #include_directories(${ZLIB_INCLUDE_DIRS})
+  # do nothing
 else()
   message(FATAL_ERROR "Failure to locate MPI: MPI is required for LB to build")
 endif(MPI_FOUND)
@@ -44,7 +44,7 @@ function(build_mpi_proc_test_list)
     ARG "${noValOption}" "${singleValArg}" "${multiValueArgs}" ${ARGN}
   )
 
-  # Stop the configurtion if there are any unparsed arguments
+  # Stop the configuration if there are any unparsed arguments
   if (ARG_UNPARSED_ARGUMENTS)
     message(FATAL_ERROR "found unparsed arguments: ${ARG_UNPARSED_ARGUMENTS}")
   endif()

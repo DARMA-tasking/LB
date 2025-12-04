@@ -14,7 +14,7 @@ find_package(vt)
 
 # vt includes magistrate
 #if(NOT vt_FOUND)
-  find_package(magistrate REQUIRED)
+#  find_package(magistrate REQUIRED)
 #endif()
 
 file(

@@ -54,20 +54,12 @@ target "lb-build-all" {
       {
         image = "amd64-alpine-3.16-clang-cpp"
       },
-      {
-        image = "amd64-ubuntu-20.04-clang-10-cpp"
-      },
-      {
-        image = "amd64-ubuntu-20.04-clang-9-cpp"
-      },
+
       {
         image = "amd64-ubuntu-20.04-gcc-10-cpp"
       },
       {
         image = "amd64-ubuntu-20.04-gcc-10-openmpi-cpp"
-      },
-      {
-        image = "amd64-ubuntu-20.04-gcc-9-cpp"
       },
       {
         image = "amd64-ubuntu-22.04-clang-11-cpp"

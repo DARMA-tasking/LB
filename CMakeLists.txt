@@ -13,9 +13,9 @@ find_package(MPI REQUIRED)
 find_package(vt)
 
 # vt includes magistrate
-#if(NOT vt_FOUND)
+if(NOT vt_FOUND)
   find_package(magistrate REQUIRED)
-#endif()
+endif()
 
 file(
   GLOB

@@ -81,25 +81,15 @@ add_library(${VT_LB_LIBRARY_NS} ALIAS ${VT_LB_LIBRARY})
 include(turn_on_warnings)
 turn_on_warnings(${VT_LB_LIBRARY})
 
-# target_link_libraries(
-#   ${VT_LB_LIBRARY} PUBLIC ${JSON_LIBRARY}
-# )
-
-# target_link_libraries(
-#   ${VT_LB_LIBRARY} PUBLIC ${FMT_LIBRARY}
-# )
-
-# target_link_libraries(
-#   ${VT_LB_LIBRARY} PUBLIC ${BROTLI_LIBRARY}
-# )
-
 target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC MPI::MPI_CXX
 )
 
-target_link_libraries(
-  ${VT_LB_LIBRARY} PUBLIC vt::lib::magistrate
-)
+if(NOT vt_FOUND)
+  target_link_libraries(
+    ${VT_LB_LIBRARY} PUBLIC vt::lib::magistrate
+  )
+endif()
 target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC vt::runtime::vt
 )

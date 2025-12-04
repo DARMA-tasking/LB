@@ -31,7 +31,7 @@ static double sampleCommVolume(std::mt19937& gen) {
 }
 
 // Synthetic graph builder (no ghost tasks: edges reference real remote tasks)
-static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks) {
+static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int /*num_ranks*/) {
   using namespace vt_lb::model;
   std::mt19937 gen(rank * 7937 + 17 + 9);
   std::uniform_real_distribution<double> uni(0.0, 1.0);
@@ -49,7 +49,7 @@ static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks)
       rank,
       rank,
       true,
-      TaskMemory{1024 + i * 10, 512, 256},
+      TaskMemory{1024.0 + i * 10.0, 512.0, 256.0},
       20.0 + i
     };
     pd.addTask(t);

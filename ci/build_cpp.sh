@@ -121,6 +121,7 @@ cmake -GNinja \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
       -Dvt_DIR="$VT_BUILD/install/cmake/" \
       -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Debug}" \
+      -DMPI_EXTRA_FLAGS_LIST="${MPI_EXTRA_FLAGS:-}" \
       "$LB"
 cmake_conf_ret=$?
 

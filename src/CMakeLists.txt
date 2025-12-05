@@ -6,6 +6,7 @@ set(
     comm/MPI comm/vt
   input
   model
+  util
 )
 
 set(VT_LB_INSTALL_DESTINATION "include/vt-lb")

@@ -92,6 +92,9 @@ struct Task {
   TaskMemory const& getMemory() const { return memory_; }
   LoadType getLoad() const { return load_; }
 
+  void setMemory(TaskMemory mem) { memory_ = mem; }
+  void setLoad(LoadType load) { load_ = load; }
+
   // Add accessors for shared blocks
   void addSharedBlock(SharedBlockType sb) { shared_blocks_.insert(sb); }
   std::unordered_set<SharedBlockType> const& getSharedBlocks() const { return shared_blocks_; }

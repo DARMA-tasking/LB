@@ -58,6 +58,7 @@ enum class Verbosity : int {
 
 enum class Component : int {
   Communicator = 0,
+  LoadBalancer = 1
   // Add more components here as needed
   // e.g., LoadBalancer, Termination, Scheduler, etc.
 };

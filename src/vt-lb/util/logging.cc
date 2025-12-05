@@ -47,11 +47,12 @@ namespace vt_lb::util {
 
 // Simple global logging state
 struct LoggingState {
-  Verbosity verbosity{Verbosity::terse};
+  Verbosity verbosity{Verbosity::normal};
   std::array<bool, 16> components;
   LoggingState() {
     for (auto& c : components) c = false;
     components[static_cast<int>(Component::Communicator)] = true;
+    components[static_cast<int>(Component::LoadBalancer)] = true;
   }
   static LoggingState& instance() {
     static LoggingState s;
@@ -109,6 +110,7 @@ bool getColorEnabled() { return g_color_enabled; }
 std::string_view componentName(Component c) {
   switch (c) {
     case Component::Communicator: return "Communicator";
+    case Component::LoadBalancer:   return "LoadBalancer";
     default: return "Unknown";
   }
 }
@@ -133,6 +135,7 @@ constexpr std::string_view FG_MAGENTA = "\033[35m";
 std::string_view componentColorName(Component c) {
   switch (c) {
     case Component::Communicator: return "\033[34mCommunicator\033[0m"; // blue
+    case Component::LoadBalancer:   return "\033[36mLoadBalancer\033[0m";   // cyan
     default: return "\033[35mUnknown\033[0m"; // magenta
   }
 }

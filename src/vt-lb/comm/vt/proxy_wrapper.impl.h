@@ -88,24 +88,18 @@ typename ProxyWrapper<ProxyT>::VTOp ProxyWrapper<ProxyT>::mapOp(MPI_Op mpio) {
 template <typename ProxyT>
 template <typename U, typename V>
 void ProxyWrapper<ProxyT>::reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count) {
-  switch (datatype) {
-    case MPI_INT:
-      if constexpr (std::is_same_v<U, int*>) reduce_impl<int>(root, op, sendbuf, recvbuf, count);
-      break;
-    case MPI_DOUBLE:
-      if constexpr (std::is_same_v<U, double*>) reduce_impl<double>(root, op, sendbuf, recvbuf, count);
-      break;
-    case MPI_FLOAT:
-      if constexpr (std::is_same_v<U, float*>) reduce_impl<float>(root, op, sendbuf, recvbuf, count);
-      break;
-    case MPI_LONG:
-      if constexpr (std::is_same_v<U, long*>) reduce_impl<long>(root, op, sendbuf, recvbuf, count);
-      break;
-    case MPI_LONG_LONG:
-      if constexpr (std::is_same_v<U, long long*>) reduce_impl<long long>(root, op, sendbuf, recvbuf, count);
-      break;
-    default:
-      vtAbort("ProxyWrapper::reduce: unsupported MPI_Datatype");
+  if (datatype == MPI_INT) {
+    if constexpr (std::is_same_v<U, int*>) reduce_impl<int>(root, op, sendbuf, recvbuf, count);
+  } else if (datatype == MPI_DOUBLE) {
+    if constexpr (std::is_same_v<U, double*>) reduce_impl<double>(root, op, sendbuf, recvbuf, count);
+  } else if (datatype == MPI_FLOAT) {
+    if constexpr (std::is_same_v<U, float*>) reduce_impl<float>(root, op, sendbuf, recvbuf, count);
+  } else if (datatype == MPI_LONG) {
+    if constexpr (std::is_same_v<U, long*>) reduce_impl<long>(root, op, sendbuf, recvbuf, count);
+  } else if (datatype == MPI_LONG_LONG) {
+    if constexpr (std::is_same_v<U, long long*>) reduce_impl<long long>(root, op, sendbuf, recvbuf, count);
+  } else {
+    vtAbort("ProxyWrapper::reduce: unsupported MPI_Datatype");
   }
 }
 

@@ -9,13 +9,17 @@ if (ccache_binary)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${ccache_binary}")
 endif()
 
-find_package(MPI REQUIRED)
+set(MPI_EXTRA_FLAGS "" CACHE STRING "Flags to pass to mpirun/mpiexec")
+string(REPLACE " " ";" MPI_EXTRA_FLAGS_LIST "${MPI_EXTRA_FLAGS}")
+message(STATUS "Running tests and examples with additional MPI flags = ${MPI_EXTRA_FLAGS_LIST}")
+
+include(cmake/load_mpi_package.cmake)
 find_package(vt)
 
 # vt includes magistrate
-#if(NOT vt_FOUND)
+if(NOT vt_FOUND)
   find_package(magistrate REQUIRED)
-#endif()
+endif()
 
 file(
   GLOB
@@ -52,6 +56,7 @@ add_subdirectory(src)
 add_subdirectory(examples)
 
 include(CTest) #adds option BUILD_TESTING (default ON)
+enable_testing()
 
 message(STATUS "VT_LB_TESTS_ENABLED: ${VT_LB_TESTS_ENABLED}")
 if (BUILD_TESTING AND VT_LB_TESTS_ENABLED)

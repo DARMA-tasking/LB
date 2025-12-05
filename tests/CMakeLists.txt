@@ -83,14 +83,9 @@ function(add_unit_test unit_test_name unit_test_files uses_mpi additional_args)
 
   if(uses_mpi)
     foreach(PROC ${PROC_TEST_LIST})
-      gtest_add_tests(
-        TARGET                 ${unit_test_name}
-        EXTRA_ARGS             ${additional_args}
-        WORKING_DIRECTORY      ${CMAKE_CURRENT_BINARY_DIR}
-        TEST_SUFFIX            _proc_${PROC}
-        TEST_PREFIX            vt-lb:
-        TEST_LIST              ${CUR_TEST_LIST}
-        EXECUTE_COMMAND        ${MPI_RUN_COMMAND} ${MPI_EXTRA_FLAGS_LIST} ${MPI_NUMPROC_FLAG} ${PROC}
+      add_test(
+        NAME ${unit_test_name}_proc_${PROC}
+        COMMAND ${MPI_RUN_COMMAND} ${MPI_EXTRA_FLAGS_LIST} ${MPI_NUMPROC_FLAG} ${PROC} "${CMAKE_CURRENT_BINARY_DIR}/${unit_test_name}"
       )
 
       set_tests_properties(
@@ -104,13 +99,9 @@ function(add_unit_test unit_test_name unit_test_files uses_mpi additional_args)
       )
     endforeach()
   else()
-    gtest_add_tests(
-      TARGET                 ${unit_test_name}
-      EXTRA_ARGS             ${additional_args}
-      WORKING_DIRECTORY      ${CMAKE_CURRENT_BINARY_DIR}
-      TEST_SUFFIX            _no_mpi
-      TEST_PREFIX            vt-lb:
-      TEST_LIST              ${CUR_TEST_LIST}
+    add_test(
+      NAME ${unit_test_name}
+      COMMAND "${CMAKE_CURRENT_BINARY_DIR}/${unit_test_name}"
     )
 
     set_tests_properties(

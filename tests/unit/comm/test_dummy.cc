@@ -65,6 +65,6 @@ TYPED_TEST_SUITE(TestDummyAnyComm, CommTypesForTesting, CommNameGenerator);
 TYPED_TEST(TestDummyAnyComm, test_dummy) {
   auto const my_rank = this->comm.getRank();
   EXPECT_GE( my_rank, 0 );
-};
+}
 
 }}} // end namespace vt_lb::tests::unit

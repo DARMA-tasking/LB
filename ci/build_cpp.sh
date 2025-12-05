@@ -10,7 +10,7 @@ target=${3:-install}
 vt_rev=develop
 checkpoint_rev=develop
 
-if [ -z ${4} ]; then
+if [ -z "${4}" ]; then
     dashj=""
 else
     dashj="-j ${4}"

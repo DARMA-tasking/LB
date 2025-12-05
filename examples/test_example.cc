@@ -38,7 +38,7 @@ static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks)
 
   (void)num_ranks;
 
-  int const local_tasks = 20 - rank*2; // Varying number of tasks per rank
+  int const local_tasks = 10 + rank*2; // Varying number of tasks per rank
   std::vector<TaskType> local_ids;
   local_ids.reserve(local_tasks);
 

@@ -82,6 +82,10 @@ include(turn_on_warnings)
 turn_on_warnings(${VT_LB_LIBRARY})
 
 target_link_libraries(
+  ${VT_LB_LIBRARY} PRIVATE fmt
+)
+
+target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC MPI::MPI_CXX
 )
 
@@ -90,6 +94,7 @@ if(NOT vt_FOUND)
     ${VT_LB_LIBRARY} PUBLIC vt::lib::magistrate
   )
 endif()
+
 target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC vt::runtime::vt
 )

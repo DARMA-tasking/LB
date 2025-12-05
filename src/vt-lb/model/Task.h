@@ -75,6 +75,10 @@ private:
 
 struct Task {
   Task() = default;
+  Task(TaskType id, LoadType load)
+    : id_(id), load_(load)
+  {}
+
   Task(TaskType id, RankType home, RankType current, bool migratable,
         TaskMemory const& memory, LoadType load)
     : id_(id),

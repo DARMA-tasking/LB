@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: lifflander1/vt:wf-amd64-ubuntu-22.04-gcc-12-cpp
+    steps:
+      - name: Checkout LB
+        uses: actions/checkout@v6
+        with:
+          path: LB
+      - name: Checkout magistrate
+        uses: actions/checkout@v6
+        with:
+          repository: DARMA-tasking/magistrate
+          path: magistrate
+      - name: Checkout vt
+        uses: actions/checkout@v6
+        with:
+          repository: DARMA-tasking/vt
+          path: vt
+      - name: Build magistrate
+        shell: bash
+        run: |
+          cmake -S magistrate -B magistrate/build -DCMAKE_INSTALL_PREFIX=magistrate/build/install
+          cmake --build magistrate/build --target install
+      - name: Build vt
+        shell: bash
+        run: |
+          cmake -S vt -B vt/build -DCMAKE_INSTALL_PREFIX=vt/build/install \
+            -Dmagistrate_ROOT=magistrate/build/install \
+            -Dvt_build_examples=0                      \
+            -Dvt_build_tests=0                         \
+            -Dvt_build_tools=0
+          cmake --build vt/build --target install
+      - name: Build LB
+        shell: bash
+        run: |
+          cmake -S LB -B LB/build \
+            -Dvt_ROOT=vt/build/install
+          cmake --build LB/build --target install
+      - name: Test
+        shell: bash
+        run: |
+          echo "ok"

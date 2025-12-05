@@ -59,6 +59,8 @@ struct SharedBlock {
     BytesType getSize() const { return size_; }
     RankType getHome() const { return home_; }
 
+    void setSize(BytesType size) { size_ = size; }
+
     template <typename Serializer>
     void serialize(Serializer& s) {
       s | id_;

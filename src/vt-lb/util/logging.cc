@@ -138,10 +138,15 @@ constexpr std::string_view FG_YELLOW = "\033[33m";
 constexpr std::string_view FG_MAGENTA = "\033[35m";
 constexpr std::string_view FG_CYAN = "\033[36m";
 constexpr std::string_view FG_RED = "\033[31m";
+constexpr std::string_view FG_BD_GREEN = "\033[32;1m";
 
 // Helper to map Component to index used in arrays
 static inline size_t componentIndex(Component c) {
   return static_cast<size_t>(c);
+}
+
+std::string prefixColor() {
+  return std::string(FG_BD_GREEN) + std::string("LB:") + std::string(RESET);
 }
 
 // Precomputed names for components (plain and colored)

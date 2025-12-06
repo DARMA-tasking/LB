@@ -90,6 +90,7 @@ bool getColorEnabled();
 // Colored helpers
 std::string_view componentColorName(Component c);
 std::string_view verbosityColorName(Verbosity v);
+std::string prefixColor();
 
 // rank provider symbol is defined in logging.cc
 extern RankProvider __vt_lb_util_rank_provider;
@@ -103,13 +104,15 @@ inline void log(Component comp, Verbosity msg_verbosity, std::string_view fmt_st
   if (isEnabled(comp) && static_cast<int>(getVerbosity()) >= static_cast<int>(msg_verbosity)) {
     auto const comp_str = getColorEnabled() ? componentColorName(comp) : componentName(comp);
     auto const verb_str = getColorEnabled() ? verbosityColorName(msg_verbosity) : verbosityName(msg_verbosity);
+    auto const prefix = getColorEnabled() ? prefixColor() :  "LB:";
     if (__vt_lb_util_rank_provider) {
       auto const r = __vt_lb_util_rank_provider();
-      fmt::print("[{}][{}][{}] ", r, comp_str, verb_str);
+      fmt::print("{} [{}] ({}) {}: ", prefix, r, verb_str, comp_str);
     } else {
-      fmt::print("[{}][{}] ", comp_str, verb_str);
+      fmt::print("{} ({}) {}: ", prefix, verb_str, comp_str);
     }
     fmt::print(fmt::runtime(fmt_str), std::forward<Args>(args)...);
+    fflush(stdout);
   }
 }
 } /* end namespace vt_lb::util */

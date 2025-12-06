@@ -176,8 +176,8 @@ struct FullGraphVisualizer {
     if (parent >= 0) {
       // Forward merged accumulation to parent
       VT_LB_LOG(normal, "[viz] send to parent={}\n", parent);
-      handle_.template send<&ThisType::receiveAggregated>(
-        parent, merged, merged_clusters, static_cast<model::RankType>(my_rank)
+      handle_[parent].template send<&ThisType::receiveAggregated>(
+        merged, merged_clusters, static_cast<model::RankType>(my_rank)
       );
     } else {
       // Root: we now have the complete graph and cluster map across all ranks

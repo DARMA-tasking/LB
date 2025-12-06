@@ -21,6 +21,9 @@ if(NOT vt_FOUND)
   find_package(magistrate REQUIRED)
 endif()
 
+set(FMT_LIBRARY fmt)
+add_subdirectory(tpl/fmt)
+
 file(
   GLOB
   HEADER_FILES

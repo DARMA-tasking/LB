@@ -44,6 +44,8 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTERING_H
 
 #include <vt-lb/model/PhaseData.h>
+#include <vt-lb/util/logging.h>
+
 #include <algorithm>
 #include <tuple>
 #include <unordered_map>
@@ -56,6 +58,8 @@
 #include <limits>
 #include <random>
 #include <deque>
+
+#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::Clusterer, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
 
 namespace vt_lb::algo::temperedlb {
 
@@ -349,24 +353,24 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     if (node_to_tasks_.empty()) return;
 
     if (rank0()) {
-      printf("LeidenCPMStandalone: start nodes=%zu edges=%zu gamma=%.4f\n",
-             node_to_tasks_.size(), edges_.size(), gamma_);
+      VT_LB_LOG(normal, "LeidenCPMStandalone: start nodes={} edges={} gamma={:.4f}\n",
+                node_to_tasks_.size(), edges_.size(), gamma_);
     }
 
     int level = 0;
     while (level < max_levels_) {
-      if (rank0()) printf("LeidenCPMStandalone: level %d\n", level);
+      if (rank0()) VT_LB_LOG(normal, "LeidenCPMStandalone: level {}\n", level);
 
       bool moved_any = localMovingPhase();
       refinementPhase();
 
       bool coarsened = coarsenGraph();
       if (rank0()) {
-        printf("  after level %d: moved=%s coarsened=%s nodes=%zu edges=%zu\n",
-               level,
-               moved_any ? "yes" : "no",
-               coarsened ? "yes" : "no",
-               node_to_tasks_.size(), edges_.size());
+        VT_LB_LOG(normal, "  after level {}: moved={} coarsened={} nodes={} edges={}\n",
+                  level,
+                  moved_any ? "yes" : "no",
+                  coarsened ? "yes" : "no",
+                  node_to_tasks_.size(), edges_.size());
       }
       ++level;
       if (!coarsened) break;
@@ -376,9 +380,9 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     buildCoarsenedEdges();
 
     if (rank0()) {
-      printf("LeidenCPMStandalone: final communities=%zu\n", clusters_.size());
+      VT_LB_LOG(normal, "LeidenCPMStandalone: final communities={}\n", clusters_.size());
       for (auto const& c : clusters_) {
-        printf("  community %d size=%zu load=%.2f\n", c.id, c.members.size(), c.load);
+        VT_LB_LOG(normal, "  community {} size={} load={:.2f}\n", c.id, c.members.size(), c.load);
       }
     }
   }
@@ -546,7 +550,7 @@ private:
       }
 
       if (rank0()) {
-        printf("  local pass %d moved=%s\n", pass, moved ? "yes" : "no");
+        VT_LB_LOG(normal, "  local pass {} moved={}\n", pass, moved ? "yes" : "no");
       }
       if (!moved) break;
     }
@@ -612,7 +616,7 @@ private:
       ++splits;
     }
     if (rank0()) {
-      printf("  refinement: splits=%d\n", splits);
+      VT_LB_LOG(normal, "  refinement: splits={}\n", splits);
     }
   }
 
@@ -780,5 +784,7 @@ inline bool allTasksClustered(Clusterer const& clusterer, vt_lb::model::PhaseDat
 }
 
 } // namespace vt_lb::algo::temperedlb
+
+#undef VT_LB_LOG
 
 #endif // INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTERING_H

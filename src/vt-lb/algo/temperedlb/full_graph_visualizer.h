@@ -56,6 +56,8 @@
 #include <unordered_set>
 #include <fstream>
 
+#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::Visualizer, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
+
 namespace vt_lb::algo::temperedlb {
 
 template <typename CommT>
@@ -84,8 +86,8 @@ struct FullGraphVisualizer {
     clusters_by_rank_[from_rank] = std::move(incoming_clusters);
     ++received_children_;
     // Debug: child arrival
-    printf("[viz] rank=%d receiveAggregated from child rank=%d (received=%d/%d)\n",
-           comm_.getRank(), static_cast<int>(from_rank), received_children_, expected_children_);
+    VT_LB_LOG(verbose, "[viz] receiveAggregated from child rank={} (received={}/{})\n",
+              static_cast<int>(from_rank), received_children_, expected_children_);
   }
 
   void run() {
@@ -101,10 +103,10 @@ struct FullGraphVisualizer {
         local_clusters_[tid] = global_cid;
       }
       // Debug: local cluster count and conversion info
-      printf("[viz] rank=%d init local_clusters task-maps=%zu unique-clusters=%d (globalized, gmax=%d)\n",
-             my_rank, local_clusters_.size(), countClusters(local_clusters_), global_max_clusters_);
+      VT_LB_LOG(normal, "[viz] init local_clusters task-maps={} unique-clusters={} (globalized, gmax={})\n",
+                local_clusters_.size(), countClusters(local_clusters_), global_max_clusters_);
     } else {
-      printf("[viz] rank=%d clusterer_=nullptr\n", my_rank);
+      VT_LB_LOG(normal, "[viz] clusterer_=nullptr\n");
     }
 
     // Compute parent and children for a simple binary tree: parent = r/2
@@ -118,38 +120,42 @@ struct FullGraphVisualizer {
     expected_children_ = static_cast<int>(children.size());
     received_children_ = 0;
     // Debug: topology
-    printf("[viz] rank=%d parent=%d children=[", my_rank, parent);
-    for (std::size_t i = 0; i < children.size(); ++i) {
-      printf("%d%s", children[i], (i + 1 < children.size()) ? "," : "");
-    }
-    printf("] expected_children=%d\n", expected_children_);
+    VT_LB_LOG(normal, "[viz] parent={} children=[{}] expected_children={}\n",
+              parent,
+              [&children](){
+                std::string s;
+                for (std::size_t i = 0; i < children.size(); ++i) {
+                  s += std::to_string(children[i]);
+                  if (i + 1 < children.size()) s += ",";
+                }
+                return s;
+              }(),
+              expected_children_);
 
     // Wait for all children to send their data up the tree
     while (received_children_ < expected_children_) {
       if (!comm_.poll()) break; // progress MPI and handlers
     }
-    printf("[viz] rank=%d proceed to merge (received=%d/%d)\n",
-           my_rank, received_children_, expected_children_);
+    VT_LB_LOG(normal, "[viz] proceed to merge (received={}/{})\n",
+              received_children_, expected_children_);
 
     // Merge children data into a local accumulator
     model::PhaseData merged = phase_data_; // start with local rank data
     auto merged_clusters = local_clusters_; // local per-task cluster map (empty if none)
 
     // Debug: local counts pre-merge
-    printf("[viz] rank=%d local tasks=%zu edges=%zu shared_blocks=%zu\n",
-           my_rank,
-           merged.getTasksMap().size(),
-           merged.getCommunications().size(),
-           merged.getSharedBlocksMap().size());
+    VT_LB_LOG(verbose, "[viz] local tasks={} edges={} shared_blocks={}\n",
+              merged.getTasksMap().size(),
+              merged.getCommunications().size(),
+              merged.getSharedBlocksMap().size());
 
     for (auto const& [rank, pd] : phases_by_rank_) {
       // Debug: child payload sizes
-      printf("[viz] rank=%d merge child rank=%d tasks=%zu edges=%zu shared_blocks=%zu\n",
-             my_rank,
-             static_cast<int>(rank),
-             pd.getTasksMap().size(),
-             pd.getCommunications().size(),
-             pd.getSharedBlocksMap().size());
+      VT_LB_LOG(verbose, "[viz] merge child rank={} tasks={} edges={} shared_blocks={}\n",
+                static_cast<int>(rank),
+                pd.getTasksMap().size(),
+                pd.getCommunications().size(),
+                pd.getSharedBlocksMap().size());
       mergePhaseData(merged, pd);
     }
     for (auto const& [rank, cmap] : clusters_by_rank_) {
@@ -160,17 +166,16 @@ struct FullGraphVisualizer {
     }
 
     // Debug: post-merge counts
-    printf("[viz] rank=%d merged tasks=%zu edges=%zu shared_blocks=%zu task-maps=%zu unique-clusters=%d\n",
-           my_rank,
-           merged.getTasksMap().size(),
-           merged.getCommunications().size(),
-           merged.getSharedBlocksMap().size(),
-           merged_clusters.size(),
-           countClusters(merged_clusters));
+    VT_LB_LOG(normal, "[viz] merged tasks={} edges={} shared_blocks={} task-maps={} unique-clusters={}\n",
+              merged.getTasksMap().size(),
+              merged.getCommunications().size(),
+              merged.getSharedBlocksMap().size(),
+              merged_clusters.size(),
+              countClusters(merged_clusters));
 
     if (parent >= 0) {
       // Forward merged accumulation to parent
-      printf("[viz] rank=%d send to parent=%d\n", my_rank, parent);
+      VT_LB_LOG(normal, "[viz] send to parent={}\n", parent);
       handle_.template send<&ThisType::receiveAggregated>(
         parent, merged, merged_clusters, static_cast<model::RankType>(my_rank)
       );
@@ -178,22 +183,21 @@ struct FullGraphVisualizer {
       // Root: we now have the complete graph and cluster map across all ranks
       final_merged_phase_ = std::move(merged);
       final_merged_clusters_ = std::move(merged_clusters);
-      printf("[viz] rank=%d (root) final merged tasks=%zu edges=%zu shared_blocks=%zu task-maps=%zu unique-clusters=%d\n",
-             my_rank,
-             final_merged_phase_.getTasksMap().size(),
-             final_merged_phase_.getCommunications().size(),
-             final_merged_phase_.getSharedBlocksMap().size(),
-             final_merged_clusters_.size(),
-             countClusters(final_merged_clusters_));
+      VT_LB_LOG(normal, "[viz] (root) final merged tasks={} edges={} shared_blocks={} task-maps={} unique-clusters={}\n",
+                final_merged_phase_.getTasksMap().size(),
+                final_merged_phase_.getCommunications().size(),
+                final_merged_phase_.getSharedBlocksMap().size(),
+                final_merged_clusters_.size(),
+                countClusters(final_merged_clusters_));
       // Build and write the full DOT visualization across ranks/clusters
       std::string dot = buildFullGraphDOT(final_merged_phase_, final_merged_clusters_);
       std::ofstream ofs(filename_ + ".dot");
       if (ofs) {
         ofs << dot;
         ofs.close();
-        printf("[viz] rank=%d (root) wrote DOT to '%s'\n", my_rank, filename_.c_str());
+        VT_LB_LOG(normal, "[viz] (root) wrote DOT to '{}.dot'\n", filename_);
       } else {
-        printf("[viz] rank=%d (root) failed to open '%s' for writing\n", my_rank, filename_.c_str());
+        VT_LB_LOG(normal, "[viz] (root) failed to open '{}.dot' for writing\n", filename_);
       }
     }
   }
@@ -434,5 +438,7 @@ private:
 };
 
 } /* end namespace vt_lb::algo::temperedlb */
+
+#undef VT_LB_LOG
 
 #endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_FULL_GRAPH_VISUALIZER_H*/

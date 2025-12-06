@@ -46,11 +46,9 @@
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
+#include <vt-lb/util/logging.h>
 
-#include <unordered_map>
-#include <vector>
-#include <cassert>
-#include <cstdio>
+#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::LoadBalancer, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
 
 namespace vt_lb::algo::temperedlb {
 
@@ -223,18 +221,16 @@ ClusterSummarizer::buildClusterSummaries(
   // Emit summaries
   for (auto const& cl : clusterer_->clusters()) {
     auto const& sum = summary_by_local.at(cl.id);
-    printf(
-      "%d: buildClusterSummaries cluster %d size=%zu load=%.2f "
-      "intra_send=%.2f intra_recv=%.2f "
-      "inter_edges=%zu "
-      "footprint=%.0f "
-      "max_work_in=%.0f "
-      "max_work_out=%.0f "
-      "max_ser_in=%.0f "
-      "max_ser_out=%.0f "
-      "shared_block_count=%zu\n",
-      rank, localToGlobalClusterID(cl.id, rank, global_max_clusters), cl.members.size(), cl.load,
-      sum.cluster_intra_send_bytes, sum.cluster_intra_recv_bytes,
+    VT_LB_LOG(
+      normal,
+      "buildClusterSummaries cluster {} size={} load={:.2f} intra_send={:.2f} intra_recv={:.2f} "
+      "inter_edges={} footprint={:.0f} max_work_in={:.0f} max_work_out={:.0f} "
+      "max_ser_in={:.0f} max_ser_out={:.0f} shared_block_count={}\n",
+      localToGlobalClusterID(cl.id, rank, global_max_clusters),
+      cl.members.size(),
+      cl.load,
+      sum.cluster_intra_send_bytes,
+      sum.cluster_intra_recv_bytes,
       sum.inter_edges_.size(),
       sum.cluster_footprint,
       sum.max_object_working_bytes,
@@ -249,3 +245,5 @@ ClusterSummarizer::buildClusterSummaries(
 }
 
 } /* end namespace vt_lb::algo::temperedlb */
+
+#undef VT_LB_LOG

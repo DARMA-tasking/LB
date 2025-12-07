@@ -60,8 +60,6 @@
 #include <vt-lb/comm/MPI/class_handle.h>
 #include <vt-lb/comm/MPI/comm_mpi_detail.h>
 
-#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::Communicator, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
-
 /**
  * \namespace vt_lb::comm
  * \brief Communication layer implemented in straight MPI code
@@ -219,7 +217,7 @@ public:
 
     // Validate destination rank
     if (dest < 0 || dest >= numRanks()) {
-      VT_LB_LOG(terse, "Invalid destination rank {}\n", dest);
+      VT_LB_LOG(Communicator, terse, "Invalid destination rank {}\n", dest);
       throw std::runtime_error("Invalid destination rank");
     }
 
@@ -243,7 +241,7 @@ public:
     buf_interpreter.isTermination() = is_termination_msg ? 1 : 0;
 
     VT_LB_LOG(
-      normal,
+      Communicator, normal,
       "MPI_Isend to {} handler_index={} class_index={} is_termination={}\n",
       dest,
       buf_interpreter.handlerIndex(),
@@ -297,7 +295,5 @@ private:
 } /* end namespace vt_lb::comm */
 
 #include "vt-lb/comm/MPI/class_handle.impl.h"
-
-#undef VT_LB_LOG
 
 #endif /*INCLUDED_VT_LB_COMM_COMM_MPI_H*/

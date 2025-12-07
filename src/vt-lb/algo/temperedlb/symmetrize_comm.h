@@ -52,8 +52,6 @@
 #include <utility>
 #include <unordered_map> // added
 
-#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::LoadBalancer, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
-
 namespace vt_lb::algo::temperedlb {
 
 template <typename CommT>
@@ -106,7 +104,10 @@ struct CommunicationsSymmetrizer {
       // do nothing
     }
 
-    VT_LB_LOG(normal, "completed symmetrization of communications\n");
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "completed symmetrization of communications\n"
+    );
   }
 
 private:
@@ -137,7 +138,5 @@ private:
 };
 
 } // namespace vt_lb::algo::temperedlb
-
-#undef VT_LB_LOG
 
 #endif // INCLUDED_VT_LB_ALGO_TEMPEREDLB_SYMMETRIZE_COMM_H

@@ -47,6 +47,7 @@
 #include <fmt-lb/format.h>
 #include <string_view>
 #include <utility>
+#include <cstdio>
 
 namespace vt_lb::util {
 
@@ -116,5 +117,9 @@ inline void log(Component comp, Verbosity msg_verbosity, std::string_view fmt_st
   }
 }
 } /* end namespace vt_lb::util */
+
+// Unified logging macro: specify component first, then verbosity mode
+#define VT_LB_LOG(component, mode, ...) \
+  ::vt_lb::util::log(::vt_lb::util::Component::component, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
 
 #endif /*INCLUDED_VT_LB_UTIL_LOGGING_H*/

@@ -43,8 +43,6 @@
 
 #include <vt-lb/comm/MPI/comm_mpi.h>
 
-#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::Communicator, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
-
 namespace vt_lb::comm {
 
 void CommMPI::init(int& argc, char**& argv, MPI_Comm comm) {
@@ -70,7 +68,7 @@ void CommMPI::init(int& argc, char**& argv, MPI_Comm comm) {
     return r;
   });
   initTermination();
-  VT_LB_LOG(terse, "Initialized MPI with {} ranks\n", cached_size_);
+  VT_LB_LOG(Communicator, terse, "Initialized MPI with {} ranks\n", cached_size_);
 }
 
 CommMPI CommMPI::clone(bool dup_comm) const {
@@ -85,7 +83,7 @@ CommMPI CommMPI::clone(bool dup_comm) const {
 
 void CommMPI::finalize() {
   if (!interop_mode_) {
-    VT_LB_LOG(terse, "Finalizing MPI\n");
+    VT_LB_LOG(Communicator, terse, "Finalizing MPI\n");
     MPI_Finalize();
   }
   // Clear rank provider when MPI is no longer available
@@ -94,7 +92,7 @@ void CommMPI::finalize() {
 }
 
 void CommMPI::barrier() {
-  VT_LB_LOG(verbose, "MPI_Barrier\n");
+  VT_LB_LOG(Communicator, verbose, "MPI_Barrier\n");
   MPI_Barrier(comm_);
 }
 
@@ -123,7 +121,7 @@ void CommMPI::initTermination() {
     termination_detector_->notifyMessageSend();
     termination_detector_->notifyMessageReceive();
   }
-  VT_LB_LOG(verbose, "Termination initialized\n");
+  VT_LB_LOG(Communicator, verbose, "Termination initialized\n");
 }
 
 bool CommMPI::poll() {
@@ -131,7 +129,7 @@ bool CommMPI::poll() {
   {
     int flag = 0;
     MPI_Status status;
-    VT_LB_LOG(verbose, "MPI_Iprobe\n");
+    VT_LB_LOG(Communicator, verbose, "MPI_Iprobe\n");
     MPI_Iprobe(MPI_ANY_SOURCE, 0, comm_, &flag, &status);
     if (flag) {
       int count = 0;
@@ -139,25 +137,25 @@ bool CommMPI::poll() {
 
       // Validate message size
       if (count < static_cast<int>(3 * sizeof(int))) {
-        VT_LB_LOG(terse, "Received too small message ({})\n", count);
+        VT_LB_LOG(Communicator, terse, "Received too small message ({})\n", count);
         throw std::runtime_error("Received message is too small");
       }
 
       std::vector<char> buf(count);
       // Ensure buffer is properly aligned
       if (reinterpret_cast<std::uintptr_t>(buf.data()) % alignof(int) != 0) {
-        VT_LB_LOG(terse, "Buffer alignment error\n");
+        VT_LB_LOG(Communicator, terse, "Buffer alignment error\n");
         throw std::runtime_error("Buffer alignment error");
       }
 
-      VT_LB_LOG(normal, "MPI_Recv from {} of size {}\n", status.MPI_SOURCE, count);
+      VT_LB_LOG(Communicator, normal, "MPI_Recv from {} of size {}\n", status.MPI_SOURCE, count);
       MPI_Recv(buf.data(), count, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG, comm_, MPI_STATUS_IGNORE);
       BufferIntInterpreter buf_interpreter(buf.data());
       int handler_index = buf_interpreter.handlerIndex();
       int class_index = buf_interpreter.classIndex();
       bool is_termination = buf_interpreter.isTermination() != 0;
 
-      VT_LB_LOG(
+      VT_LB_LOG(Communicator,
         verbose,
         "Received message: handler_index={} class_index={} is_termination={}\n",
         handler_index, class_index, is_termination ? 1 : 0
@@ -177,7 +175,7 @@ bool CommMPI::poll() {
     }
 
     if (termination_detector_->singleRank()) {
-      VT_LB_LOG(verbose, "TD single-rank progression\n");
+      VT_LB_LOG(Communicator, verbose, "TD single-rank progression\n");
       termination_detector_->startFirstWave();
     }
   }
@@ -188,7 +186,7 @@ bool CommMPI::poll() {
     MPI_Status status;
     MPI_Test(&std::get<0>(*it), &flag, &status);
     if (flag) {
-      VT_LB_LOG(verbose, "Completed pending send\n");
+      VT_LB_LOG(Communicator, verbose, "Completed pending send\n");
       it = pending_.erase(it);
     } else {
       ++it;

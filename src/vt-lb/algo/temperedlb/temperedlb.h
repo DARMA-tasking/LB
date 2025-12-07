@@ -64,8 +64,6 @@
 
 #include <mpi.h>
 
-#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::LoadBalancer, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
-
 namespace vt_lb::algo::temperedlb {
 
 template <typename CommT, typename DataT, typename JoinT>
@@ -109,7 +107,7 @@ struct InformationPropagation {
       // do nothing
     }
 
-    VT_LB_LOG(normal, "done with poll: local_data size={}\n", local_data_.size());
+    VT_LB_LOG(LoadBalancer, normal, "done with poll: local_data size={}\n", local_data_.size());
 
     return local_data_;
   }
@@ -273,7 +271,7 @@ struct TemperedLB final : baselb::BaseLB {
   std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
     InformationPropagation<CommT, T, TemperedLB<CommT>> ip(comm_, config_);
     auto gathered_info = ip.run(initial_data);
-    VT_LB_LOG(normal, "gathered load info size={}\n", gathered_info.size());
+    VT_LB_LOG(LoadBalancer, normal, "gathered load info size={}\n", gathered_info.size());
     return gathered_info;
   }
 
@@ -282,9 +280,9 @@ struct TemperedLB final : baselb::BaseLB {
     makeCommunicationsSymmetric();
 
     for (int trial = 0; trial < config_.num_trials_; ++trial) {
-      VT_LB_LOG(normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+      VT_LB_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
       runTrial(trial);
-      VT_LB_LOG(normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
+      VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
     }
   }
 
@@ -327,7 +325,7 @@ struct TemperedLB final : baselb::BaseLB {
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
       auto info = runInformationPropagation(total_load);
-      VT_LB_LOG(normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
     } else {
 #if 0
       computeGlobalMaxClusters();
@@ -339,7 +337,7 @@ struct TemperedLB final : baselb::BaseLB {
       assert(clusterer_ != nullptr && "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
       auto info = runInformationPropagation(local_summary);
-      VT_LB_LOG(normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
     }
 
     // Before we restore phase data for the next trial, save the work and task distribution
@@ -371,7 +369,7 @@ private:
     handle_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
 
     if (comm_.getRank() == root) {
-      VT_LB_LOG(normal, "global max clusters across ranks: {}\n", global_max_clusters_);
+      VT_LB_LOG(LoadBalancer, normal, "global max clusters across ranks: {}\n", global_max_clusters_);
     }
     // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
   }
@@ -392,8 +390,10 @@ private:
       I = (global_max / global_avg) - 1.0;
     }
     if (comm_.getRank() == 0) {
-      VT_LB_LOG(normal, "{} statistics -- min: {}, max: {}, avg: {}, I: {}\n",
-                name, global_min, global_max, global_avg, I);
+      VT_LB_LOG(
+        LoadBalancer, normal, "{} statistics -- min: {}, max: {}, avg: {}, I: {}\n",
+        name, global_min, global_max, global_avg, I
+      );
     }
   }
 
@@ -413,7 +413,5 @@ private:
 };
 
 } /* end namespace vt_lb::algo::temperedlb */
-
-#undef VT_LB_LOG
 
 #endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H*/

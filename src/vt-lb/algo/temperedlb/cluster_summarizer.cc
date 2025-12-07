@@ -48,8 +48,6 @@
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/util/logging.h>
 
-#define VT_LB_LOG(mode, ...) ::vt_lb::util::log(::vt_lb::util::Component::LoadBalancer, ::vt_lb::util::Verbosity::mode, __VA_ARGS__)
-
 namespace vt_lb::algo::temperedlb {
 
 /*static*/ std::unordered_map<int, TaskClusterSummaryInfo>
@@ -222,6 +220,7 @@ ClusterSummarizer::buildClusterSummaries(
   for (auto const& cl : clusterer_->clusters()) {
     auto const& sum = summary_by_local.at(cl.id);
     VT_LB_LOG(
+      LoadBalancer,
       normal,
       "buildClusterSummaries cluster {} size={} load={:.2f} intra_send={:.2f} intra_recv={:.2f} "
       "inter_edges={} footprint={:.0f} max_work_in={:.0f} max_work_out={:.0f} "
@@ -245,5 +244,3 @@ ClusterSummarizer::buildClusterSummaries(
 }
 
 } /* end namespace vt_lb::algo::temperedlb */
-
-#undef VT_LB_LOG

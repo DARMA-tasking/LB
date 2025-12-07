@@ -46,13 +46,17 @@
 
 #include <vector>
 #include <mpi.h>
+#include <cassert>
 
 #include "test_config.h"
 #include "test_harness.h"
 
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/comm/MPI/comm_mpi.h>
+
+#if vt_backend_enabled
 #include <vt-lb/comm/vt/comm_vt.h>
+#endif
 
 namespace vt_lb { namespace tests { namespace unit {
 
@@ -74,8 +78,8 @@ struct TestParallelHarnessAny : TestHarnessAny<TestBase> {
     auto const new_args = injectAdditionalArgs(test_argc, test_argv);
     auto custom_argc = new_args.first;
     auto custom_argv = new_args.second;
-    vtAssert(
-      custom_argv[custom_argc] == nullptr,
+    assert(
+      custom_argv[custom_argc] == nullptr &&
       "The value of argv[argc] should always be 0"
     );
     comm.init(custom_argc, custom_argv, mpi_comm);
@@ -174,12 +178,19 @@ struct CommNameGenerator {
   template <comm::Communicator CommType>
   static std::string GetName(int) {
     if constexpr (std::is_same_v<CommType, comm::CommMPI>) return "CommMPI";
+  #if vt_backend_enabled
     if constexpr (std::is_same_v<CommType, comm::CommVT>) return "CommVT";
+  #endif
     return "Unrecognized";
   }
 };
 
-using CommTypesForTesting = ::testing::Types<comm::CommMPI, comm::CommVT>;
+using CommTypesForTesting = ::testing::Types<
+  comm::CommMPI
+#if vt_backend_enabled
+  ,comm::CommVT
+#endif
+>;
 
 }}} // end namespace vt_lb::tests::unit
 

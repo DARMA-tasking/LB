@@ -44,7 +44,7 @@
 #if !defined INCLUDED_VT_LB_UTIL_LOGGING_H
 #define INCLUDED_VT_LB_UTIL_LOGGING_H
 
-#include <fmt-vt/format.h>
+#include <fmt-lb/format.h>
 #include <string_view>
 #include <utility>
 

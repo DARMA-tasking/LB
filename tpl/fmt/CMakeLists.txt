@@ -106,7 +106,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "MSDOS")
 endif ()
 
 # Get version from base.h
-file(READ include/fmt-vt/base.h base_h)
+file(READ include/fmt-lb/base.h base_h)
 if (NOT base_h MATCHES "FMT_VERSION ([0-9]+)([0-9][0-9])([0-9][0-9])")
   message(FATAL_ERROR "Cannot get FMT_VERSION from base.h.")
 endif ()
@@ -182,7 +182,7 @@ endif ()
 function(add_headers VAR)
   set(headers ${${VAR}})
   foreach (header ${ARGN})
-    set(headers ${headers} ${CMAKE_CURRENT_SOURCE_DIR}/include/fmt-vt/${header})
+    set(headers ${headers} ${CMAKE_CURRENT_SOURCE_DIR}/include/fmt-lb/${header})
   endforeach()
   set(${VAR} ${headers} PARENT_SCOPE)
 endfunction()
@@ -200,7 +200,7 @@ function(add_module_library name)
 
   add_library(${name})
   set_target_properties(${name} PROPERTIES LINKER_LANGUAGE CXX)
-  set_target_properties(${name} PROPERTIES OUTPUT_NAME fmt-vt)
+  set_target_properties(${name} PROPERTIES OUTPUT_NAME fmt-lb)
 
   if (NOT ${${AML_IF}})
     # Create a non-modular library.
@@ -272,38 +272,38 @@ add_headers(FMT_HEADERS base.h  core.h format-inl.h ostream.h chrono.h format.h)
 #                         xchar.h)
 set(FMT_SOURCES src/format.cc)
 
-add_module_library(fmt src/fmt.cc FALLBACK
+add_module_library(fmt-lb src/fmt.cc FALLBACK
                    ${FMT_SOURCES} ${FMT_HEADERS}
                    IF FMT_MODULE)
-add_library(fmt::fmt ALIAS fmt)
+add_library(fmt-lb::fmt-lb ALIAS fmt-lb)
 if (FMT_MODULE)
-  enable_module(fmt)
+  enable_module(fmt-lb)
 elseif (FMT_OS)
-  target_sources(fmt PRIVATE src/os.cc)
+  target_sources(fmt-lb PRIVATE src/os.cc)
 else()
-  target_compile_definitions(fmt PRIVATE FMT_OS=0)
+  target_compile_definitions(fmt-lb PRIVATE FMT_OS=0)
 endif ()
 
 if (FMT_WERROR)
-  target_compile_options(fmt PRIVATE ${WERROR_FLAG})
+  target_compile_options(fmt-lb PRIVATE ${WERROR_FLAG})
 endif ()
 if (FMT_PEDANTIC)
-  target_compile_options(fmt PRIVATE ${PEDANTIC_COMPILE_FLAGS})
+  target_compile_options(fmt-lb PRIVATE ${PEDANTIC_COMPILE_FLAGS})
 endif ()
 
 if (cxx_std_11 IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-  target_compile_features(fmt PUBLIC cxx_std_11)
+  target_compile_features(fmt-lb PUBLIC cxx_std_11)
 else ()
   message(WARNING "Feature cxx_std_11 is unknown for the CXX compiler")
 endif ()
 
-target_include_directories(fmt ${FMT_SYSTEM_HEADERS_ATTRIBUTE} BEFORE PUBLIC
+target_include_directories(fmt-lb ${FMT_SYSTEM_HEADERS_ATTRIBUTE} BEFORE PUBLIC
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${FMT_INC_DIR}>)
 
 set(FMT_DEBUG_POSTFIX d CACHE STRING "Debug library postfix.")
 
-set_target_properties(fmt PROPERTIES
+set_target_properties(fmt-lb PROPERTIES
   VERSION ${FMT_VERSION} SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
   PUBLIC_HEADER "${FMT_HEADERS}"
   DEBUG_POSTFIX "${FMT_DEBUG_POSTFIX}"
@@ -313,21 +313,21 @@ set_target_properties(fmt PROPERTIES
   # as the .lib. Newer VS versions already do this by default, but there is no
   # harm in setting it for those too. Ignored by other generators.
   COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-  COMPILE_PDB_NAME "fmt"
+  COMPILE_PDB_NAME "fmt-lb"
   COMPILE_PDB_NAME_DEBUG "fmt${FMT_DEBUG_POSTFIX}")
 
 # Set FMT_LIB_NAME for pkg-config fmt.pc. We cannot use the OUTPUT_NAME target
 # property because it's not set by default.
-set(FMT_LIB_NAME fmt)
+set(FMT_LIB_NAME fmt-lb)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(FMT_LIB_NAME ${FMT_LIB_NAME}${FMT_DEBUG_POSTFIX})
 endif ()
 
 if (BUILD_SHARED_LIBS)
-  target_compile_definitions(fmt PRIVATE FMT_LIB_EXPORT INTERFACE FMT_SHARED)
+  target_compile_definitions(fmt-lb PRIVATE FMT_LIB_EXPORT INTERFACE FMT_SHARED)
 endif ()
 if (FMT_SAFE_DURATION_CAST)
-  target_compile_definitions(fmt PUBLIC FMT_SAFE_DURATION_CAST)
+  target_compile_definitions(fmt-lb PUBLIC FMT_SAFE_DURATION_CAST)
 endif ()
 
 add_library(fmt-header-only INTERFACE)
@@ -337,10 +337,10 @@ if (NOT MSVC)
   # Unicode is always supported on compilers other than MSVC.
 elseif (FMT_UNICODE)
   # Unicode support requires compiling with /utf-8.
-  target_compile_options(fmt PUBLIC $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>)
+  target_compile_options(fmt-lb PUBLIC $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>)
   target_compile_options(fmt-header-only INTERFACE $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>)
 else ()
-  target_compile_definitions(fmt PUBLIC FMT_UNICODE=0)
+  target_compile_definitions(fmt-lb PUBLIC FMT_UNICODE=0)
 endif ()
 
 target_compile_definitions(fmt-header-only INTERFACE FMT_HEADER_ONLY=1)
@@ -354,7 +354,7 @@ target_include_directories(fmt-header-only
 # Install targets.
 if (FMT_INSTALL)
   include(CMakePackageConfigHelpers)
-  set_verbose(FMT_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/fmt CACHE STRING
+  set_verbose(FMT_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/fmt-lb CACHE STRING
               "Installation directory for cmake files, a relative path that "
               "will be joined with ${CMAKE_INSTALL_PREFIX} or an absolute "
               "path.")
@@ -390,11 +390,11 @@ if (FMT_INSTALL)
     ${project_config}
     INSTALL_DESTINATION ${FMT_CMAKE_DIR})
 
-  set(INSTALL_TARGETS fmt fmt-header-only)
+  set(INSTALL_TARGETS fmt-lb fmt-header-only)
 
   set(INSTALL_FILE_SET)
   if (FMT_USE_CMAKE_MODULES)
-    set(INSTALL_FILE_SET FILE_SET fmt DESTINATION "${FMT_INC_DIR}/fmt-vt")
+    set(INSTALL_FILE_SET FILE_SET fmt-lb DESTINATION "${FMT_INC_DIR}/fmt-lb")
   endif()
 
   # Install the library and headers.
@@ -403,7 +403,7 @@ if (FMT_INSTALL)
           EXPORT ${targets_export_name}
           LIBRARY DESTINATION ${FMT_LIB_DIR}
           ARCHIVE DESTINATION ${FMT_LIB_DIR}
-          PUBLIC_HEADER DESTINATION "${FMT_INC_DIR}/fmt-vt"
+          PUBLIC_HEADER DESTINATION "${FMT_INC_DIR}/fmt-lb"
           RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
           ${INSTALL_FILE_SET})
 

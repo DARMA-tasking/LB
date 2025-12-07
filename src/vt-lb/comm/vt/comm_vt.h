@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
 #define INCLUDED_VT_LB_COMM_COMM_VT_H
 
+#if vt_backend_enabled
+
 #include <vt/configs/types/types_type.h>
 #include <vt/objgroup/proxy/proxy_objgroup.h>
 
@@ -86,5 +88,7 @@ private:
 } /* end namespace vt_lb::comm */
 
 #include "vt-lb/comm/vt/comm_vt.impl.h"
+
+#endif /*vt_backend_enabled*/
 
 #endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/

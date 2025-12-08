@@ -235,13 +235,13 @@ void generateTaskLoads(
  *
  * @param pd The PhaseData for this rank
  * @param gen The seeded generator for this rank
- * @param edge_sums_per_task_dist Random edges (out+in) per task distribution
+ * @param endpoints_per_task_dist Random endpoints per task distribution
  * @param weight_per_edge_dist Random edge weights distribution
  */
 template <typename EdgesPerTaskDistType, typename WeightPerEdgeDistType>
 void generateIntraRankComm(
   vt_lb::model::PhaseData& pd, std::mt19937 &gen,
-  EdgesPerTaskDistType &edge_sums_per_task_dist,
+  EdgesPerTaskDistType &endpoints_per_task_dist,
   WeightPerEdgeDistType &weight_per_edge_dist
 ) {
   using namespace vt_lb::model;
@@ -250,9 +250,15 @@ void generateIntraRankComm(
   assert(rank != invalid_node);
 
   auto local_ids = pd.getTaskIds();
+  std::size_t num_tasks = local_ids.size();
+
+  if (num_tasks == 1) {
+    return;
+  }
+
   std::vector<TaskType> endpoints;
   for (auto t : local_ids) {
-    int count = edge_sums_per_task_dist(gen);
+    int count = endpoints_per_task_dist(gen);
     for (int c = 0; c < count; ++c) {
       endpoints.push_back(t);
     }
@@ -261,9 +267,102 @@ void generateIntraRankComm(
 
   // if we generated a odd number of endpoints, one will be dropped
   std::size_t edge_count = endpoints.size() / 2;
+  std::uniform_int_distribution<> fix_self_edge_dist(0, num_tasks-1);
   for (std::size_t e = 0; e < edge_count; ++e) {
+    TaskType from = endpoints[e*2];
+    TaskType to = endpoints[e*2+1];
+    if (from == to) {
+      // avoid self-comm by minimal reshuffling
+      bool fixed = false;
+      for (std::size_t i = e*2+2; i < endpoints.size(); ++i) {
+        if (endpoints[i] != to) {
+          endpoints[e*2+1] = endpoints[i];
+          endpoints[i] = to;
+          to = endpoints[e*2+1];
+          fixed = true;
+          break;
+        }
+      }
+      if (!fixed) {
+        // fallback approach to avoiding self-comm is to break the distribution
+        TaskType new_task = fix_self_edge_dist(gen);
+        if (new_task != to) {
+          to = new_task;
+        } else {
+          to = (new_task + 1) % num_tasks;
+        }
+      }
+    }
     pd.addCommunication(Edge{
-      endpoints[e*2], endpoints[e*2+1], weight_per_edge_dist(gen), rank, rank
+      from, to, weight_per_edge_dist(gen), rank, rank
+    });
+  }
+}
+
+/**
+ * Generate random inter-rank communications on each rank
+ *
+ * @param pd The PhaseData for this rank
+ * @param gen The seeded generator for this rank
+ * @param endpoints_per_local_task_dist Random endpoints per local task distribution
+ * @param weight_per_edge_dist Random edge weights distribution
+ * @param remote_rank_dist Random remote rank distribution
+ * @param min_tasks_per_rank The minimum number of tasks on each rank
+ * @param num_ranks The number of ranks being used
+ * @param locally_gen_in_edge_frac Fraction of locally generated endpoints that will be in-edges
+ */
+template <
+  typename EdgesPerTaskDistType, typename WeightPerEdgeDistType,
+  typename RemoteRankDistType
+>
+void generateInterRankComm(
+  vt_lb::model::PhaseData& pd, std::mt19937 &gen,
+  EdgesPerTaskDistType &endpoints_per_local_task_dist,
+  WeightPerEdgeDistType &weight_per_edge_dist,
+  RemoteRankDistType &remote_rank_dist,
+  int min_tasks_per_rank, int num_ranks, int locally_gen_in_edge_frac
+) {
+  using namespace vt_lb::model;
+
+  if (num_ranks == 1) {
+    return;
+  }
+
+  int const rank = pd.getRank();
+  assert(rank != invalid_node);
+
+  auto local_ids = pd.getTaskIds();
+  std::vector<TaskType> local_endpoints;
+  for (auto t : local_ids) {
+    int count = endpoints_per_local_task_dist(gen);
+    for (int c = 0; c < count; ++c) {
+      local_endpoints.push_back(t);
+    }
+  }
+  std::shuffle(local_endpoints.begin(), local_endpoints.end(), gen);
+
+  std::size_t to_edge_count = static_cast<std::size_t>(
+    local_endpoints.size() * locally_gen_in_edge_frac
+  );
+  std::size_t from_edge_count = local_endpoints.size() - to_edge_count;
+  std::uniform_int_distribution remote_task_dist(1, min_tasks_per_rank-1);
+
+  for (std::size_t e = 0; e < from_edge_count; ++e) {
+    TaskType from = local_endpoints[e];
+    int remote_rank = rank;
+    while (remote_rank_dist(gen) == rank) {}
+    TaskType to = remote_task_dist(gen);
+    pd.addCommunication(Edge{
+      from, to, weight_per_edge_dist(gen), rank, remote_rank
+    });
+  }
+  for (std::size_t e = from_edge_count; e < local_endpoints.size(); ++e) {
+    TaskType to = local_endpoints[e];
+    int remote_rank = rank;
+    while (remote_rank_dist(gen) == rank) {}
+    TaskType from = remote_task_dist(gen);
+    pd.addCommunication(Edge{
+      from, to, weight_per_edge_dist(gen), remote_rank, rank
     });
   }
 }

@@ -44,11 +44,17 @@
 #if !defined INCLUDED_VT_LB_UNIT_GRAPH_HELPERS_H
 #define INCLUDED_VT_LB_UNIT_GRAPH_HELPERS_H
 
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <mpi.h>
 #include <random>
 #include <sstream>
 
+#include <vt-lb/model/Communication.h>
+#include <vt-lb/model/PhaseData.h>
+#include <vt-lb/model/SharedBlock.h>
+#include <vt-lb/model/Task.h>
+#include <vt-lb/model/types.h>
 #include <vt-lb/model/PhaseData.h>
 
 namespace vt_lb { namespace tests { namespace unit {
@@ -108,9 +114,6 @@ void generateSharedBlockMemory(
   BlockMemoryDistType &block_memory_dist
 ) {
   using namespace vt_lb::model;
-
-  int const rank = pd.getRank();
-  assert(rank != invalid_node);
 
   auto blockmap = pd.getSharedBlocksMap();
   for (auto item : blockmap) {
@@ -196,9 +199,6 @@ void generateTaskMemory(
 ) {
   using namespace vt_lb::model;
 
-  int const rank = pd.getRank();
-  assert(rank != invalid_node);
-
   auto taskmap = pd.getTasksMap();
   for (auto item : taskmap) {
     auto &t = item.second;
@@ -223,13 +223,48 @@ void generateTaskLoads(
 ) {
   using namespace vt_lb::model;
 
-  int const rank = pd.getRank();
-  assert(rank != invalid_node);
-
   auto taskmap = pd.getTasksMap();
   for (auto item : taskmap) {
     auto &t = item.second;
     t.setLoad(task_load_dist(gen));
+  }
+}
+
+/**
+ * Generate random intra-rank communications on each rank
+ *
+ * @param pd The PhaseData for this rank
+ * @param gen The seeded generator for this rank
+ * @param edge_sums_per_task_dist Random edges (out+in) per task distribution
+ * @param weight_per_edge_dist Random edge weights distribution
+ */
+template <typename EdgesPerTaskDistType, typename WeightPerEdgeDistType>
+void generateIntraRankComm(
+  vt_lb::model::PhaseData& pd, std::mt19937 &gen,
+  EdgesPerTaskDistType &edge_sums_per_task_dist,
+  WeightPerEdgeDistType &weight_per_edge_dist
+) {
+  using namespace vt_lb::model;
+
+  int const rank = pd.getRank();
+  assert(rank != invalid_node);
+
+  auto local_ids = pd.getTaskIds();
+  std::vector<TaskType> endpoints;
+  for (auto t : local_ids) {
+    int count = edge_sums_per_task_dist(gen);
+    for (int c = 0; c < count; ++c) {
+      endpoints.push_back(t);
+    }
+  }
+  std::shuffle(endpoints.begin(), endpoints.end(), gen);
+
+  // if we generated a odd number of endpoints, one will be dropped
+  std::size_t edge_count = endpoints.size() / 2;
+  for (std::size_t e = 0; e < edge_count; ++e) {
+    pd.addCommunication(Edge{
+      endpoints[e*2], endpoints[e*2+1], weight_per_edge_dist(gen), rank, rank
+    });
   }
 }
 

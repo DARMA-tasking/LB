@@ -87,7 +87,7 @@ struct Configuration {
   int seed_ = 29;
 
   /// @brief  Criterion type for transfer decisions
-  CriterionEnum criterion_ = CriterionEnum::Grapevine;
+  CriterionEnum criterion_ = CriterionEnum::ModifiedGrapevine;
   /// @brief  Object ordering for transfer decisions
   TransferUtil::ObjectOrder obj_ordering_ = TransferUtil::ObjectOrder::ElmID;
   /// @brief  CMF type for transfer decisions

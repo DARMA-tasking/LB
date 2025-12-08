@@ -66,6 +66,8 @@ struct Transferer {
       pd_(pd)
   {}
 
+  virtual ~Transferer() = default;
+
   void migrateTask(int const rank, model::Task const& task, [[maybe_unused]] bool include_edges = false) {
     migrate_tasks_[rank].insert(task);
     pd_.eraseTask(task.getId());
@@ -73,7 +75,7 @@ struct Transferer {
 
   void doMigrations() {
     for (auto&& [rank, tasks] : migrate_tasks_) {
-      handle_[rank].template send<&Transferer::migrationHandler>(tasks);
+      handle_[rank].template send<&Transferer::migrationHandler>(comm_.getRank(), tasks);
     }
     while (comm_.poll()) {
       // do nothing
@@ -81,11 +83,27 @@ struct Transferer {
     migrate_tasks_.clear();
   }
 
-  void migrationHandler(std::unordered_set<model::Task> tasks) {
+  void sendBackHandler(model::Task const& task) {
+    pd_.addTask(task);
+  }
+
+  void migrationHandler(int from_rank, std::unordered_set<model::Task> tasks) {
     for (auto& task : tasks) {
-      pd_.addTask(task);
+      if (!acceptIncomingTask(task)) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "Transferer::migrationHandler: rejecting incoming task {}, load {} due to load constraints\n",
+          task.getId(),
+          task.getLoad()
+        );
+        handle_[from_rank].template send<&Transferer::sendBackHandler>(task);
+      } else {
+        pd_.addTask(task);
+      }
     }
   }
+
+  virtual bool acceptIncomingTask(model::Task const& task) = 0;
 
 protected:
   CommT comm_;
@@ -119,7 +137,7 @@ struct BasicTransfer : Transferer<CommT> {
     std::mt19937 gen_sample_,
     std::random_device& seed_
   ) {
-    RankInfo cur_load = load_info_.at(this->pd_.getRank());
+    RankInfo& cur_load = load_info_.at(this->pd_.getRank());
 
     // Initialize transfer and rejection counters
     int n_transfers = 0, n_rejected = 0;
@@ -166,7 +184,7 @@ struct BasicTransfer : Transferer<CommT> {
           auto const selected_rank = TransferUtil::sampleFromCMF(deterministic, under, cmf, gen_sample_, seed_);
 
           VT_LB_LOG(
-            LoadBalancer, normal,
+            LoadBalancer, verbose,
             "TemperedLB::originalTransfer: selected_node={}, load_info_.size()={}\n",
             selected_rank, load_info_.size()
           );
@@ -183,7 +201,7 @@ struct BasicTransfer : Transferer<CommT> {
           );
 
           VT_LB_LOG(
-            LoadBalancer, normal,
+            LoadBalancer, verbose,
             "TemperedLB::originalTransfer: under.size()={}, "
             "selected_node={}, selected_load={}, obj_id={}, "
             "is_migratable()={}, obj_load={}, target_max_load={}, "
@@ -234,6 +252,21 @@ struct BasicTransfer : Transferer<CommT> {
     }
 
     this->doMigrations();
+  }
+
+  /*virutal*/ bool acceptIncomingTask(model::Task const& task) override final {
+    RankInfo& cur_load = load_info_.at(this->pd_.getRank());
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "BasicTransfer::incomingTask: current load={} task load={} total load={} max={}\n",
+      cur_load.load, task.getLoad(), cur_load.load + task.getLoad(), stats_.max
+    );
+    if ((cur_load.load + task.getLoad()) * cur_load.rank_alpha > stats_.max) {
+      return false;
+    } else {
+      cur_load.load += task.getLoad();
+      return true;
+    }
   }
 
 private:

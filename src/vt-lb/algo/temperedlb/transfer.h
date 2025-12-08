@@ -113,7 +113,7 @@ protected:
 };
 
 template <comm::Communicator CommT>
-struct BasicTransfer : Transferer<CommT> {
+struct BasicTransfer final : Transferer<CommT> {
   BasicTransfer(
     CommT& comm,
     model::PhaseData& pd,

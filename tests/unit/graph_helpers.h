@@ -57,7 +57,7 @@ namespace vt_lb { namespace tests { namespace unit {
  * Generate random rank footprint on each rank
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param per_rank_dist Random size distribution
  */
 template <typename PerRankDistType>
@@ -73,7 +73,7 @@ void generateRankFootprintBytes(
  * Generate a random number of shared blocks on each rank
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param per_rank_dist Random number distribution
  * @param max_blocks_per_rank Cap for the number of shared blocks on any rank
  */
@@ -99,7 +99,7 @@ void generateSharedBlocksCountsPerRank(
  * Generate random memory for shared blocks on each rank
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param block_memory_dist Random memory distribution
  */
 template <typename BlockMemoryDistType>
@@ -123,7 +123,7 @@ void generateSharedBlockMemory(
  * Generate a random number of tasks on each rank
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param per_rank_dist Random number distribution
  * @param max_tasks_per_rank The cap for the number of tasks on any rank
  */
@@ -149,7 +149,7 @@ void generateTaskCountsPerRank(
  * Generate a random number of tasks on each shared block
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param per_block_dist Random number distribution
  * @param max_tasks_per_rank The cap for the number of tasks on any rank
  */
@@ -185,7 +185,7 @@ void generateTaskCountsPerSharedBlock(
  * Generate random working memory for tasks on each rank
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param task_working_memory_dist Random memory distribution
  */
 template <typename TaskMemoryDistType>
@@ -213,7 +213,7 @@ void generateTaskMemory(
  * Generate random loads for tasks on each rank
  *
  * @param pd The PhaseData for this rank
- * @param seed The seed for this rank
+ * @param gen The seeded generator for this rank
  * @param task_load_dist Random load distribution
  */
 template <typename TaskLoadDistType>

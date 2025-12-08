@@ -55,8 +55,10 @@
 
 #include <checkpoint/checkpoint.h>
 
-#include "vt-lb/comm/MPI/termination.h"
-#include "vt-lb/comm/MPI/class_handle.h"
+#include <vt-lb/util/logging.h>
+#include <vt-lb/comm/MPI/termination.h>
+#include <vt-lb/comm/MPI/class_handle.h>
+#include <vt-lb/comm/MPI/comm_mpi_detail.h>
 
 /**
  * \namespace vt_lb::comm
@@ -65,96 +67,6 @@
  * Provides MPI-based communication for load balancing suite
  */
 namespace vt_lb::comm {
-
-namespace detail {
-
-template <typename Tag, typename T>
-std::vector<T>& getRegistry() {
-  static std::vector<T> registry;
-  return registry;
-}
-
-struct BaseRegisteredInfo {
-  virtual ~BaseRegisteredInfo() = default;
-  virtual void dispatch(void* data, void* object, bool deserialize) const = 0;
-};
-
-template <typename ObjT>
-struct RegisteredInfo final : BaseRegisteredInfo {
-  using FnType = decltype(ObjT::getFunc());
-  FnType fn_ptr;
-
-  explicit RegisteredInfo(FnType in_fn_ptr) : fn_ptr(in_fn_ptr) {}
-
-  void dispatch(void* data, void* object, bool deserialize) const override {
-    typename ObjT::TupleType tup;
-    if (deserialize) {
-      checkpoint::deserializeInPlace<typename ObjT::TupleType>(
-        static_cast<char*>(data), &tup
-      );
-    } else {
-      tup = *reinterpret_cast<typename ObjT::TupleType*>(data);
-    }
-
-    auto obj = reinterpret_cast<typename ObjT::ObjectType*>(object);
-    std::apply(
-      fn_ptr,
-      std::tuple_cat(std::make_tuple(obj), tup)
-    );
-  }
-};
-
-// Combine Registrar and Type into a single structure
-template <typename Tag, typename T, typename ObjT>
-struct TypeRegistry {
-  static std::size_t const idx;
-  static std::size_t register_type() {
-    auto& reg = getRegistry<Tag, T>();
-    auto index = reg.size();
-    reg.emplace_back(ObjT::makeRegisteredInfo());
-    return index;
-  }
-};
-
-template <typename Tag, typename T, typename ObjT>
-std::size_t const TypeRegistry<Tag, T, ObjT>::idx = TypeRegistry<Tag, T, ObjT>::register_type();
-
-struct MemberTag {};
-
-// Simplify ObjFuncTraits
-template <typename T>
-struct ObjFuncTraits;
-
-template <typename Return, typename Obj, typename... Args>
-struct ObjFuncTraits<Return(Obj::*)(Args...)> {
-  using ObjT = Obj;
-  using TupleType = std::tuple<std::decay_t<Args>...>;
-};
-
-template <typename F, F f>
-struct FunctionWrapper {
-  using ThisType = FunctionWrapper<F,f>;
-  using FuncType = F;
-  using TupleType = typename ObjFuncTraits<F>::TupleType;
-  using ObjectType = typename ObjFuncTraits<F>::ObjT;
-  static constexpr F getFunc() { return f; }
-  static constexpr auto makeRegisteredInfo() {
-    return std::make_unique<RegisteredInfo<ThisType>>(ThisType::getFunc());
-  }
-};
-
-inline auto getMember(std::size_t idx) {
-  return getRegistry<MemberTag, std::unique_ptr<BaseRegisteredInfo>>().at(idx).get();
-}
-
-template <auto f>
-inline std::size_t registerMember() {
-  return TypeRegistry<MemberTag, std::unique_ptr<BaseRegisteredInfo>, FunctionWrapper<decltype(f), f>>::idx;
-}
-
-struct TerminationDetector;
-
-} // namespace detail
 
 /**
  * \brief MPI-based communication manager
@@ -185,66 +97,50 @@ private:
 
 public:
  /**
-   * \brief Initialize MPI
+   * \brief Initialize CommMPI
+   *
    * \param argc Pointer to argument count
    * \param argv Pointer to argument array
+   * \param comm MPI communicator to use (default: MPI_COMM_NULL)
    */
-  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL) {
-    if (comm == MPI_COMM_NULL) {
-      MPI_Init(&argc, &argv);
-      comm_ = MPI_COMM_WORLD;
-    } else {
-      interop_mode_ = true;
-      comm_ = comm;
-    }
-    MPI_Comm_rank(comm_, &cached_rank_);
-    MPI_Comm_size(comm_, &cached_size_);
-    initTermination();
-    // printf("%d: Initialized MPI with %d ranks\n", cached_rank_, cached_size_);
-  }
+  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL);
 
-  CommMPI clone(bool dup_comm = true) const {
-    MPI_Comm new_comm;
-    if (dup_comm) {
-      MPI_Comm_dup(comm_, &new_comm);
-    } else {
-      new_comm = comm_;
-    }
-    return CommMPI{new_comm, cached_rank_, cached_size_};
-  }
+  /**
+   * \brief Clone the communicator to create a distinct termination scope
+   *
+   * \param dup_comm Whether to duplicate the underlying MPI_Comm (default: true)
+   *
+   * \return A new CommMPI instance with the cloned communicator
+   */
+  CommMPI clone(bool dup_comm = true) const;
+
+ /**
+   * \brief Get the number of ranks in the communicator
+   * \return Number of ranks
+   */
+  int numRanks() const;
+
+  /**
+   * \brief Get this process's rank
+   * \return Current rank
+   */
+  int getRank() const;
 
   /**
    * \brief Finalize MPI
    */
-  void finalize() {
-    if (!interop_mode_) {
-      // printf("%d: Finalizing MPI\n", cached_rank_);
-      MPI_Finalize();
-    }
-    comm_ = MPI_COMM_NULL;
-  }
-
-  void barrier() {
-    MPI_Barrier(comm_);
-  }
+  void finalize();
 
   /**
-   * \brief Helper class for interpreting buffer headers
+   * \brief MPI barrier
    */
-  class BufferIntInterpreter {
-    char* const ptr_;
-  public:
-    explicit BufferIntInterpreter(char* buf) : ptr_(buf) {
-      assert((reinterpret_cast<std::uintptr_t>(buf) % alignof(int)) == 0);
-    }
-    int& handlerIndex() { return *reinterpret_cast<int*>(ptr_); }
-    int& classIndex() { return *(reinterpret_cast<int*>(ptr_) + 1); }
-    int& isTermination() { return *(reinterpret_cast<int*>(ptr_) + 2); }
-  };
+  void barrier();
 
   /**
    * \brief Register an instance for collective operations
+   *
    * \param obj Pointer to the object to register
+   *
    * \return A handle for the registered instance
    */
   template <typename T>
@@ -256,12 +152,19 @@ public:
 
   /**
    * \brief Unregister a previously registered instance
+   *
    * \param idx Index of the instance to unregister
    */
   void unregisterInstanceCollective(std::size_t idx) {
     class_map_.erase(idx);
   }
 
+  /**
+   * \brief Get a registered instance by index
+   *
+   * \param idx Index of the instance
+   * \return Pointer to the registered instance
+   */
   void* getInstanceCollective(std::size_t idx) {
     return class_map_.at(idx);
   }
@@ -290,6 +193,20 @@ public:
     sendImpl<fn>(dest, proxy.getIndex(), false, std::forward<Args>(args)...);
   }
 
+  /**
+   * \brief Helper class for interpreting buffer headers
+   */
+  class BufferIntInterpreter {
+    char* const ptr_;
+  public:
+    explicit BufferIntInterpreter(char* buf) : ptr_(buf) {
+      assert((reinterpret_cast<std::uintptr_t>(buf) % alignof(int)) == 0);
+    }
+    int& handlerIndex() { return *reinterpret_cast<int*>(ptr_); }
+    int& classIndex() { return *(reinterpret_cast<int*>(ptr_) + 1); }
+    int& isTermination() { return *(reinterpret_cast<int*>(ptr_) + 2); }
+  };
+
   template <auto fn, typename... Args>
   void sendImpl(int dest, int idx, bool is_termination_msg, Args&&... args) {
     // Layout of buffer:
@@ -300,6 +217,7 @@ public:
 
     // Validate destination rank
     if (dest < 0 || dest >= numRanks()) {
+      VT_LB_LOG(Communicator, terse, "Invalid destination rank {}\n", dest);
       throw std::runtime_error("Invalid destination rank");
     }
 
@@ -322,13 +240,15 @@ public:
     buf_interpreter.classIndex() = idx;
     buf_interpreter.isTermination() = is_termination_msg ? 1 : 0;
 
-    // printf("%d: MPI_Send to %d handler_index=%d class_index=%d is_termination=%d\n",
-    //   cached_rank_,
-    //   dest,
-    //   buf_interpreter.handlerIndex(),
-    //   buf_interpreter.classIndex(),
-    //   buf_interpreter.isTermination()
-    // );
+    VT_LB_LOG(
+      Communicator, normal,
+      "MPI_Isend to {} handler_index={} class_index={} is_termination={}\n",
+      dest,
+      buf_interpreter.handlerIndex(),
+      buf_interpreter.classIndex(),
+      is_termination_msg ? 1 : 0
+    );
+
     MPI_Request req;
     MPI_Isend(
       send_ptr, send_ptr_size, MPI_BYTE, dest, 0, comm_,
@@ -346,126 +266,31 @@ public:
    *
    * Checks for new messages and processes them, also cleans up completed sends
    * \throws std::runtime_error if received message is invalid
+   *
+   * \return true when termination occurs, false otherwise
    */
-  bool poll() {
-    // Look for new incoming messages
-    {
-      int flag = 0;
-      MPI_Status status;
-      // printf("%d: MPI_Iprobe\n", cached_rank_);
-      MPI_Iprobe(MPI_ANY_SOURCE, 0, comm_, &flag, &status);
-      if (flag) {
-        int count = 0;
-        MPI_Get_count(&status, MPI_BYTE, &count);
-
-        // Validate message size
-        if (count < static_cast<int>(3 * sizeof(int))) {
-          throw std::runtime_error("Received message is too small");
-        }
-
-        std::vector<char> buf(count);
-        // Ensure buffer is properly aligned
-        if (reinterpret_cast<std::uintptr_t>(buf.data()) % alignof(int) != 0) {
-          throw std::runtime_error("Buffer alignment error");
-        }
-
-        // printf("%d: MPI_Recv from %d of size %d\n", cached_rank_, status.MPI_SOURCE, count);
-        MPI_Recv(buf.data(), count, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG, comm_, MPI_STATUS_IGNORE);
-        BufferIntInterpreter buf_interpreter(buf.data());
-        int handler_index = buf_interpreter.handlerIndex();
-        int class_index = buf_interpreter.classIndex();
-        bool is_termination = buf_interpreter.isTermination() != 0;
-
-        // printf("%d: Received message: handler_index=%d class_index=%d is_termination=%d\n",
-        //   cached_rank_,
-        //   handler_index,
-        //   class_index,
-        //   is_termination ? 1 : 0
-        // );
-        auto mem_fn = detail::getMember(handler_index);
-        assert(class_map_.find(class_index) != class_map_.end() && "Class index not found");
-        mem_fn->dispatch(
-          buf.data() + 3*sizeof(int),
-          class_map_[class_index],
-          true
-        );
-
-        if (!is_termination) {
-          termination_detector_->notifyMessageReceive();
-        }
-      }
-
-      if (termination_detector_->singleRank()) {
-        // In single rank case, we need to progress the TD state machine
-        termination_detector_->startFirstWave();
-      }
-    }
-
-    // Process pending sends
-    for (auto it = pending_.begin(); it != pending_.end();) {
-      int flag = 0;
-      MPI_Status status;
-      MPI_Test(&std::get<0>(*it), &flag, &status);
-      if (flag) {
-        it = pending_.erase(it);
-      } else {
-        ++it;
-      }
-    }
-
-    return !termination_detector_->isTerminated() || pending_.size() > 0;
-  }
-
-  /**
-   * \brief Get the number of ranks in the communicator
-   * \return Number of ranks
-   */
-  int numRanks() const {
-    int size = 0;
-    // printf("%d: numRanks\n", cached_rank_);
-    if (comm_ == MPI_COMM_NULL) {
-      throw std::runtime_error("Communicator is not initialized");
-    }
-    MPI_Comm_size(comm_, &size);
-    return size;
-  }
-
-  /**
-   * \brief Get this process's rank
-   * \return Current rank
-   */
-  int getRank() const {
-    int rank = 0;
-    // printf("%d: getRank\n", cached_rank_);
-    if (comm_ == MPI_COMM_NULL) {
-      throw std::runtime_error("Communicator is not initialized");
-    }
-    MPI_Comm_rank(comm_, &rank);
-    return rank;
-  }
+  bool poll();
 
 private:
   void initTermination();
 
+  /// @brief Flag indicating if MPI is being used in interop mode
   bool interop_mode_ = false;
+  /// @brief MPI communicator
   MPI_Comm comm_ = MPI_COMM_NULL;
+  /// @brief Pending operations we are waiting on with buffers
   std::list<std::tuple<MPI_Request, std::unique_ptr<char[]>>> pending_;
+  /// @brief Next class index to use for registering class instances
   int next_class_index_ = 0;
+  /// @brief Map of class indices to registered instances
   std::unordered_map<int, void*> class_map_;
+  /// @brief Termination detector instance
   std::unique_ptr<detail::TerminationDetector> termination_detector_;
-
+  /// @brief Cached rank
   int cached_rank_ = -1;
+  /// @brief Cached size
   int cached_size_ = -1;
 };
-
-inline void CommMPI::initTermination() {
-  termination_detector_ = std::make_unique<detail::TerminationDetector>();
-  termination_detector_->init(*this, registerInstanceCollective(termination_detector_.get()));
-  if (cached_rank_ == 0) {
-    termination_detector_->notifyMessageSend();
-    termination_detector_->notifyMessageReceive();
-  }
-}
 
 } /* end namespace vt_lb::comm */
 

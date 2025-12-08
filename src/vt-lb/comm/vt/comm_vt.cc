@@ -43,6 +43,8 @@
 
 #include "vt-lb/comm/vt/comm_vt.h"
 
+#if vt_backend_enabled
+
 #include <vt/transport.h>
 
 namespace vt_lb::comm {
@@ -92,3 +94,5 @@ bool CommVT::poll() const {
 }
 
 } // namespace vt_lb::comm
+
+#endif /*vt_backend_enabled*/

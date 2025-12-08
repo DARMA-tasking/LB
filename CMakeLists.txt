@@ -14,12 +14,20 @@ string(REPLACE " " ";" MPI_EXTRA_FLAGS_LIST "${MPI_EXTRA_FLAGS}")
 message(STATUS "Running tests and examples with additional MPI flags = ${MPI_EXTRA_FLAGS_LIST}")
 
 include(cmake/load_mpi_package.cmake)
-find_package(vt)
 
-# vt includes magistrate
+option(vt_backend_enabled "Whether VT backend is enabled" ON)
+
+if (vt_backend_enabled)
+  find_package(vt)
+endif()
+
+# vt includes magistrate and we must have magistrate for the MPI backend
 if(NOT vt_FOUND)
   find_package(magistrate REQUIRED)
 endif()
+
+set(FMT_LIBRARY fmt)
+add_subdirectory(tpl/fmt)
 
 file(
   GLOB
@@ -51,6 +59,11 @@ set(PROJECT_BIN_DIR      ${CMAKE_CURRENT_BINARY_DIR})
 set(PROJECT_BASE_DIR     ${CMAKE_CURRENT_SOURCE_DIR})
 set(PROJECT_LIB_DIR      ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(PROJECT_EXAMPLE_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+
+configure_file(
+  ${PROJECT_BASE_DIR}/src/vt-lb/config/cmake_config.h.in
+  ${PROJECT_BIN_DIR}/src/vt-lb/config/cmake_config.h @ONLY
+)
 
 add_subdirectory(src)
 add_subdirectory(examples)

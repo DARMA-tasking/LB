@@ -2,10 +2,10 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                 test_dummy.h
+//                               cmake_config.h.in
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
-// Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
+// Copyright 2019-2021 National Technology & Engineering Solutions of Sandia, LLC
 // (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
@@ -41,32 +41,4 @@
 //@HEADER
 */
 
-#include <gtest/gtest.h>
-
-#include "test_parallel_harness.h"
-#include "test_helpers.h"
-
-namespace vt_lb { namespace tests { namespace unit {
-
-#if vt_backend_enabled
-struct TestDummyVTOnly : TestParallelHarness<comm::CommVT> {
-};
-
-TEST_F(TestDummyVTOnly, test_dummy) {
-  auto const my_rank = comm.getRank();
-  EXPECT_GE( my_rank, 0 );
-}
-#endif
-
-template <comm::Communicator CommType>
-struct TestDummyAnyComm : TestParallelHarness<CommType> {
-};
-
-TYPED_TEST_SUITE(TestDummyAnyComm, CommTypesForTesting, CommNameGenerator);
-
-TYPED_TEST(TestDummyAnyComm, test_dummy) {
-  auto const my_rank = this->comm.getRank();
-  EXPECT_GE( my_rank, 0 );
-}
-
-}}} // end namespace vt_lb::tests::unit
+#define vt_backend_enabled                   @vt_backend_enabled@

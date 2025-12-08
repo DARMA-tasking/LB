@@ -6,6 +6,7 @@ set(
     comm/MPI comm/vt
   input
   model
+  util
 )
 
 set(VT_LB_INSTALL_DESTINATION "include/vt-lb")
@@ -85,14 +86,20 @@ target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC MPI::MPI_CXX
 )
 
-if(NOT vt_FOUND)
+target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC fmt-lb
+)
+
+if (vt_FOUND AND vt_backend_enabled)
+  message(STATUS "Linking vt-lb with vt runtime")
+  target_link_libraries(
+    ${VT_LB_LIBRARY} PUBLIC vt::runtime::vt
+  )
+else()
   target_link_libraries(
     ${VT_LB_LIBRARY} PUBLIC vt::lib::magistrate
   )
 endif()
-target_link_libraries(
-  ${VT_LB_LIBRARY} PUBLIC vt::runtime::vt
-)
 
 target_include_directories(
   ${VT_LB_LIBRARY} PUBLIC

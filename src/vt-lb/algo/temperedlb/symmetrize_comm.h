@@ -104,7 +104,10 @@ struct CommunicationsSymmetrizer {
       // do nothing
     }
 
-    printf("%d: completed symmetrization of communications\n", my_rank);
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "completed symmetrization of communications\n"
+    );
   }
 
 private:

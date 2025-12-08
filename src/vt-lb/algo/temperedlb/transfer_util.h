@@ -51,8 +51,24 @@
 #include <set>
 #include <random>
 #include <cassert>
+#include <fmt-lb/format.h>
 
 namespace vt_lb::algo::temperedlb {
+
+struct RankInfo {
+  model::LoadType load;
+  double rank_alpha;
+
+  double getScaledLoad() const {
+    return load * rank_alpha;
+  }
+
+  template <typename SerializerT>
+  void serialize(SerializerT& s) {
+    s | load;
+    s | rank_alpha;
+  }
+};
 
 enum struct CriterionEnum : uint8_t {
   Grapevine         = 0,
@@ -60,14 +76,14 @@ enum struct CriterionEnum : uint8_t {
 };
 
 struct GrapevineCriterion {
-  bool operator()(model::LoadType, model::LoadType under, model::LoadType obj, model::LoadType avg) const {
-    return !(under + obj > avg);
+  bool operator()(RankInfo, RankInfo under, model::LoadType obj, model::LoadType avg) const {
+    return !(under.getScaledLoad() + obj * under.rank_alpha > avg);
   }
 };
 
 struct ModifiedGrapevineCriterion  {
-  bool operator()(model::LoadType over, model::LoadType under, model::LoadType obj, model::LoadType) const {
-    return obj <= over - under;
+  bool operator()(RankInfo over, RankInfo under, model::LoadType obj, model::LoadType) const {
+    return obj * under.rank_alpha <= over.getScaledLoad() - under.getScaledLoad();
   }
 };
 
@@ -76,7 +92,7 @@ struct Criterion {
     : criterion_(criterion)
   { }
 
-  bool operator()(model::LoadType over, model::LoadType under, model::LoadType obj, model::LoadType avg) const {
+  bool operator()(RankInfo over, RankInfo under, model::LoadType obj, model::LoadType avg) const {
     switch (criterion_) {
     case CriterionEnum::Grapevine:
       return GrapevineCriterion()(over, under, obj, avg);
@@ -109,6 +125,12 @@ inline auto format_as(CriterionEnum c) {
     break;
   }
   return name;
+}
+
+// Provide fmt::format_as overload for RankInfo so it can be used with fmt::print
+inline auto format_as(RankInfo const& ri) {
+  return fmt::format("RankInfo{{load={}, rank_alpha={}, scaled_load={}}}",
+                     ri.load, ri.rank_alpha, ri.getScaledLoad());
 }
 
 struct TransferUtil {
@@ -178,7 +200,7 @@ struct TransferUtil {
 
   static std::vector<double> createCMF(
     CMFType cmf_type,
-    std::unordered_map<int, model::LoadType> const& load_info,
+    std::unordered_map<int, RankInfo> const& load_info,
     model::LoadType target_max_load,
     std::vector<int> const& under
   );
@@ -193,15 +215,15 @@ struct TransferUtil {
 
   static std::vector<int> makeUnderloaded(
     bool deterministic,
-    std::unordered_map<int, model::LoadType> const& load_info,
+    std::unordered_map<int, RankInfo> const& load_info,
     double underloaded_threshold
   );
 
   static std::vector<int> makeSufficientlyUnderloaded(
     bool deterministic,
-    std::unordered_map<int, model::LoadType> const& load_info,
+    std::unordered_map<int, RankInfo> const& load_info,
     CriterionEnum criterion,
-    model::LoadType this_rank_load,
+    RankInfo this_rank_info,
     model::LoadType target_max_load,
     model::LoadType load_to_accommodate
   );
@@ -209,7 +231,7 @@ struct TransferUtil {
   static std::vector<model::TaskType> orderObjects(
     ObjectOrder obj_ordering,
     std::unordered_map<model::TaskType, model::Task> cur_objs,
-    model::LoadType this_rank_load,
+    RankInfo this_rank_info,
     model::LoadType target_max_load
   );
 };

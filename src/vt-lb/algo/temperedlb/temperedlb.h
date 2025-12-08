@@ -206,7 +206,7 @@ struct TemperedLB final : baselb::BaseLB {
       config_.work_model_,
       WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
     );
-    /*auto work_stats =*/ computeStatistics(total_work, "Work");
+    auto work_stats = computeStatistics(total_work, "Work");
 
     if (config_.hasMemoryInfo()) {
       double const total_memory_usage = WorkModelCalculator::computeMemoryUsage(
@@ -237,9 +237,10 @@ struct TemperedLB final : baselb::BaseLB {
 
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
-      auto info = runInformationPropagation(total_load);
+      auto rank_info = RankInfo{total_work, config_.work_model_.rank_alpha};
+      auto info = runInformationPropagation(rank_info);
       VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
-      BasicTransfer<CommT> transfer(comm_, *phase_data_, info, load_stats);
+      BasicTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
       std::mt19937 gen_select_;
       std::random_device seed_;
       transfer.run(
@@ -251,6 +252,11 @@ struct TemperedLB final : baselb::BaseLB {
         gen_select_,
         seed_
       );
+      double const after_work = WorkModelCalculator::computeWork(
+        config_.work_model_,
+        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+      );
+      computeStatistics(after_work, "After Work");
     } else {
       // computeGlobalMaxClusters();
       // Just assume max of 1000 clusters per rank for now, until we have bcast

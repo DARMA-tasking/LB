@@ -56,7 +56,7 @@ namespace vt_lb::algo::temperedlb {
 
 /*static*/ std::vector<double> TransferUtil::createCMF(
   CMFType cmf_type,
-  std::unordered_map<int, model::LoadType> const& load_info,
+  std::unordered_map<int, RankInfo> const& load_info,
   model::LoadType target_max_load,
   std::vector<int> const& under
 ) {
@@ -85,8 +85,8 @@ namespace vt_lb::algo::temperedlb {
         auto iter = load_info.find(pe);
         assert(iter != load_info.end() && "Rank must be in load_info");
         auto load = iter->second;
-        if (load > l_max) {
-          l_max = load;
+        if (load.getScaledLoad() > l_max) {
+          l_max = load.getScaledLoad();
         }
       }
       factor = 1.0 / (l_max > target_max_load ? l_max : target_max_load);
@@ -101,7 +101,7 @@ namespace vt_lb::algo::temperedlb {
     assert(iter != load_info.end() && "Node must be in load_info");
 
     auto load = iter->second;
-    sum_p += 1. - factor * load;
+    sum_p += 1. - factor * load.getScaledLoad();
     cmf.push_back(sum_p);
   }
 
@@ -147,12 +147,12 @@ namespace vt_lb::algo::temperedlb {
 
 /*static*/ std::vector<int> TransferUtil::makeUnderloaded(
   bool deterministic,
-  std::unordered_map<int, model::LoadType> const& load_info,
+  std::unordered_map<int, RankInfo> const& load_info,
   double underloaded_threshold
 ) {
   std::vector<int> under = {};
   for (auto&& elm : load_info) {
-    if (elm.second < underloaded_threshold) {
+    if (elm.second.load * elm.second.rank_alpha < underloaded_threshold) {
       under.push_back(elm.first);
     }
   }
@@ -164,16 +164,19 @@ namespace vt_lb::algo::temperedlb {
 
 /*static*/ std::vector<int> TransferUtil::makeSufficientlyUnderloaded(
   bool deterministic,
-  std::unordered_map<int, model::LoadType> const& load_info,
+  std::unordered_map<int, RankInfo> const& load_info,
   CriterionEnum criterion,
-  model::LoadType this_rank_load,
+  RankInfo this_rank_info,
   model::LoadType target_max_load,
   model::LoadType load_to_accommodate
 ) {
   std::vector<int> sufficiently_under = {};
   for (auto&& elm : load_info) {
     bool eval = Criterion(criterion)(
-      this_rank_load, elm.second, load_to_accommodate, target_max_load
+      this_rank_info,
+      elm.second,
+      load_to_accommodate,
+      target_max_load
     );
     if (eval) {
       sufficiently_under.push_back(elm.first);
@@ -188,7 +191,8 @@ namespace vt_lb::algo::temperedlb {
 /*static*/ std::vector<model::TaskType> TransferUtil::orderObjects(
   ObjectOrder obj_ordering,
   std::unordered_map<model::TaskType, model::Task> cur_objs,
-  model::LoadType this_rank_load, model::LoadType target_max_load
+  RankInfo this_rank_info,
+  model::LoadType target_max_load
 ) {
   // define the iteration order
   std::vector<model::TaskType> ordered_obj_ids(cur_objs.size());
@@ -208,10 +212,10 @@ namespace vt_lb::algo::temperedlb {
     {
       // first find the load of the smallest single object that, if migrated
       // away, could bring this processor's load below the target load
-      auto over_avg = this_rank_load - target_max_load;
+      auto over_avg = this_rank_info.getScaledLoad() - target_max_load;
       // if no objects are larger than over_avg, then single_obj_load will still
       // (incorrectly) reflect the total load, which will not be a problem
-      auto single_obj_load = this_rank_load;
+      auto single_obj_load = this_rank_info.getScaledLoad();
       for (auto &obj : cur_objs) {
         auto obj_load = obj.second.getLoad();
         if (obj_load >= over_avg && obj_load < single_obj_load) {
@@ -257,7 +261,7 @@ namespace vt_lb::algo::temperedlb {
       // first find the smallest object that, if migrated away along with all
       // smaller objects, could bring this processor's load below the target
       // load
-      auto over_avg = this_rank_load - target_max_load;
+      auto over_avg = this_rank_info.getScaledLoad() - target_max_load;
       std::sort(
         ordered_obj_ids.begin(), ordered_obj_ids.end(),
         [&cur_objs](const model::TaskType &left, const model::TaskType &right) {
@@ -267,10 +271,10 @@ namespace vt_lb::algo::temperedlb {
           return left_load > right_load;
         }
       );
-      auto cum_obj_load = this_rank_load;
-      auto single_obj_load = cur_objs[ordered_obj_ids[0]].getLoad();
+      auto cum_obj_load = this_rank_info.getScaledLoad();
+      auto single_obj_load = cur_objs[ordered_obj_ids[0]].getLoad() * this_rank_info.rank_alpha;
       for (auto obj_id : ordered_obj_ids) {
-        auto this_obj_load = cur_objs[obj_id].getLoad();
+        auto this_obj_load = cur_objs[obj_id].getLoad() * this_rank_info.rank_alpha;
         if (cum_obj_load - this_obj_load < over_avg) {
           single_obj_load = this_obj_load;
           break;

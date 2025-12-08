@@ -60,14 +60,38 @@ template <comm::Communicator CommT>
 struct Transferer {
   using HandleType = typename CommT::template HandleType<Transferer<CommT>>;
 
-  Transferer(CommT& comm)
+  Transferer(CommT& comm, model::PhaseData& pd)
     : comm_(comm.clone()),
-      handle_(comm_.template registerInstanceCollective<Transferer<CommT>>(this))
+      handle_(comm_.template registerInstanceCollective<Transferer<CommT>>(this)),
+      pd_(pd)
   {}
+
+  void migrateTask(int const rank, model::Task const& task, [[maybe_unused]] bool include_edges = false) {
+    migrate_tasks_[rank].insert(task);
+    pd_.eraseTask(task.getId());
+  }
+
+  void doMigrations() {
+    for (auto&& [rank, tasks] : migrate_tasks_) {
+      handle_[rank].template send<&Transferer::migrationHandler>(tasks);
+    }
+    while (comm_.poll()) {
+      // do nothing
+    }
+    migrate_tasks_.clear();
+  }
+
+  void migrationHandler(std::unordered_set<model::Task> tasks) {
+    for (auto& task : tasks) {
+      pd_.addTask(task);
+    }
+  }
 
 protected:
   CommT comm_;
   HandleType handle_;
+  model::PhaseData& pd_;
+  std::unordered_map<int, std::unordered_set<model::Task>> migrate_tasks_;
 };
 
 template <comm::Communicator CommT>
@@ -75,10 +99,9 @@ struct BasicTransfer : Transferer<CommT> {
   BasicTransfer(
     CommT& comm,
     model::PhaseData& pd,
-    std::unordered_map<int, model::LoadType> const& load_info,
+    std::unordered_map<int, RankInfo> const& load_info,
     Statistics stats
-  ) : Transferer<CommT>(comm),
-      pd_(pd),
+  ) : Transferer<CommT>(comm, pd),
       load_info_(load_info),
       stats_(stats)
   {}
@@ -96,27 +119,27 @@ struct BasicTransfer : Transferer<CommT> {
     std::mt19937 gen_sample_,
     std::random_device& seed_
   ) {
-    double cur_load = load_info_.at(pd_.getRank());
+    RankInfo cur_load = load_info_.at(this->pd_.getRank());
 
     // Initialize transfer and rejection counters
     int n_transfers = 0, n_rejected = 0;
 
     // Try to migrate objects only from overloaded ranks
-    if (isOverloaded(cur_load)) {
+    if (isOverloaded(cur_load.getScaledLoad())) {
       std::vector<int> under = TransferUtil::makeUnderloaded(deterministic, load_info_, stats_.avg);
       std::unordered_map<int, model::TaskType> migrate_tasks;
 
-      auto cur_objs = pd_.getTasksMap();
+      auto cur_tasks = this->pd_.getTasksMap();
 
       if (under.size() > 0) {
         std::vector<model::TaskType> ordered_obj_ids = TransferUtil::orderObjects(
-          obj_ordering, cur_objs, cur_load, target_max_load
+          obj_ordering, cur_tasks, cur_load, target_max_load
         );
 
         // Iterate through all the objects
         for (auto iter = ordered_obj_ids.begin(); iter != ordered_obj_ids.end(); ) {
           auto obj_id = *iter;
-          auto obj_load = cur_objs[obj_id].getLoad();
+          auto obj_load = cur_tasks[obj_id].getLoad();
 
           if (cmf_type == TransferUtil::CMFType::Original) {
             // Rebuild the relaxed underloaded set based on updated load of this node
@@ -154,15 +177,15 @@ struct BasicTransfer : Transferer<CommT> {
           auto& selected_load = load_iter->second;
 
           // Check if object is migratable and evaluate criterion for proposed transfer
-          bool is_migratable = cur_objs[obj_id].isMigratable();
+          bool is_migratable = cur_tasks[obj_id].isMigratable();
           bool eval = Criterion(criterion)(
             cur_load, selected_load, obj_load, target_max_load
           );
 
           VT_LB_LOG(
             LoadBalancer, normal,
-            "TemperedLB::originalTransfer: trial={}, iter={}, under.size()={}, "
-            "selected_node={}, selected_load={:e}, obj_id={:x}, "
+            "TemperedLB::originalTransfer: under.size()={}, "
+            "selected_node={}, selected_load={}, obj_id={}, "
             "is_migratable()={}, obj_load={}, target_max_load={}, "
             "cur_load={}, criterion={}\n",
             under.size(),
@@ -181,50 +204,41 @@ struct BasicTransfer : Transferer<CommT> {
             ++n_transfers;
             // Transfer the object load in seconds
             // to match the object load units on the receiving end
-            migrate_tasks_[selected_rank].insert(cur_objs[obj_id]);
+            this->migrateTask(selected_rank, cur_tasks[obj_id]);
 
-            cur_load -= obj_load;
-            selected_load += obj_load;
+            VT_LB_LOG(
+              LoadBalancer, verbose,
+              "TemperedLB::decide: migrating obj_id={:x} of load={} to rank={}\n",
+              obj_id, model::LoadType(obj_load), selected_rank
+            );
+
+            // Update loads
+            cur_load.load -= obj_load;
+            selected_load.load += obj_load;
 
             iter = ordered_obj_ids.erase(iter);
-            cur_objs.erase(obj_id);
+            cur_tasks.erase(obj_id);
           } else {
             ++n_rejected;
             iter++;
           }
 
-          if (!(cur_load > target_max_load)) {
+          if (!(cur_load.getScaledLoad() > target_max_load)) {
             break;
           }
         }
-      }
-
-      // Send objects to nodes
-      for (auto&& [rank, tasks] : migrate_tasks_) {
-        this->handle_[rank].template send<&BasicTransfer::migrationHandler>(tasks);
       }
     } else {
       // do nothing (underloaded-based algorithm), waits to get work from
       // overloaded nodes
     }
 
-    while (this->comm_.poll()) {
-      // do nothing
-    }
-  }
-
-  void migrationHandler(std::unordered_set<model::Task> tasks) {
-    for (auto& task : tasks) {
-      pd_.addTask(task);
-      load_info_[pd_.getRank()] += task.getLoad();
-    }
+    this->doMigrations();
   }
 
 private:
-  model::PhaseData& pd_;
-  std::unordered_map<int, model::LoadType> load_info_;
+  std::unordered_map<int, RankInfo> load_info_;
   Statistics stats_;
-  std::unordered_map<int, std::unordered_set<model::Task>> migrate_tasks_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

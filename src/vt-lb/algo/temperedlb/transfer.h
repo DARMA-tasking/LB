@@ -77,6 +77,8 @@ struct Transferer {
     for (auto&& [rank, tasks] : migrate_tasks_) {
       handle_[rank].template send<&Transferer::migrationHandler>(comm_.getRank(), tasks);
     }
+
+    // Wait for termination on the migrations
     while (comm_.poll()) {
       // do nothing
     }
@@ -258,7 +260,7 @@ struct BasicTransfer final : Transferer<CommT> {
     RankInfo& cur_load = load_info_.at(this->pd_.getRank());
     VT_LB_LOG(
       LoadBalancer, verbose,
-      "BasicTransfer::incomingTask: current load={} task load={} total load={} max={}\n",
+      "BasicTransfer::acceptIncomingTask: current load={} task load={} total load={} max={}\n",
       cur_load.load, task.getLoad(), cur_load.load + task.getLoad(), stats_.max
     );
     if ((cur_load.load + task.getLoad()) * cur_load.rank_alpha > stats_.max) {

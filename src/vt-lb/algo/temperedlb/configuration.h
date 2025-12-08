@@ -45,6 +45,7 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_CONFIGURATION_H
 
 #include <vt-lb/algo/temperedlb/work_model.h>
+#include <vt-lb/algo/temperedlb/transfer_util.h>
 
 #include <cmath>
 
@@ -84,6 +85,13 @@ struct Configuration {
   bool deterministic_ = true;
   /// @brief Seed for random number generation when deterministic_ is true
   int seed_ = 29;
+
+  /// @brief  Criterion type for transfer decisions
+  CriterionEnum criterion_ = CriterionEnum::Grapevine;
+  /// @brief  Object ordering for transfer decisions
+  TransferUtil::ObjectOrder obj_ordering_ = TransferUtil::ObjectOrder::ElmID;
+  /// @brief  CMF type for transfer decisions
+  TransferUtil::CMFType cmf_type_ = TransferUtil::CMFType::Original;
 
   /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
   WorkModel work_model_;

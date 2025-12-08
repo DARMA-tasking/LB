@@ -55,6 +55,8 @@
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/algo/temperedlb/full_graph_visualizer.h>
 #include <vt-lb/algo/temperedlb/info_propagation.h>
+#include <vt-lb/algo/temperedlb/transfer.h>
+#include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/util/logging.h>
 
 #include <limits>
@@ -176,54 +178,10 @@ struct TemperedLB final : baselb::BaseLB {
     // Save a clone of the phase data before load balancing
     savePhaseData();
 
-    double total_load = computeLoad();
-    computeStatistics(total_load, "Compute Load");
-
-    double const total_work = WorkModelCalculator::computeWork(
-      config_.work_model_,
-      WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
-    );
-    computeStatistics(total_work, "Work");
-
-    if (config_.hasMemoryInfo()) {
-      double const total_memory_usage = WorkModelCalculator::computeMemoryUsage(
-        config_,
-        this->getPhaseData()
-      ).current_memory_usage;
-      computeStatistics(total_memory_usage, "Memory Usage");
-    }
-
-    // Run the clustering algorithm if appropriate for the configuration
-    doClustering();
-
-    // Generate visualization after clustering
-    visualizeGraph("temperedlb_rank" + std::to_string(comm_.getRank()) + "_trial" + std::to_string(trial));
-
-    visualizeFullGraphIfNeeded(
-      comm_,
-      this->getPhaseData(),
-      getClusterer(),
-      global_max_clusters_,
-      config_,
-      "temperedlb_full_graph_trial" + std::to_string(trial)
-    );
-
-    auto& wm = config_.work_model_;
-    if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
-      auto info = runInformationPropagation(total_load);
-      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
-    } else {
-#if 0
-      computeGlobalMaxClusters();
-#else
-      // Just assume max of 1000 clusters per rank for now, until we have bcast
-#endif
-      // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
-      // Every task could be its own cluster, but clusters must exist
-      assert(clusterer_ != nullptr && "Clusterer must be valid");
-      auto local_summary = buildClusterSummaries();
-      auto info = runInformationPropagation(local_summary);
-      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+    for (int iter = 0; iter < config_.num_iters_; ++iter) {
+      VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
+      runIteration(trial, iter);
+      VT_LB_LOG(LoadBalancer, normal, "  Finished iteration {}/{}\n", iter + 1, config_.num_iters_);
     }
 
     // Before we restore phase data for the next trial, save the work and task distribution
@@ -238,6 +196,72 @@ struct TemperedLB final : baselb::BaseLB {
 
     // Restore phase data
     restorePhaseData();
+  }
+
+  void runIteration(int trial, int iter) {
+    double total_load = computeLoad();
+    auto load_stats = computeStatistics(total_load, "Compute Load");
+
+    double const total_work = WorkModelCalculator::computeWork(
+      config_.work_model_,
+      WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+    );
+    /*auto work_stats =*/ computeStatistics(total_work, "Work");
+
+    if (config_.hasMemoryInfo()) {
+      double const total_memory_usage = WorkModelCalculator::computeMemoryUsage(
+        config_,
+        this->getPhaseData()
+      ).current_memory_usage;
+      computeStatistics(total_memory_usage, "Memory Usage");
+    }
+
+    // Run the clustering algorithm if appropriate for the configuration
+    doClustering();
+
+    // Generate visualization after clustering
+    visualizeGraph(
+      "temperedlb_rank" + std::to_string(comm_.getRank()) +
+      "_trial" + std::to_string(trial) +
+      "_iter" + std::to_string(iter)
+    );
+
+    visualizeFullGraphIfNeeded(
+      comm_,
+      this->getPhaseData(),
+      getClusterer(),
+      global_max_clusters_,
+      config_,
+      "temperedlb_full_graph_trial" + std::to_string(trial)
+    );
+
+    auto& wm = config_.work_model_;
+    if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
+      auto info = runInformationPropagation(total_load);
+      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      BasicTransfer<CommT> transfer(comm_, *phase_data_, info, load_stats);
+      std::mt19937 gen_select_;
+      std::random_device seed_;
+      transfer.run(
+        config_.cmf_type_,
+        config_.obj_ordering_,
+        config_.criterion_,
+        config_.deterministic_,
+        load_stats.avg,
+        gen_select_,
+        seed_
+      );
+    } else {
+      // computeGlobalMaxClusters();
+      // Just assume max of 1000 clusters per rank for now, until we have bcast
+
+      // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
+      // Every task could be its own cluster, but clusters must exist
+      assert(clusterer_ != nullptr && "Clusterer must be valid");
+      auto local_summary = buildClusterSummaries();
+      auto info = runInformationPropagation(local_summary);
+      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+    }
   }
 
   Clusterer const* getClusterer() const { return clusterer_.get(); }
@@ -261,15 +285,18 @@ private:
   }
 
   template <typename T>
-  void computeStatistics(T quantity, std::string const& name) {
+  Statistics computeStatistics(T quantity, std::string const& name) {
     // Compute min, max, avg of quantity across all ranks
     double local_value = static_cast<double>(quantity);
     double global_min = 0.0;
     double global_max = 0.0;
     double global_sum = 0.0;
-    handle_.reduce(0, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
-    handle_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
-    handle_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    // For now, do P reductions since we don't have broadcast yet
+    for (int p = 0; p < comm_.numRanks(); ++p) {
+      handle_.reduce(p, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
+      handle_.reduce(p, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
+      handle_.reduce(p, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    }
     double global_avg = global_sum / static_cast<double>(comm_.numRanks());
     double I = 0;
     if (global_avg > 0.0) {
@@ -281,6 +308,7 @@ private:
         name, global_min, global_max, global_avg, I
       );
     }
+    return Statistics{global_min, global_max, global_avg, I};
   }
 
 private:

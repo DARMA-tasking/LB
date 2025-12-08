@@ -121,6 +121,9 @@ int main(int argc, char** argv) {
   config.visualize_clusters_ = true;
   config.cluster_based_on_communication_ = true;
   config.work_model_.beta = 0.5;
+  config.visualize_full_graph_ = true;
+  config.num_iters_ = 2;
+  config.num_trials_ = 1;
   //config.k_max_ = 1;
 
   vt_lb::model::PhaseData phase_data{comm.getRank()};

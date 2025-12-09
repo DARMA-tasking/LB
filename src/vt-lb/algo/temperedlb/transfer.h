@@ -68,12 +68,45 @@ struct Transferer {
 
   virtual ~Transferer() = default;
 
-  void migrateTask(int const rank, model::Task const& task, [[maybe_unused]] bool include_edges = false) {
-    migrate_tasks_[rank].insert(task);
+  struct TransferTask {
+    model::Task task;
+    std::vector<model::Edge> edges;
+    std::vector<model::SharedBlock> shared_blocks;
+
+    template <typename SerializerT>
+    void serialize(SerializerT& s) {
+      s | task;
+      s | edges;
+      s | shared_blocks;
+    }
+  };
+
+  void migrateTask(int const rank, model::Task const& task, bool include_comm = false) {
+    std::vector<model::Edge> edges;
+    std::vector<model::SharedBlock> shared_blocks;
+
+    if (include_comm) {
+      for (auto const& sb_id : task.getSharedBlocks()) {
+        auto const* sb = pd_.getSharedBlock(sb_id);
+        if (sb != nullptr) {
+          shared_blocks.push_back(*sb);
+        }
+      }
+      for (auto const& edge : pd_.getCommunications()) {
+        if (edge.getFrom() == task.getId() || edge.getTo() == task.getId()) {
+          edges.push_back(edge);
+        }
+      }
+    }
+
+    migrate_tasks_[rank].push_back(TransferTask{task, edges, shared_blocks});
     pd_.eraseTask(task.getId());
+
+    // We can't clean up everything here, because the task might come back.
+    // Do this later once all migrations are done.
   }
 
-  void doMigrations() {
+  void doMigrations(bool do_cleanup = true) {
     for (auto&& [rank, tasks] : migrate_tasks_) {
       handle_[rank].template send<&Transferer::migrationHandler>(comm_.getRank(), tasks);
     }
@@ -82,15 +115,22 @@ struct Transferer {
     while (comm_.poll()) {
       // do nothing
     }
+
     migrate_tasks_.clear();
+
+    if (do_cleanup) {
+      cleanup();
+    }
   }
 
+private:
   void sendBackHandler(model::Task const& task) {
+    // Add the task back
     pd_.addTask(task);
   }
 
-  void migrationHandler(int from_rank, std::unordered_set<model::Task> tasks) {
-    for (auto& task : tasks) {
+  void migrationHandler(int from_rank, std::vector<TransferTask> const& tasks) {
+    for (auto& [task, edges, shared_blocks] : tasks) {
       if (!acceptIncomingTask(task)) {
         VT_LB_LOG(
           LoadBalancer, normal,
@@ -101,18 +141,46 @@ struct Transferer {
         handle_[from_rank].template send<&Transferer::sendBackHandler>(task);
       } else {
         pd_.addTask(task);
+        for (auto const& edge : edges) {
+          pd_.addCommunication(edge);
+        }
+        for (auto const& sb : shared_blocks) {
+          if (!pd_.hasSharedBlock(sb.getId())) {
+            pd_.addSharedBlock(sb);
+          }
+        }
       }
     }
   }
 
+  void cleanup() {
+    // 1) Remove communications where neither endpoint exists locally
+    pd_.purgeDanglingCommunications();
+
+    // 2) Compute shared-block references from current tasks
+    std::unordered_map<model::SharedBlockType, int> refcounts;
+    for (auto const& [id, task] : pd_.getTasksMap()) {
+      for (auto const& sb : task.getSharedBlocks()) {
+        ++refcounts[sb];
+      }
+    }
+
+    // 3) Remove shared blocks with zero references on this rank
+    for (auto const& [sb_id, sb] : pd_.getSharedBlocksMap()) {
+      if (refcounts.find(sb_id) == refcounts.end()) {
+        pd_.eraseSharedBlock(sb_id);
+      }
+    }
+  }
+
+protected:
   virtual bool acceptIncomingTask(model::Task const& task) = 0;
 
 protected:
   CommT comm_;
   HandleType handle_;
   model::PhaseData& pd_;
-  std::unordered_map<int, std::unordered_set<model::Task>> migrate_tasks_;
-  std::unordered_map<model::TaskType, std::vector<model::Edge>> migrate_task_edges_;
+  std::unordered_map<int, std::vector<TransferTask>> migrate_tasks_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

@@ -118,6 +118,20 @@ struct PhaseData {
     rank_max_memory_available_ = 0.0;
   }
 
+  void purgeDanglingCommunications() {
+    std::vector<Edge> filtered;
+    filtered.reserve(communications_.size());
+    for (auto const& e : communications_) {
+      bool from_present = hasTask(e.getFrom());
+      bool to_present   = hasTask(e.getTo());
+      // Keep edge unless both sides are missing
+      if (from_present || to_present) {
+        filtered.push_back(e);
+      }
+    }
+    communications_.swap(filtered);
+  }
+
   template <typename Serializer>
   void serialize(Serializer& s) {
     s | rank_;

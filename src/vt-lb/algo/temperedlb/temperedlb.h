@@ -56,6 +56,7 @@
 #include <vt-lb/algo/temperedlb/full_graph_visualizer.h>
 #include <vt-lb/algo/temperedlb/info_propagation.h>
 #include <vt-lb/algo/temperedlb/transfer.h>
+#include <vt-lb/algo/temperedlb/basic_transfer.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/util/logging.h>
 

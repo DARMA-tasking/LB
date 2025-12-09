@@ -49,37 +49,37 @@
 namespace vt_lb::model {
 
 struct Edge {
-    Edge() = default;
-    Edge(TaskType from, TaskType to, BytesType volume)
-      : from_(from), to_(to), volume_(volume)
-    {}
-    // New ctor with explicit endpoint ranks
-    Edge(TaskType from, TaskType to, BytesType volume, RankType from_rank, RankType to_rank)
-      : from_(from), to_(to), volume_(volume), from_rank_(from_rank), to_rank_(to_rank)
-    {}
+  Edge() = default;
+  Edge(TaskType from, TaskType to, BytesType volume)
+    : from_(from), to_(to), volume_(volume)
+  {}
+  // New ctor with explicit endpoint ranks
+  Edge(TaskType from, TaskType to, BytesType volume, RankType from_rank, RankType to_rank)
+    : from_(from), to_(to), volume_(volume), from_rank_(from_rank), to_rank_(to_rank)
+  {}
 
-    TaskType getFrom() const { return from_; }
-    TaskType getTo() const { return to_; }
-    BytesType getVolume() const { return volume_; }
-    // New rank accessors
-    RankType getFromRank() const { return from_rank_; }
-    RankType getToRank() const { return to_rank_; }
+  TaskType getFrom() const { return from_; }
+  TaskType getTo() const { return to_; }
+  BytesType getVolume() const { return volume_; }
+  // New rank accessors
+  RankType getFromRank() const { return from_rank_; }
+  RankType getToRank() const { return to_rank_; }
 
-    template <typename Serializer>
-    void serialize(Serializer& s) {
-      s | from_;
-      s | to_;
-      s | volume_;
-      s | from_rank_;
-      s | to_rank_;
-    }
+  template <typename Serializer>
+  void serialize(Serializer& s) {
+    s | from_;
+    s | to_;
+    s | volume_;
+    s | from_rank_;
+    s | to_rank_;
+  }
 
 private:
-    TaskType from_ = invalid_task;
-    TaskType to_ = invalid_task;
-    BytesType volume_ = 0.0;
-    RankType from_rank_ = invalid_node;
-    RankType to_rank_ = invalid_node;
+  TaskType from_ = invalid_task;
+  TaskType to_ = invalid_task;
+  BytesType volume_ = 0.0;
+  RankType from_rank_ = invalid_node;
+  RankType to_rank_ = invalid_node;
 };
 
 } /* end namespace vt_lb::model */

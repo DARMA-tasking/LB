@@ -163,7 +163,7 @@ struct TemperedLB final : baselb::BaseLB {
     return gathered_info;
   }
 
-  void run() {
+  std::unordered_set<model::TaskType> run() {
     // Make communications symmetric before running trials so we only have to do it once
     makeCommunicationsSymmetric();
 
@@ -172,6 +172,22 @@ struct TemperedLB final : baselb::BaseLB {
       runTrial(trial);
       VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
     }
+
+    // Sort trial work distribution by max work
+    std::sort(
+      trial_work_distribution_.begin(),
+      trial_work_distribution_.end(),
+      [](auto const& a, auto const& b) {
+        return std::get<0>(a) < std::get<0>(b);
+      }
+    );
+
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
+    );
+
+    return std::get<1>(trial_work_distribution_.front());
   }
 
   void runTrial(int trial) {
@@ -186,11 +202,15 @@ struct TemperedLB final : baselb::BaseLB {
 
     // Before we restore phase data for the next trial, save the work and task distribution
     // @todo: for now, we recompute work from scratch but we probably can use the breakdown
+    auto after_iters_work = WorkModelCalculator::computeWork(
+      config_.work_model_,
+      WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+    );
+    auto final_stats = computeStatistics(after_iters_work, "Final Work After Iters");
+
+    // Save the max work and task distribution for this trial
     trial_work_distribution_.emplace_back(
-      WorkModelCalculator::computeWork(
-        config_.work_model_,
-        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
-      ),
+      final_stats.max,
       this->getPhaseData().getTaskIds()
     );
 

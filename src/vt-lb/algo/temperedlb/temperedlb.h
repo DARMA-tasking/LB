@@ -46,7 +46,15 @@
 
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/algo/baselb/baselb.h>
+
+// Include all model types
+#include <vt-lb/model/types.h>
 #include <vt-lb/model/PhaseData.h>
+#include <vt-lb/model/Task.h>
+#include <vt-lb/model/Communication.h>
+#include <vt-lb/model/SharedBlock.h>
+
+// Include various temperedlb components
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
@@ -57,7 +65,10 @@
 #include <vt-lb/algo/temperedlb/info_propagation.h>
 #include <vt-lb/algo/temperedlb/transfer.h>
 #include <vt-lb/algo/temperedlb/basic_transfer.h>
+#include <vt-lb/algo/temperedlb/relaxed_cluster_transfer.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
+
+// Logging include
 #include <vt-lb/util/logging.h>
 
 #include <limits>
@@ -286,8 +297,11 @@ struct TemperedLB final : baselb::BaseLB {
       // Every task could be its own cluster, but clusters must exist
       assert(clusterer_ != nullptr && "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
-      auto info = runInformationPropagation(local_summary);
+      auto rank_info = RankClusterInfo{local_summary, config_.work_model_.rank_alpha};
+      auto info = runInformationPropagation(rank_info);
       VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      RelaxedClusterTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
+      transfer.run();
     }
   }
 

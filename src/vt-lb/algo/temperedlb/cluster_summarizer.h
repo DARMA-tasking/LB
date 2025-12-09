@@ -47,6 +47,7 @@
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Communication.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
+#include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
 
 #include <unordered_map>
 #include <vector>
@@ -54,41 +55,6 @@
 #include <cassert>
 
 namespace vt_lb::algo::temperedlb {
-
-struct TaskClusterSummaryInfo {
-  TaskClusterSummaryInfo() = default;
-
-  int cluster_id = -1;
-  int num_tasks_ = 0;
-  double cluster_load = 0.0;
-  double cluster_intra_send_bytes = 0.0;
-  double cluster_intra_recv_bytes = 0.0;
-  std::vector<model::Edge> inter_edges_;
-
-  // Memory info
-  std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
-  model::BytesType max_object_working_bytes = 0;
-  model::BytesType max_object_working_bytes_outside = 0;
-  model::BytesType max_object_serialized_bytes = 0;
-  model::BytesType max_object_serialized_bytes_outside = 0;
-  model::BytesType cluster_footprint = 0;
-
-  template <typename SerializerT>
-  void serialize(SerializerT& s) {
-    s | cluster_id;
-    s | num_tasks_;
-    s | cluster_load;
-    s | cluster_intra_send_bytes;
-    s | cluster_intra_recv_bytes;
-    s | inter_edges_;
-    s | shared_block_bytes_;
-    s | max_object_working_bytes;
-    s | max_object_working_bytes_outside;
-    s | max_object_serialized_bytes;
-    s | max_object_serialized_bytes_outside;
-    s | cluster_footprint;
-  }
-};
 
 struct Clusterer;
 

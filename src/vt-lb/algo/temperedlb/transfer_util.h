@@ -46,18 +46,20 @@
 
 #include <vt-lb/model/types.h>
 #include <vt-lb/model/PhaseData.h>
+#include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
 
 #include <vector>
 #include <set>
 #include <random>
 #include <cassert>
+
 #include <fmt-lb/format.h>
 
 namespace vt_lb::algo::temperedlb {
 
 struct RankInfo {
-  model::LoadType load;
-  double rank_alpha;
+  model::LoadType load = 0.0;
+  double rank_alpha = 0.0;
 
   double getScaledLoad() const {
     return load * rank_alpha;
@@ -66,6 +68,17 @@ struct RankInfo {
   template <typename SerializerT>
   void serialize(SerializerT& s) {
     s | load;
+    s | rank_alpha;
+  }
+};
+
+struct RankClusterInfo {
+  std::unordered_map<int, TaskClusterSummaryInfo> cluster_summaries;
+  double rank_alpha = 0.0;
+
+  template <typename SerializerT>
+  void serialize(SerializerT& s) {
+    s | cluster_summaries;
     s | rank_alpha;
   }
 };

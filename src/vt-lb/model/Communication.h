@@ -48,6 +48,11 @@
 
 namespace vt_lb::model {
 
+/**
+ * @struct Edge
+ *
+ * @brief Represents a communication edge between two tasks
+ */
 struct Edge {
   Edge() = default;
   Edge(TaskType from, TaskType to, BytesType volume)
@@ -80,6 +85,34 @@ private:
   BytesType volume_ = 0.0;
   RankType from_rank_ = invalid_node;
   RankType to_rank_ = invalid_node;
+};
+
+/**
+ * @struct ClusterEdge
+ *
+ * @brief Represents a communication edge between two clusters
+ */
+struct ClusterEdge {
+  ClusterEdge() = default;
+  ClusterEdge(int from_cluster, int to_cluster, BytesType volume)
+    : from_cluster_(from_cluster), to_cluster_(to_cluster), volume_(volume)
+  {}
+
+  int getFromCluster() const { return from_cluster_; }
+  int getToCluster() const { return to_cluster_; }
+  BytesType getVolume() const { return volume_; }
+
+  template <typename Serializer>
+  void serialize(Serializer& s) {
+    s | from_cluster_;
+    s | to_cluster_;
+    s | volume_;
+  }
+
+private:
+  int from_cluster_ = -1;
+  int to_cluster_ = -1;
+  BytesType volume_ = 0.0;
 };
 
 } /* end namespace vt_lb::model */

@@ -97,7 +97,7 @@ struct FullGraphVisualizer {
     if (clusterer_) {
       // Convert local cluster IDs to global using global_max_clusters_
       for (auto const& [tid, local_cid] : clusterer_->taskToCluster()) {
-        int global_cid = ClusterSummarizer::localToGlobalClusterID(local_cid, my_rank, global_max_clusters_);
+        int global_cid = ClusterSummarizerUtil::localToGlobalClusterID(local_cid, my_rank, global_max_clusters_);
         local_clusters_[tid] = global_cid;
       }
       // Debug: local cluster count and conversion info

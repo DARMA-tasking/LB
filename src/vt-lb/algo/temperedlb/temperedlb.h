@@ -123,8 +123,9 @@ struct TemperedLB final : baselb::BaseLB {
   }
 
   std::unordered_map<int, TaskClusterSummaryInfo> buildClusterSummaries() {
-    return ClusterSummarizer::buildClusterSummaries(
-      this->getPhaseData(), config_, getClusterer(), global_max_clusters_
+    ClusterSummarizer<CommT> cs(comm_, getClusterer(), global_max_clusters_);
+    return cs.buildClusterSummaries(
+      this->getPhaseData(), config_
     );
   }
 
@@ -234,9 +235,11 @@ struct TemperedLB final : baselb::BaseLB {
     double total_load = computeLoad();
     auto load_stats = computeStatistics(total_load, "Compute Load");
 
+    auto work_breakdown = WorkModelCalculator::computeWorkBreakdown(
+      this->getPhaseData(), config_
+    );
     double const total_work = WorkModelCalculator::computeWork(
-      config_.work_model_,
-      WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+      config_.work_model_, work_breakdown
     );
     auto work_stats = computeStatistics(total_work, "Work");
 
@@ -297,11 +300,22 @@ struct TemperedLB final : baselb::BaseLB {
       // Every task could be its own cluster, but clusters must exist
       assert(clusterer_ != nullptr && "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
-      auto rank_info = RankClusterInfo{local_summary, config_.work_model_.rank_alpha};
+      auto rank_info = RankClusterInfo{
+        local_summary,
+        this->getPhaseData().getRankFootprintBytes(),
+        config_.work_model_.rank_alpha,
+        work_breakdown
+      };
       auto info = runInformationPropagation(rank_info);
       VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
       RelaxedClusterTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
-      transfer.run();
+      transfer.run(
+        config_,
+        getClusterer(),
+        global_max_clusters_,
+        local_summary,
+        work_breakdown
+      );
     }
   }
 

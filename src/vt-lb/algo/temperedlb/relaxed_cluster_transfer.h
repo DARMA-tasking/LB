@@ -48,6 +48,9 @@
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/comm/comm_traits.h>
+#include <vt-lb/algo/temperedlb/work_model.h>
+#include <vt-lb/algo/temperedlb/configuration.h>
+#include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 
 #include <unordered_map>
 
@@ -65,8 +68,156 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       stats_(stats)
   {}
 
-  void run() {
+  // local_clusters: map local cluster-id -> task IDs (on this rank)
+  void run(
+    Configuration const& config,
+    Clusterer const* clusterer,
+    int global_max_clusters,
+    std::unordered_map<int, TaskClusterSummaryInfo> const& local_cluster_summaries,
+    WorkBreakdown work_breakdown
+  ) {
+    (void)clusterer;
+    (void)global_max_clusters;
 
+    int this_rank = this->comm_.getRank();
+    std::vector<int> dest_ranks;
+    dest_ranks.reserve(cluster_info_.size());
+    for (auto const& kv : cluster_info_) {
+      if (kv.first == this_rank) continue;
+      dest_ranks.push_back(kv.first);
+    }
+
+    RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
+
+    // Precompute "before" work per known rank
+    std::unordered_map<int, double> before_work;
+    for (auto const& kv : cluster_info_) {
+      before_work[kv.first] = WorkModelCalculator::computeWork(
+        config.work_model_, kv.second.rank_breakdown
+      );
+    }
+
+    struct Candidate {
+      int dst_rank;
+      int give_cluster_gid = -1;
+      int recv_cluster_gid = -1;
+      double this_work_after = 0.0;
+      double dst_work_after = 0.0;
+      double improvement = 0.0; // w_max_0 - w_max_new
+    };
+
+    std::vector<Candidate> candidates;
+
+    auto eval_swap = [&](int dst_rank, int give_gid, int recv_gid) -> Candidate {
+      Candidate c{dst_rank, give_gid, recv_gid, 0.0, 0.0, 0.0};
+
+      TaskClusterSummaryInfo to_add_this{};
+      TaskClusterSummaryInfo to_remove_this{};
+
+      if (give_gid != -1) {
+        auto it_local = std::find_if(
+          local_cluster_summaries.begin(), local_cluster_summaries.end(),
+          [&](auto const& kv) { return kv.second.cluster_id == give_gid; }
+        );
+        if (it_local != local_cluster_summaries.end()) {
+          to_remove_this = it_local->second;
+        }
+      }
+      if (recv_gid != -1) {
+        auto const& dst_summaries = cluster_info_.at(dst_rank).cluster_summaries;
+        auto it_dst = std::find_if(
+          dst_summaries.begin(), dst_summaries.end(),
+          [&](auto const& kv) { return kv.second.cluster_id == recv_gid; }
+        );
+        if (it_dst != dst_summaries.end()) {
+          to_add_this = it_dst->second;
+        }
+      }
+
+      c.this_work_after = WorkModelCalculator::computeWorkUpdateSummary(
+        config.work_model_, this_rank_info, to_add_this, to_remove_this
+      );
+
+      RankClusterInfo const& dst_info = cluster_info_.at(dst_rank);
+      TaskClusterSummaryInfo to_add_dst{};
+      TaskClusterSummaryInfo to_remove_dst{};
+
+      if (give_gid != -1) {
+        auto it_local = std::find_if(
+          local_cluster_summaries.begin(), local_cluster_summaries.end(),
+          [&](auto const& kv) { return kv.second.cluster_id == give_gid; }
+        );
+        if (it_local != local_cluster_summaries.end()) {
+          to_add_dst = it_local->second;
+        }
+      }
+      if (recv_gid != -1) {
+        auto const& dst_summaries = dst_info.cluster_summaries;
+        auto it_dst = std::find_if(
+          dst_summaries.begin(), dst_summaries.end(),
+          [&](auto const& kv) { return kv.second.cluster_id == recv_gid; }
+        );
+        if (it_dst != dst_summaries.end()) {
+          to_remove_dst = it_dst->second;
+        }
+      }
+
+      c.dst_work_after = WorkModelCalculator::computeWorkUpdateSummary(
+        config.work_model_, dst_info, to_add_dst, to_remove_dst
+      );
+
+      // Criterion: improvement in max work
+      double before_w_src = before_work[this_rank];
+      double before_w_dst = before_work[dst_rank];
+      double w_max_0 = std::max(before_w_src, before_w_dst);
+      double w_max_new = std::max(c.this_work_after, c.dst_work_after);
+      c.improvement = w_max_0 - w_max_new;
+
+      return c;
+    };
+
+    // Null swap candidates
+    for (auto const& kv_local : local_cluster_summaries) {
+      int give_gid = kv_local.second.cluster_id;
+      for (int dst : dest_ranks) {
+        candidates.emplace_back(eval_swap(dst, give_gid, -1));
+      }
+    }
+
+    // Receive-only candidates
+    for (int dst : dest_ranks) {
+      auto const& dst_summaries = cluster_info_.at(dst).cluster_summaries;
+      for (auto const& kv_dst : dst_summaries) {
+        int recv_gid = kv_dst.second.cluster_id;
+        candidates.emplace_back(eval_swap(dst, -1, recv_gid));
+      }
+    }
+
+    if (candidates.empty()) {
+      VT_LB_LOG(LoadBalancer, normal, "RelaxedClusterTransfer: no swap candidates\n");
+      return;
+    }
+
+    // Sort by descending improvement; tie-breakers by this rank’s post-work then destination’s
+    std::sort(
+      candidates.begin(), candidates.end(),
+      [](Candidate const& a, Candidate const& b) {
+        if (a.improvement != b.improvement) return a.improvement > b.improvement;
+        if (a.this_work_after != b.this_work_after) return a.this_work_after < b.this_work_after;
+        return a.dst_work_after < b.dst_work_after;
+      }
+    );
+
+    auto const& best = candidates.front();
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "RelaxedClusterTransfer: best candidate dst_rank={} give_gid={} recv_gid={} "
+      "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+      best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
+      best.this_work_after, best.dst_work_after, best.improvement
+    );
+
+    (void)work_breakdown;
   }
 
   /*virutal*/ bool acceptIncomingTask(model::Task const& task) override final {

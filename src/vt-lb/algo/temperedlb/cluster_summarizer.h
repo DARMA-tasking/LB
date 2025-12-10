@@ -58,25 +58,7 @@ namespace vt_lb::algo::temperedlb {
 
 struct Clusterer;
 
-struct ClusterSummarizer {
-  /**
-   * @brief Build cluster summaries from phase data and a clusterer
-   *
-   * @param[in] pd Phase data
-   * @param[in] clusterer_ Clusterer instance
-   * @param[in] global_max_clusters Global maximum number of clusters
-   * @param[in] config Configuration object
-   *
-   * @return Map from global cluster ID to summary info
-   */
-  static std::unordered_map<int, TaskClusterSummaryInfo>
-  buildClusterSummaries(
-    model::PhaseData const& pd,
-    Configuration const& config,
-    Clusterer const* clusterer_,
-    int global_max_clusters
-);
-
+struct ClusterSummarizerUtil {
   /**
    * @brief Convert local cluster ID to global cluster ID
    *
@@ -117,6 +99,68 @@ struct ClusterSummarizer {
   }
 };
 
+template <typename CommT>
+struct ClusterSummarizer : ClusterSummarizerUtil {
+  using HandleType = typename CommT::template HandleType<ClusterSummarizer<CommT>>;
+
+  ClusterSummarizer(
+    CommT& comm,
+    Clusterer const* clusterer,
+    int global_max_clusters
+  ) : comm_(comm.clone()),
+      handle_(comm_.template registerInstanceCollective<ClusterSummarizer<CommT>>(this)),
+      clusterer_(clusterer),
+      global_max_clusters_(global_max_clusters)
+  {}
+
+  /**
+   * @brief Build cluster summaries from phase data and a clusterer
+   *
+   * @param[in] pd Phase data
+   * @param[in] config Configuration object
+   *
+   * @return Map from global cluster ID to summary info
+   */
+  std::unordered_map<int, TaskClusterSummaryInfo>
+  buildClusterSummaries(
+    model::PhaseData const& pd,
+    Configuration const& config
+  );
+
+  /**
+   * @brief Resolve cluster ID for a given task
+   *
+   * @param[in] task_id Task ID
+   * @param[in] source_task_id Source task ID (for inter-cluster edges)
+   * @param[in] source_global_cluster_id Source global cluster ID
+   */
+  void resolveClusterIDForTask(
+    model::TaskType task_id,
+    model::TaskType source_task_id,
+    int source_global_cluster_id
+  );
+
+  /**
+   * @brief Handler receiving cluster ID for a task
+   *
+   * @param[in] task_id Task ID
+   * @param[in] global_cluster_id Global cluster ID
+   */
+  void recvClusterIDForTask(
+    model::TaskType task_id,
+    int global_cluster_id
+  );
+
+private:
+  CommT comm_;
+  HandleType handle_;
+  Clusterer const* clusterer_ = nullptr;
+  int global_max_clusters_ = 1000;
+  std::unordered_map<model::TaskType, int> task_to_global_cluster_id_;
+};
+
 } /* end namespace vt_lb::algo::temperedlb */
+
+#include <vt-lb/algo/temperedlb/cluster_summarizer.impl.h>
 
 #endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTER_SUMMARIZER_H*/

@@ -46,6 +46,7 @@
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
+#include <vt-lb/algo/temperedlb/transfer_util.h>
 
 #include <cassert>
 #include <unordered_set>
@@ -219,6 +220,108 @@ namespace vt_lb::algo::temperedlb {
   return computeWork(model, new_bd);
 }
 
+/*static*/ double WorkModelCalculator::computeWorkUpdateSummary(
+  WorkModel const& model,
+  RankClusterInfo rank_cluster_info,
+  TaskClusterSummaryInfo to_add,
+  TaskClusterSummaryInfo to_remove
+) {
+  WorkBreakdown new_bd = rank_cluster_info.rank_breakdown;
+
+  // Build sets of local clusters BEFORE and AFTER (global IDs)
+  std::unordered_set<int> local_before;
+  for (const auto& kv : rank_cluster_info.cluster_summaries) {
+    local_before.insert(kv.second.cluster_id);
+  }
+  auto local_after = local_before;
+  if (to_add.cluster_id != -1) {
+    local_after.insert(to_add.cluster_id);
+  }
+  if (to_remove.cluster_id != -1) {
+    local_after.erase(to_remove.cluster_id);
+  }
+
+  // Adjust compute and intra bytes for add/remove
+  if (to_remove.cluster_id != -1) {
+    new_bd.compute -= to_remove.cluster_load;
+    new_bd.intra_node_send_comm -= to_remove.cluster_intra_send_bytes;
+    new_bd.intra_node_recv_comm -= to_remove.cluster_intra_recv_bytes;
+  }
+  if (to_add.cluster_id != -1) {
+    new_bd.compute += to_add.cluster_load;
+    new_bd.intra_node_send_comm += to_add.cluster_intra_send_bytes;
+    new_bd.intra_node_recv_comm += to_add.cluster_intra_recv_bytes;
+  }
+
+  // Deduplicate inter-edges by unordered pair of global cluster IDs
+  auto encode_pair = [](int a, int b) -> long long {
+    if (a > b) std::swap(a, b);
+    return (static_cast<long long>(a) << 32) | static_cast<unsigned long long>(b);
+  };
+  std::unordered_set<long long> seen;
+
+  auto process_edges_reclass = [&](const std::vector<model::ClusterEdge>& edges) {
+    for (auto const& e : edges) {
+      int g_from = e.getFromCluster();
+      int g_to   = e.getToCluster();
+      double vol = e.getVolume();
+
+      long long key = encode_pair(g_from, g_to);
+      if (!seen.insert(key).second) continue;
+
+      int init_locals =
+        (local_before.count(g_from) ? 1 : 0) +
+        (local_before.count(g_to)   ? 1 : 0);
+      int final_locals =
+        (local_after.count(g_from) ? 1 : 0) +
+        (local_after.count(g_to)   ? 1 : 0);
+
+      // intra: 2 local; inter: 1 local; none: 0 local
+      if (init_locals == 2 && final_locals < 2) {
+        // intra -> inter or none
+        new_bd.intra_node_send_comm -= vol;
+        new_bd.intra_node_recv_comm -= vol;
+        if (final_locals == 1) {
+          // treat inter as undirected, add to both send/recv
+          new_bd.inter_node_send_comm += vol;
+          new_bd.inter_node_recv_comm += vol;
+        }
+      } else if (init_locals == 1 && final_locals == 2) {
+        // inter -> intra
+        new_bd.inter_node_send_comm -= vol;
+        new_bd.inter_node_recv_comm -= vol;
+        new_bd.intra_node_send_comm += vol;
+        new_bd.intra_node_recv_comm += vol;
+      } else if (init_locals == 0 && final_locals == 1) {
+        // none -> inter (newly relevant to this rank)
+        new_bd.inter_node_send_comm += vol;
+        new_bd.inter_node_recv_comm += vol;
+      } else if (init_locals == 1 && final_locals == 0) {
+        // inter -> none (no longer relevant)
+        new_bd.inter_node_send_comm -= vol;
+        new_bd.inter_node_recv_comm -= vol;
+      }
+      // 2->2, 0->0, 1->1: no change
+    }
+  };
+
+  if (to_add.cluster_id != -1) {
+    process_edges_reclass(to_add.inter_edges_);
+  }
+  if (to_remove.cluster_id != -1) {
+    process_edges_reclass(to_remove.inter_edges_);
+  }
+
+  new_bd.compute              = std::max(0.0, new_bd.compute);
+  new_bd.inter_node_recv_comm = std::max(0.0, new_bd.inter_node_recv_comm);
+  new_bd.inter_node_send_comm = std::max(0.0, new_bd.inter_node_send_comm);
+  new_bd.intra_node_recv_comm = std::max(0.0, new_bd.intra_node_recv_comm);
+  new_bd.intra_node_send_comm = std::max(0.0, new_bd.intra_node_send_comm);
+  new_bd.shared_mem_comm      = std::max(0.0, new_bd.shared_mem_comm);
+
+  return computeWork(model, new_bd);
+}
+
 /*static*/ double WorkModelCalculator::computeWork(
   WorkModel const& model, WorkBreakdown const& breakdown
 ) {
@@ -344,7 +447,7 @@ namespace vt_lb::algo::temperedlb {
 
     // Determine tasks belonging to the local cluster being removed
     std::unordered_set<model::TaskType> remove_tasks;
-    int local_cid = ClusterSummarizer::globalToLocalClusterID(to_remove.cluster_id, global_max_clusters);
+    int local_cid = ClusterSummarizerUtil::globalToLocalClusterID(to_remove.cluster_id, global_max_clusters);
     for (auto const& kv : clusterer.taskToCluster()) {
       if (kv.second == local_cid) {
         remove_tasks.insert(kv.first);

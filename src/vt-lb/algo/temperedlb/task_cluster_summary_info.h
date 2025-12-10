@@ -60,7 +60,8 @@ struct TaskClusterSummaryInfo {
   double cluster_load = 0.0;
   double cluster_intra_send_bytes = 0.0;
   double cluster_intra_recv_bytes = 0.0;
-  std::vector<model::Edge> inter_edges_;
+  /// @brief Inter-cluster edges
+  std::vector<model::ClusterEdge> inter_edges_;
 
   // Memory info
   std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;

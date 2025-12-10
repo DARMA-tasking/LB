@@ -46,6 +46,7 @@
 
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Task.h>
+#include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
 
 #include <vector>
 
@@ -54,6 +55,7 @@ namespace vt_lb::algo::temperedlb {
 struct Configuration;
 struct Clusterer;
 struct TaskClusterSummaryInfo;
+struct RankClusterInfo;
 
 /**
  * @struct WorkModel
@@ -115,6 +117,13 @@ struct MemoryBreakdown {
   double current_max_task_working_bytes = 0.0;
   /// @brief Current maximum task serialized memory usage
   double current_max_task_serialized_bytes = 0.0;
+
+  template <typename SerializerT>
+  void serialize(SerializerT& s) {
+    s | current_memory_usage;
+    s | current_max_task_working_bytes;
+    s | current_max_task_serialized_bytes;
+  }
 };
 
 /**
@@ -137,6 +146,17 @@ struct WorkBreakdown {
   double shared_mem_comm = 0.0;
   /// @brief Memory breakdown
   MemoryBreakdown memory_breakdown;
+
+  template <typename SerializerT>
+  void serialize(SerializerT& s) {
+    s | compute;
+    s | inter_node_recv_comm;
+    s | inter_node_send_comm;
+    s | intra_node_recv_comm;
+    s | intra_node_send_comm;
+    s | shared_mem_comm;
+    s | memory_breakdown;
+  }
 };
 
 /**
@@ -191,6 +211,13 @@ struct WorkModelCalculator {
     std::vector<model::Task> const& to_add,
     std::vector<model::Edge> to_add_edges,
     std::vector<model::TaskType> const& to_remove
+  );
+
+  static double computeWorkUpdateSummary(
+    WorkModel const& model,
+    RankClusterInfo rank_cluster_info,
+    TaskClusterSummaryInfo to_add,
+    TaskClusterSummaryInfo to_remove
   );
 
   /**

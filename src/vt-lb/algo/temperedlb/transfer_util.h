@@ -47,6 +47,7 @@
 #include <vt-lb/model/types.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
+#include <vt-lb/algo/temperedlb/work_model.h>
 
 #include <vector>
 #include <set>
@@ -74,12 +75,16 @@ struct RankInfo {
 
 struct RankClusterInfo {
   std::unordered_map<int, TaskClusterSummaryInfo> cluster_summaries;
+  double rank_footprint_bytes = 0.0;
   double rank_alpha = 0.0;
+  WorkBreakdown rank_breakdown;
 
   template <typename SerializerT>
   void serialize(SerializerT& s) {
     s | cluster_summaries;
+    s | rank_footprint_bytes;
     s | rank_alpha;
+    s | rank_breakdown;
   }
 };
 

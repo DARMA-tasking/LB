@@ -168,17 +168,21 @@ void generateTaskCountsPerSharedBlock(
   assert(rank != invalid_node);
 
   int rank_tasks = 0;
+  int local_block_num = 0;
   auto block_ids = pd.getSharedBlockIds();
   for (auto bid : block_ids) {
     int block_tasks = std::max(per_block_dist(gen), max_tasks_per_block);
-    block_tasks = std::max(block_tasks, max_tasks_per_rank - rank_tasks);
+    block_tasks = std::min(block_tasks, max_tasks_per_rank - rank_tasks);
     rank_tasks += block_tasks;
     for (int i = 0; i < block_tasks; ++i) {
-      TaskType tid = static_cast<TaskType>(rank * max_tasks_per_rank + i);
+      TaskType tid = static_cast<TaskType>(
+        rank * max_tasks_per_rank + local_block_num * max_tasks_per_block + i
+      );
       Task t{tid, rank, rank, true, TaskMemory{}, 0.0};
       t.addSharedBlock(bid);
       pd.addTask(t);
     }
+    ++local_block_num;
   }
 }
 

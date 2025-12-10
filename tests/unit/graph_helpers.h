@@ -297,9 +297,8 @@ void generateIntraRankComm(
         }
       }
     }
-    pd.addCommunication(Edge{
-      from, to, weight_per_edge_dist(gen), rank, rank
-    });
+    double bytes = weight_per_edge_dist(gen);
+    pd.addCommunication(Edge{from, to, bytes, rank, rank});
   }
 }
 
@@ -353,18 +352,16 @@ void generateInterRankComm(
     int remote_rank = rank;
     while ((remote_rank = remote_rank_dist(gen)) == rank) {}
     TaskType to = remote_task_dist(gen);
-    pd.addCommunication(Edge{
-      from, to, weight_per_edge_dist(gen), rank, remote_rank
-    });
+    double bytes = weight_per_edge_dist(gen);
+    pd.addCommunication(Edge{from, to, bytes, rank, remote_rank});
   }
   for (std::size_t e = from_edge_count; e < local_endpoints.size(); ++e) {
     TaskType to = local_endpoints[e];
     int remote_rank = rank;
     while ((remote_rank = remote_rank_dist(gen)) == rank) {}
     TaskType from = remote_task_dist(gen);
-    pd.addCommunication(Edge{
-      from, to, weight_per_edge_dist(gen), remote_rank, rank
-    });
+    double bytes = weight_per_edge_dist(gen);
+    pd.addCommunication(Edge{from, to, bytes, remote_rank, rank});
   }
 }
 
@@ -418,18 +415,16 @@ void generateRankComm(
     int remote_rank = remote_rank_dist(gen);
     TaskType to = remote_task_dist(gen);
     while ((remote_rank == rank) and ((to = remote_task_dist(gen)) == from)) {}
-    pd.addCommunication(Edge{
-      from, to, weight_per_edge_dist(gen), rank, remote_rank
-    });
+    double bytes = weight_per_edge_dist(gen);
+    pd.addCommunication(Edge{from, to, bytes, rank, remote_rank});
   }
   for (std::size_t e = from_edge_count; e < local_endpoints.size(); ++e) {
     TaskType to = local_endpoints[e];
     int remote_rank = remote_rank_dist(gen);
     TaskType from = remote_task_dist(gen);
     while ((remote_rank == rank) and ((from = remote_task_dist(gen)) == to)) {}
-    pd.addCommunication(Edge{
-      from, to, weight_per_edge_dist(gen), remote_rank, rank
-    });
+    double bytes = weight_per_edge_dist(gen);
+    pd.addCommunication(Edge{from, to, bytes, remote_rank, rank});
   }
 }
 

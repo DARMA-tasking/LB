@@ -551,4 +551,192 @@ TYPED_TEST(TestGraphHelpers, test_generate_tasks_without_shared_blocks2) {
   }
 };
 
+TYPED_TEST(TestGraphHelpers, test_generate_intra_rank_comm) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(6745 * rank);
+
+  int min_tasks = 10;
+  int max_tasks = 20;
+  std::uniform_int_distribution<> dist(min_tasks, max_tasks);
+
+  generateTaskCountsPerRank(pd, gen, dist, max_tasks);
+
+  int task_count = pd.getTasksMap().size();
+
+  int min_endpoints = 3;
+  int max_endpoints = 5;
+  std::uniform_int_distribution<> ep_dist(min_endpoints, max_endpoints);
+
+  int min_weight = 100;
+  int max_weight = 200;
+  std::uniform_int_distribution<> weight_dist(min_weight, max_weight);
+
+  generateIntraRankComm(pd, gen, ep_dist, weight_dist);
+
+  auto &edges = pd.getCommunications();
+  EXPECT_GE(edges.size(), task_count * min_endpoints / 2);
+  EXPECT_LE(edges.size(), task_count * max_endpoints / 2);
+
+  std::vector<int> from_task(task_count);
+  std::vector<int> to_task(task_count);
+
+  for (auto &e : edges) {
+    EXPECT_EQ(e.getFromRank(), rank);
+    EXPECT_EQ(e.getToRank(), rank);
+    EXPECT_GE(e.getVolume(), min_weight);
+    EXPECT_LE(e.getVolume(), max_weight);
+
+    auto from_task_id = e.getFrom();
+    auto to_task_id = e.getTo();
+    EXPECT_GE(from_task_id, rank * max_tasks);
+    EXPECT_LT(from_task_id, (rank + 1) * max_tasks);
+    EXPECT_GE(to_task_id, rank * max_tasks);
+    EXPECT_LT(to_task_id, (rank + 1) * max_tasks);
+
+    int from_lid = from_task_id - rank * max_tasks;
+    int to_lid = to_task_id - rank * max_tasks;
+    if (from_lid >= 0 and from_lid < task_count) {
+      ++(from_task[from_lid]);
+    }
+    if (to_lid >= 0 and to_lid < task_count) {
+      ++(to_task[to_lid]);
+    }
+  }
+
+  for (int tlid = 0; tlid < task_count; ++tlid) {
+    // in case we generated an odd number of endpoints and one was dropped
+    int adjusted_min_endpoints = std::max(min_endpoints - 1, 0);
+    EXPECT_GE(from_task[tlid] + to_task[tlid], adjusted_min_endpoints);
+    EXPECT_LE(from_task[tlid] + to_task[tlid], max_endpoints);
+  }
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_inter_rank_comm_out_only) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(741 * rank);
+
+  int min_tasks = 5;
+  int max_tasks = 7;
+  std::uniform_int_distribution<> dist(min_tasks, max_tasks);
+
+  generateTaskCountsPerRank(pd, gen, dist, max_tasks);
+
+  int task_count = pd.getTasksMap().size();
+
+  int min_endpoints = 1;
+  int max_endpoints = 4;
+  std::uniform_int_distribution<> ep_dist(min_endpoints, max_endpoints);
+
+  int min_weight = 1000;
+  int max_weight = 2000;
+  std::uniform_int_distribution<> weight_dist(min_weight, max_weight);
+
+  double frac = 0.0;
+
+  generateInterRankComm(
+    pd, gen, ep_dist, weight_dist, min_tasks, num_ranks, frac
+  );
+
+  auto &edges = pd.getCommunications();
+
+  if (num_ranks == 1) {
+    EXPECT_EQ(edges.size(), 0);
+    return;
+  }
+
+  EXPECT_GE(edges.size(), task_count * min_endpoints);
+  EXPECT_LE(edges.size(), task_count * max_endpoints);
+
+  std::vector<int> from_task(task_count);
+
+  for (auto &e : edges) {
+    EXPECT_EQ(e.getFromRank(), rank);
+    EXPECT_NE(e.getToRank(), rank);
+    EXPECT_GE(e.getVolume(), min_weight);
+    EXPECT_LE(e.getVolume(), max_weight);
+
+    auto from_task_id = e.getFrom();
+    EXPECT_GE(from_task_id, rank * max_tasks);
+    EXPECT_LT(from_task_id, (rank + 1) * max_tasks);
+
+    int from_lid = from_task_id - rank * max_tasks;
+    if (from_lid >= 0 and from_lid < task_count) {
+      ++(from_task[from_lid]);
+    }
+  }
+
+  for (int tlid = 0; tlid < task_count; ++tlid) {
+    EXPECT_GE(from_task[tlid], min_endpoints);
+    EXPECT_LE(from_task[tlid], max_endpoints);
+  }
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_inter_rank_comm_in_only) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(741 * rank);
+
+  int min_tasks = 5;
+  int max_tasks = 7;
+  std::uniform_int_distribution<> dist(min_tasks, max_tasks);
+
+  generateTaskCountsPerRank(pd, gen, dist, max_tasks);
+
+  int task_count = pd.getTasksMap().size();
+
+  int min_endpoints = 1;
+  int max_endpoints = 4;
+  std::uniform_int_distribution<> ep_dist(min_endpoints, max_endpoints);
+
+  int min_weight = 1000;
+  int max_weight = 2000;
+  std::uniform_int_distribution<> weight_dist(min_weight, max_weight);
+
+  double frac = 1.0;
+
+  generateInterRankComm(
+    pd, gen, ep_dist, weight_dist, min_tasks, num_ranks, frac
+  );
+
+  auto &edges = pd.getCommunications();
+
+  if (num_ranks == 1) {
+    EXPECT_EQ(edges.size(), 0);
+    return;
+  }
+
+  EXPECT_GE(edges.size(), task_count * min_endpoints);
+  EXPECT_LE(edges.size(), task_count * max_endpoints);
+
+  std::vector<int> to_task(task_count);
+
+  for (auto &e : edges) {
+    EXPECT_NE(e.getFromRank(), rank);
+    EXPECT_EQ(e.getToRank(), rank);
+    EXPECT_GE(e.getVolume(), min_weight);
+    EXPECT_LE(e.getVolume(), max_weight);
+
+    auto to_task_id = e.getTo();
+    EXPECT_GE(to_task_id, rank * max_tasks);
+    EXPECT_LT(to_task_id, (rank + 1) * max_tasks);
+
+    int to_lid = to_task_id - rank * max_tasks;
+    if (to_lid >= 0 and to_lid < task_count) {
+      ++(to_task[to_lid]);
+    }
+  }
+
+  for (int tlid = 0; tlid < task_count; ++tlid) {
+    EXPECT_GE(to_task[tlid], min_endpoints);
+    EXPECT_LE(to_task[tlid], max_endpoints);
+  }
+};
+
 }}} // end namespace vt_lb::tests::unit

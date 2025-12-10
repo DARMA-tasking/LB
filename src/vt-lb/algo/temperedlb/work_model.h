@@ -213,6 +213,14 @@ struct WorkModelCalculator {
     std::vector<model::TaskType> const& to_remove
   );
 
+  /**
+   * @brief Compute the new work after adding/removing task cluster summaries
+   *
+   * @param model The work model
+   * @param rank_cluster_info The rank cluster info
+   * @param to_add The cluster of tasks to add
+   * @param to_remove The cluster of tasks to remove
+   */
   static double computeWorkUpdateSummary(
     WorkModel const& model,
     RankClusterInfo rank_cluster_info,
@@ -254,6 +262,25 @@ struct WorkModelCalculator {
     WorkBreakdown const& breakdown,
     TaskClusterSummaryInfo to_add,
     TaskClusterSummaryInfo to_remove
+  );
+
+  /**
+   * @brief Check if the memory usage fits within available memory using just summaries
+   *
+   * @param config The configuration
+   * @param rank_cluster_info The rank cluster info
+   * @param to_add The cluster of tasks to add
+   * @param to_remove The cluster of tasks to remove
+   * @param rank_available_memory The available memory on the rank
+   *
+   * @return True if it fits, false otherwise
+   */
+  static bool checkMemoryFitUpdate(
+    Configuration const& config,
+    RankClusterInfo rank_cluster_info,
+    TaskClusterSummaryInfo to_add,
+    TaskClusterSummaryInfo to_remove,
+    double rank_available_memory
   );
 
   /**

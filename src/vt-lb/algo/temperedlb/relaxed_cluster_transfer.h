@@ -68,17 +68,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       stats_(stats)
   {}
 
-  // local_clusters: map local cluster-id -> task IDs (on this rank)
   void run(
-    Configuration const& config,
-    Clusterer const* clusterer,
-    int global_max_clusters,
-    std::unordered_map<int, TaskClusterSummaryInfo> const& local_cluster_summaries,
-    WorkBreakdown work_breakdown
+    Configuration const& config
   ) {
-    (void)clusterer;
-    (void)global_max_clusters;
-
     int this_rank = this->comm_.getRank();
     std::vector<int> dest_ranks;
     dest_ranks.reserve(cluster_info_.size());
@@ -88,6 +80,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     }
 
     RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
+    auto local_cluster_summaries = this_rank_info.cluster_summaries;
 
     // Precompute "before" work per known rank
     std::unordered_map<int, double> before_work;
@@ -216,8 +209,6 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
       best.this_work_after, best.dst_work_after, best.improvement
     );
-
-    (void)work_breakdown;
   }
 
   /*virutal*/ bool acceptIncomingTask(model::Task const& task) override final {

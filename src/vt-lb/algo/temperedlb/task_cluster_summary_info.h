@@ -55,20 +55,31 @@ namespace vt_lb::algo::temperedlb {
 struct TaskClusterSummaryInfo {
   TaskClusterSummaryInfo() = default;
 
+  /// @brief The global cluster ID
   int cluster_id = -1;
+  /// @brief Number of tasks in the cluster
   int num_tasks_ = 0;
+  /// @brief The cluster compute load
   double cluster_load = 0.0;
+  /// @brief Intra-cluster communication volume (send)
   double cluster_intra_send_bytes = 0.0;
+  /// @brief Intra-cluster communication volume (recv)
   double cluster_intra_recv_bytes = 0.0;
   /// @brief Inter-cluster edges
   std::vector<model::ClusterEdge> inter_edges_;
 
   // Memory info
+  /// @brief Shared blocks (along with bytes) accessed by tasks in this cluster
   std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
+  /// @brief Maximum working set size of any task in the cluster
   model::BytesType max_object_working_bytes = 0;
+  /// @brief Maximum working set size of any task outside the cluster on this rank
   model::BytesType max_object_working_bytes_outside = 0;
+  /// @brief Maximum serialized size of any task in the cluster
   model::BytesType max_object_serialized_bytes = 0;
+  /// @brief Maximum serialized size of any task outside the cluster on this rank
   model::BytesType max_object_serialized_bytes_outside = 0;
+  /// @brief Total footprint of the cluster
   model::BytesType cluster_footprint = 0;
 
   template <typename SerializerT>

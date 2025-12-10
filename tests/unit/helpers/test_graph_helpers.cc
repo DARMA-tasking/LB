@@ -95,6 +95,27 @@ TYPED_TEST(TestGraphHelpers, test_generate_shared_block_counts_per_rank) {
   EXPECT_LE(count, max_blocks);
 };
 
+TYPED_TEST(TestGraphHelpers, test_generate_shared_block_counts_per_rank_limit) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(777 * rank);
+
+  int min_blocks = 17;
+  int max_blocks = 300;
+  int max_blocks_limit = 18;
+  std::uniform_int_distribution<> dist(min_blocks, max_blocks);
+
+  generateSharedBlockCountsPerRank(pd, gen, dist, max_blocks_limit);
+
+  // check that the value falls within the distribution
+  auto &blocks = pd.getSharedBlocksMap();
+  int count = blocks.size();
+  EXPECT_GE(count, min_blocks);
+  EXPECT_LE(count, max_blocks);
+  EXPECT_LE(count, max_blocks_limit);
+};
+
 TYPED_TEST(TestGraphHelpers, test_generate_shared_block_memory) {
   auto rank = this->comm.getRank();
   vt_lb::model::PhaseData pd(rank);
@@ -140,6 +161,27 @@ TYPED_TEST(TestGraphHelpers, test_generate_tasks_per_rank) {
   int count = tasks.size();
   EXPECT_GE(count, min_tasks);
   EXPECT_LE(count, max_tasks);
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_tasks_per_rank_limit) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(7846 * rank);
+
+  int min_tasks = 12;
+  int max_tasks = 200;
+  int max_tasks_limit = 14;
+  std::uniform_int_distribution<> dist(min_tasks, max_tasks);
+
+  generateTaskCountsPerRank(pd, gen, dist, max_tasks_limit);
+
+  // check that the value falls within the distribution
+  auto &tasks = pd.getTasksMap();
+  int count = tasks.size();
+  EXPECT_GE(count, min_tasks);
+  EXPECT_LE(count, max_tasks);
+  EXPECT_LE(count, max_tasks_limit);
 };
 
 TYPED_TEST(TestGraphHelpers, test_generate_task_counts_per_shared_block) {
@@ -298,6 +340,214 @@ TYPED_TEST(TestGraphHelpers, test_generate_task_loads) {
   for (auto &t : tasks) {
     EXPECT_GE(t.second.getLoad(), min_load);
     EXPECT_LE(t.second.getLoad(), max_load);
+  }
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_shared_blocks_with_tasks) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(765 * rank);
+
+  int min_blocks = 4;
+  int max_blocks = 7;
+  std::uniform_int_distribution<> block_dist(min_blocks, max_blocks);
+
+  int min_bmem = 400000;
+  int max_bmem = 500000;
+  std::uniform_int_distribution<> bmem_dist(min_bmem, max_bmem);
+
+  int min_tasks_per_block = 5;
+  int max_tasks_per_block = 8;
+  std::uniform_int_distribution<> task_dist(
+    min_tasks_per_block, max_tasks_per_block
+  );
+  int max_tasks_per_rank = max_blocks * max_tasks_per_block;
+
+  double min_load = 456.7;
+  double max_load = 678.9;
+  std::uniform_real_distribution<> load_dist(min_load, max_load);
+
+  generateSharedBlocksWithTasks(
+    pd, gen, block_dist, max_blocks, bmem_dist, task_dist, max_tasks_per_rank,
+    max_tasks_per_block, load_dist
+  );
+
+  // check block counts
+  auto block_ids = pd.getSharedBlockIds();
+  int block_count = block_ids.size();
+  EXPECT_GE(block_count, min_blocks);
+  EXPECT_LE(block_count, max_blocks);
+
+  // check block memory
+  for (auto bid : block_ids) {
+    auto b = pd.getSharedBlock(bid);
+    EXPECT_GE(b->getSize(), min_bmem);
+    EXPECT_LE(b->getSize(), max_bmem);
+  }
+
+  // check task count on rank
+  auto task_ids = pd.getTaskIds();
+  int task_count = task_ids.size();
+  EXPECT_LE(task_count, max_tasks_per_rank);
+  EXPECT_GE(task_count, block_count * min_tasks_per_block);
+  EXPECT_LE(task_count, block_count * max_tasks_per_block);
+
+  // check task count per block
+  for (auto bid : block_ids) {
+    int count_this_block = 0;
+    for (auto tid : task_ids) {
+      auto t = pd.getTask(tid);
+      auto &bids_this_task = t->getSharedBlocks();
+      for (auto block_id : bids_this_task) {
+        if (block_id == bid) {
+          ++count_this_block;
+        }
+      }
+    }
+    EXPECT_GE(count_this_block, min_tasks_per_block);
+    EXPECT_LE(count_this_block, max_tasks_per_block);
+  }
+
+  // check task loads
+  for (auto tid : task_ids) {
+    auto t = pd.getTask(tid);
+    EXPECT_GE(t->getLoad(), min_load);
+    EXPECT_LE(t->getLoad(), max_load);
+  }
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_shared_blocks_with_tasks2) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(991 * rank);
+
+  int min_blocks = 3;
+  int max_blocks = 8;
+
+  int min_bmem = 6000000;
+  int max_bmem = 8000000;
+
+  int min_tasks_per_block = 4;
+  int max_tasks_per_block = 7;
+  int max_tasks_per_rank = max_blocks * max_tasks_per_block;
+
+  double min_load = 45.6;
+  double max_load = 78.9;
+  std::uniform_real_distribution<> load_dist(min_load, max_load);
+
+  generateSharedBlocksWithTasks(
+    pd, gen, min_blocks, max_blocks, min_bmem, max_bmem, min_tasks_per_block,
+    max_tasks_per_block, load_dist
+  );
+
+  // check block counts
+  auto block_ids = pd.getSharedBlockIds();
+  int block_count = block_ids.size();
+  EXPECT_GE(block_count, min_blocks);
+  EXPECT_LE(block_count, max_blocks);
+
+  // check block memory
+  for (auto bid : block_ids) {
+    auto b = pd.getSharedBlock(bid);
+    EXPECT_GE(b->getSize(), min_bmem);
+    EXPECT_LE(b->getSize(), max_bmem);
+  }
+
+  // check task count on rank
+  auto task_ids = pd.getTaskIds();
+  int task_count = task_ids.size();
+  EXPECT_LE(task_count, max_tasks_per_rank);
+  EXPECT_GE(task_count, block_count * min_tasks_per_block);
+  EXPECT_LE(task_count, block_count * max_tasks_per_block);
+
+  // check task count per block
+  for (auto bid : block_ids) {
+    int count_this_block = 0;
+    for (auto tid : task_ids) {
+      auto t = pd.getTask(tid);
+      auto &bids_this_task = t->getSharedBlocks();
+      for (auto block_id : bids_this_task) {
+        if (block_id == bid) {
+          ++count_this_block;
+        }
+      }
+    }
+    EXPECT_GE(count_this_block, min_tasks_per_block);
+    EXPECT_LE(count_this_block, max_tasks_per_block);
+  }
+
+  // check task loads
+  for (auto tid : task_ids) {
+    auto t = pd.getTask(tid);
+    EXPECT_GE(t->getLoad(), min_load);
+    EXPECT_LE(t->getLoad(), max_load);
+  }
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_tasks_without_shared_blocks) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(808 * rank);
+
+  int min_tasks = 5;
+  int max_tasks = 500;
+  int max_tasks_limit = 7;
+  std::uniform_int_distribution<> task_dist(min_tasks, max_tasks);
+
+  double min_load = 3469.9;
+  double max_load = 95795.0;
+  std::uniform_real_distribution<> load_dist(min_load, max_load);
+
+  generateTasksWithoutSharedBlocks(
+    pd, gen, task_dist, max_tasks_limit, load_dist
+  );
+
+  // check task counts
+  auto task_ids = pd.getTaskIds();
+  int task_count = task_ids.size();
+  EXPECT_LE(task_count, max_tasks);
+  EXPECT_GE(task_count, min_tasks);
+  EXPECT_LE(task_count, max_tasks_limit);
+
+  // check task loads
+  for (auto tid : task_ids) {
+    auto t = pd.getTask(tid);
+    EXPECT_GE(t->getLoad(), min_load);
+    EXPECT_LE(t->getLoad(), max_load);
+  }
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_tasks_without_shared_blocks2) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(723 * rank);
+
+  int min_tasks_per_rank = 8;
+  int max_tasks_per_rank = 12;
+
+  double min_load = 128.6;
+  double max_load = 199.4;
+  std::uniform_real_distribution<> load_dist(min_load, max_load);
+
+  generateTasksWithoutSharedBlocks(
+    pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
+  );
+
+  // check task counts
+  auto task_ids = pd.getTaskIds();
+  int task_count = task_ids.size();
+  EXPECT_GE(task_count, min_tasks_per_rank);
+  EXPECT_LE(task_count, max_tasks_per_rank);
+
+  // check task loads
+  for (auto tid : task_ids) {
+    auto t = pd.getTask(tid);
+    EXPECT_GE(t->getLoad(), min_load);
+    EXPECT_LE(t->getLoad(), max_load);
   }
 };
 

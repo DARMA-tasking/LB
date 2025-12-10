@@ -93,7 +93,7 @@ void generateSharedBlockCountsPerRank(
   int const rank = pd.getRank();
   assert(rank != invalid_node);
 
-  int local_blocks = std::max(per_rank_dist(gen), max_blocks_per_rank);
+  int local_blocks = std::min(per_rank_dist(gen), max_blocks_per_rank);
   for (int i = 0; i < local_blocks; ++i) {
     SharedBlockType bid = static_cast<SharedBlockType>(rank * max_blocks_per_rank + i);
     SharedBlock b{bid, 0, rank};
@@ -140,7 +140,7 @@ void generateTaskCountsPerRank(
   int const rank = pd.getRank();
   assert(rank != invalid_node);
 
-  int local_tasks = std::max(per_rank_dist(gen), max_tasks_per_rank);
+  int local_tasks = std::min(per_rank_dist(gen), max_tasks_per_rank);
   for (int i = 0; i < local_tasks; ++i) {
     TaskType tid = static_cast<TaskType>(rank * max_tasks_per_rank + i);
     Task t{tid, rank, rank, true, TaskMemory{}, 0.0};
@@ -171,7 +171,7 @@ void generateTaskCountsPerSharedBlock(
   int local_block_num = 0;
   auto block_ids = pd.getSharedBlockIds();
   for (auto bid : block_ids) {
-    int block_tasks = std::max(per_block_dist(gen), max_tasks_per_block);
+    int block_tasks = std::min(per_block_dist(gen), max_tasks_per_block);
     block_tasks = std::min(block_tasks, max_tasks_per_rank - rank_tasks);
     rank_tasks += block_tasks;
     for (int i = 0; i < block_tasks; ++i) {
@@ -543,7 +543,7 @@ void generateSharedBlocksWithTasks(
  * @param task_load_dist Random load distribution
  */
 template <typename PerRankDistType, typename TaskLoadDistType>
-void generateTaskWithoutSharedBlocks(
+void generateTasksWithoutSharedBlocks(
   vt_lb::model::PhaseData& pd, std::mt19937 &gen,
   PerRankDistType &per_rank_dist, int max_tasks_per_rank,
   TaskLoadDistType &task_load_dist
@@ -562,7 +562,7 @@ void generateTaskWithoutSharedBlocks(
  * @param task_load_dist Random load distribution
  */
 template <typename TaskLoadDistType>
-void generateTaskWithoutSharedBlocks(
+void generateTasksWithoutSharedBlocks(
   vt_lb::model::PhaseData& pd, std::mt19937 &gen,
   int min_tasks_per_rank, int max_tasks_per_rank,
   TaskLoadDistType &task_load_dist
@@ -570,7 +570,7 @@ void generateTaskWithoutSharedBlocks(
   std::uniform_int_distribution<> task_dist(
     min_tasks_per_rank, max_tasks_per_rank
   );
-  generateTaskWithoutSharedBlocks(
+  generateTasksWithoutSharedBlocks(
     pd, gen, task_dist, max_tasks_per_rank, task_load_dist
   );
 }
@@ -724,7 +724,7 @@ void generateGraphWithoutSharedBlocks(
   int min_task_wmem = 1024*1024, max_task_wmem = 2048*1024;
 
   std::uniform_real_distribution<> load_dist(min_load, max_load);
-  generateTaskWithoutSharedBlocks(
+  generateTasksWithoutSharedBlocks(
     pd, gen_diff_each_rank, min_tasks_per_rank, max_tasks_per_rank, load_dist
   );
 

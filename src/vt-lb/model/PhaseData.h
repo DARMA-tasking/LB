@@ -68,10 +68,18 @@ struct PhaseData {
     auto it = tasks_.find(id);
     return it != tasks_.end() ? &it->second : nullptr;
   }
+  Task * getTask(TaskType id) {
+    auto it = tasks_.find(id);
+    return it != tasks_.end() ? &it->second : nullptr;
+  }
   bool hasTask(TaskType id) const { return tasks_.find(id) != tasks_.end(); }
   void eraseTask(TaskType id) { tasks_.erase(id); }
 
   SharedBlock const* getSharedBlock(SharedBlockType id) const {
+    auto it = shared_blocks_.find(id);
+    return it != shared_blocks_.end() ? &it->second : nullptr;
+  }
+  SharedBlock * getSharedBlock(SharedBlockType id) {
     auto it = shared_blocks_.find(id);
     return it != shared_blocks_.end() ? &it->second : nullptr;
   }
@@ -84,6 +92,13 @@ struct PhaseData {
   std::unordered_set<TaskType> getTaskIds() const {
     std::unordered_set<TaskType> ids;
     for (auto const& [id, task] : tasks_) {
+      ids.insert(id);
+    }
+    return ids;
+  }
+  std::unordered_set<SharedBlockType> getSharedBlockIds() const {
+    std::unordered_set<SharedBlockType> ids;
+    for (auto const& [id, block] : shared_blocks_) {
       ids.insert(id);
     }
     return ids;

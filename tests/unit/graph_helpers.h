@@ -115,10 +115,10 @@ void generateSharedBlockMemory(
 ) {
   using namespace vt_lb::model;
 
-  auto blockmap = pd.getSharedBlocksMap();
-  for (auto item : blockmap) {
-    auto &b = item.second;
-    b.setSize(block_memory_dist(gen));
+  auto block_ids = pd.getSharedBlockIds();
+  for (auto bid : block_ids) {
+    auto b = pd.getSharedBlock(bid);
+    b->setSize(block_memory_dist(gen));
   }
 }
 
@@ -168,10 +168,8 @@ void generateTaskCountsPerSharedBlock(
   assert(rank != invalid_node);
 
   int rank_tasks = 0;
-  auto blockmap = pd.getSharedBlocksMap();
-  for (auto item : blockmap) {
-    auto bid = item.first;
-
+  auto block_ids = pd.getSharedBlockIds();
+  for (auto bid : block_ids) {
     int block_tasks = std::max(per_block_dist(gen), max_tasks_per_block);
     block_tasks = std::max(block_tasks, max_tasks_per_rank - rank_tasks);
     rank_tasks += block_tasks;
@@ -201,13 +199,13 @@ void generateTaskMemory(
 ) {
   using namespace vt_lb::model;
 
-  auto taskmap = pd.getTasksMap();
-  for (auto item : taskmap) {
-    auto &t = item.second;
+  auto local_ids = pd.getTaskIds();
+  for (auto tid : local_ids) {
+    auto t = pd.getTask(tid);
     TaskMemory m(
       task_working_memory_dist(gen), task_footprint_mem, task_serialized_mem
     );
-    t.setMemory(m);
+    t->setMemory(m);
   }
 }
 
@@ -225,10 +223,10 @@ void generateTaskLoads(
 ) {
   using namespace vt_lb::model;
 
-  auto taskmap = pd.getTasksMap();
-  for (auto item : taskmap) {
-    auto &t = item.second;
-    t.setLoad(task_load_dist(gen));
+  auto local_ids = pd.getTaskIds();
+  for (auto tid : local_ids) {
+    auto t = pd.getTask(tid);
+    t->setLoad(task_load_dist(gen));
   }
 }
 

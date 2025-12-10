@@ -95,4 +95,32 @@ TYPED_TEST(TestGraphHelpers, test_generate_shared_block_counts_per_rank) {
   EXPECT_LE(count, max_blocks);
 };
 
+TYPED_TEST(TestGraphHelpers, test_generate_shared_block_memory) {
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  std::mt19937 gen(837 * rank);
+
+  int exact_blocks = 20;
+  std::uniform_int_distribution<> count_dist(exact_blocks, exact_blocks);
+
+  generateSharedBlockCountsPerRank(pd, gen, count_dist, exact_blocks);
+
+  auto &blocks = pd.getSharedBlocksMap();
+  int count = blocks.size();
+  EXPECT_EQ(count, exact_blocks);
+
+  int min_mem = 10000;
+  int max_mem = 100000;
+  std::uniform_int_distribution<> mem_dist(min_mem, max_mem);
+
+  generateSharedBlockMemory(pd, gen, mem_dist);
+
+  // check that the values fall within the distribution
+  for (auto &b : blocks) {
+    EXPECT_GE(b.second.getSize(), min_mem);
+    EXPECT_LE(b.second.getSize(), max_mem);
+  }
+};
+
 }}} // end namespace vt_lb::tests::unit

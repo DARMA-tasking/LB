@@ -55,7 +55,6 @@
 #include <vt-lb/model/SharedBlock.h>
 #include <vt-lb/model/Task.h>
 #include <vt-lb/model/types.h>
-#include <vt-lb/model/PhaseData.h>
 
 namespace vt_lb { namespace tests { namespace unit {
 
@@ -601,7 +600,7 @@ std::pair<int, int> generateScaleRel(
  * @param gen The seeded generator for this rank
  * @param largest_max_allowed The highest number for the range max
  * @param smallest_max_allowed The lowest number for the range max
- * @param min_allowed The highest number for the range min
+ * @param min_allowed The range min, unless higher than the chosen max
  */
 std::pair<int, int> generateScaleAbs(
   std::mt19937 &gen, int largest_max_allowed, int smallest_max_allowed,

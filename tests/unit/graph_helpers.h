@@ -575,18 +575,21 @@ void generateTasksWithoutSharedBlocks(
  * Generate scale of problem
  *
  * @param gen The seeded generator for this rank
- * @param max_max_allowed The highest number for the range max
- * @param min_max_allowed The lowest number for the range max
- * @param min_frac_max The fraction of the range max used for the range min
+ * @param largest_max_allowed The highest number for the range max
+ * @param smallest_max_allowed The lowest number for the range max
+ * @param min_as_frac_of_max The fraction of the range max used for the range min
  */
 std::pair<int, int> generateScaleRel(
-  std::mt19937 &gen, int max_max_allowed, int min_max_allowed, double min_frac_max
+  std::mt19937 &gen, int largest_max_allowed, int smallest_max_allowed,
+  double min_as_frac_of_max
 ) {
-  std::uniform_int_distribution<> uni(min_max_allowed, max_max_allowed);
+  std::uniform_int_distribution<> uni(smallest_max_allowed, largest_max_allowed);
   int max_chosen = uni(gen);
   int min_chosen = max_chosen;
-  if (min_frac_max < 1.0) {
-    std::uniform_int_distribution<> uni2(static_cast<int>(max_chosen * min_frac_max), max_chosen);
+  if (min_as_frac_of_max < 1.0) {
+    std::uniform_int_distribution<> uni2(
+      static_cast<int>(max_chosen * min_as_frac_of_max), max_chosen
+    );
     min_chosen = uni2(gen);
   }
   return std::make_pair<int, int>(std::move(max_chosen), std::move(min_chosen));
@@ -596,19 +599,21 @@ std::pair<int, int> generateScaleRel(
  * Generate scale of problem
  *
  * @param gen The seeded generator for this rank
- * @param max_max_allowed The highest number for the range max
- * @param min_max_allowed The lowest number for the range max
- * @param max_min_allowed The highest number for the range min
+ * @param largest_max_allowed The highest number for the range max
+ * @param smallest_max_allowed The lowest number for the range max
+ * @param min_allowed The highest number for the range min
  */
 std::pair<int, int> generateScaleAbs(
-  std::mt19937 &gen, int max_max_allowed, int min_max_allowed,
-  int max_min_allowed
+  std::mt19937 &gen, int largest_max_allowed, int smallest_max_allowed,
+  int min_allowed
 ) {
-  std::uniform_int_distribution<> uni(min_max_allowed, max_max_allowed);
+  std::uniform_int_distribution<> uni(
+    smallest_max_allowed, largest_max_allowed
+  );
   int max_chosen = uni(gen);
   int min_chosen = max_chosen;
-  if (max_min_allowed < max_chosen) {
-    std::uniform_int_distribution<> uni2(max_min_allowed, max_chosen);
+  if (min_allowed < max_chosen) {
+    std::uniform_int_distribution<> uni2(min_allowed, max_chosen);
     min_chosen = uni2(gen);
   }
   return std::make_pair<int, int>(std::move(max_chosen), std::move(min_chosen));
@@ -634,25 +639,26 @@ void generateGraphWithSharedBlocks(
   std::mt19937 gen_diff_each_rank(seed_diff_each_rank);
 
   // tune the max allowed problem size to keep tests fast enough
-  int max_allowed_max_blocks = 25;
-  int min_allowed_max_blocks = 15;
+  int largest_allowed_max_blocks = 25;
+  int smallest_allowed_max_blocks = 15;
   // tune the allowed imbalance in the number of blocks
   double min_allowed_blocks_frac = uniform_shared_blocks ? 1.0 : 0.25;
 
   auto [max_blocks_per_rank, min_blocks_per_rank] = generateScaleRel(
-    gen_same_across_ranks, max_allowed_max_blocks, min_allowed_max_blocks,
-    min_allowed_blocks_frac
+    gen_same_across_ranks, largest_allowed_max_blocks,
+    smallest_allowed_max_blocks, min_allowed_blocks_frac
   );
 
   // tune the max allowed problem size to keep tests fast enough
-  int max_allowed_max_tasks_per_block = 20;
-  int min_allowed_max_tasks_per_block = 5;
+  int largest_allowed_max_tasks_per_block = 20;
+  int smallest_allowed_max_tasks_per_block = 5;
   // tune the allowed imbalance in the number of tasks per block
-  int max_min_tasks_per_block = uniform_tasks ? max_allowed_max_tasks_per_block : 2;
+  int largest_allowed_min_tasks_per_block
+    = uniform_tasks ? largest_allowed_max_tasks_per_block : 2;
 
   auto [max_tasks_per_block, min_tasks_per_block] = generateScaleAbs(
-    gen_same_across_ranks, max_allowed_max_tasks_per_block,
-    min_allowed_max_tasks_per_block, max_min_tasks_per_block
+    gen_same_across_ranks, largest_allowed_max_tasks_per_block,
+    smallest_allowed_max_tasks_per_block, largest_allowed_min_tasks_per_block
   );
   auto min_tasks_per_rank = min_blocks_per_rank * min_tasks_per_block;
 

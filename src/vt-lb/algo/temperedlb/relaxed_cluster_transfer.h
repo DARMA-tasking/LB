@@ -62,15 +62,29 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
   RelaxedClusterTransfer(
     CommT& comm,
     model::PhaseData& pd,
+    Clusterer* clusterer,
+    int global_max_clusters,
     std::unordered_map<int, RankClusterInfo> const& cluster_info,
     Statistics stats
-  ) : Transferer<CommT>(comm, pd),
+  ) : Transferer<CommT>(comm, pd, clusterer, global_max_clusters),
       cluster_info_(cluster_info),
       stats_(stats)
   {}
 
-  void run(Configuration const& config) {
+  struct Candidate {
+    int dst_rank = -1;
+    int give_cluster_gid = -1;
+    int recv_cluster_gid = -1;
+    double this_work_after = 0.0;
+    double dst_work_after = 0.0;
+    double improvement = 0.0; // w_max_0 - w_max_new
+  };
+
+  Candidate findBestSwapCandidate(Configuration const& config) {
     int this_rank = this->comm_.getRank();
+    RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
+    auto const& local_cluster_summaries = this_rank_info.cluster_summaries;
+
     std::vector<int> dest_ranks;
     dest_ranks.reserve(cluster_info_.size());
     for (auto const& [rank, _] : cluster_info_) {
@@ -79,9 +93,6 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
     }
 
-    RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
-    auto const& local_cluster_summaries = this_rank_info.cluster_summaries;
-
     // Precompute "before" work per known rank
     std::unordered_map<int, double> before_work;
     for (auto const& [rank, info] : cluster_info_) {
@@ -89,15 +100,6 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         config.work_model_, info.rank_breakdown
       );
     }
-
-    struct Candidate {
-      int dst_rank;
-      int give_cluster_gid = -1;
-      int recv_cluster_gid = -1;
-      double this_work_after = 0.0;
-      double dst_work_after = 0.0;
-      double improvement = 0.0; // w_max_0 - w_max_new
-    };
 
     std::vector<Candidate> candidates;
 
@@ -182,7 +184,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
 
     if (candidates.empty()) {
       VT_LB_LOG(LoadBalancer, normal, "RelaxedClusterTransfer: no swap candidates\n");
-      return;
+      return Candidate{};
     }
 
     // Sort by descending improvement; tie-breakers by this rank’s post-work then destination’s
@@ -203,6 +205,29 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
       best.this_work_after, best.dst_work_after, best.improvement
     );
+
+    return best;
+  }
+
+  void run(Configuration const& config) {
+    int this_rank = this->comm_.getRank();
+    RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
+
+    if (WorkModelCalculator::computeWork(config.work_model_, this_rank_info.rank_breakdown) <= stats_.avg) {
+      // do nothing
+    } else {
+      auto best = findBestSwapCandidate(config);
+      if (best.improvement > 0.0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "RelaxedClusterTransfer: executing swap dst_rank={} give_gid={} recv_gid={} "
+          "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+          best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
+          best.this_work_after, best.dst_work_after, best.improvement
+        );
+        this->migrateCluster(best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid);
+      }
+    }
   }
 
   /*virutal*/ bool acceptIncomingTask(model::Task const& task) override final {

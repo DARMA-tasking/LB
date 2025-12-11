@@ -60,10 +60,23 @@ template <comm::Communicator CommT>
 struct Transferer {
   using HandleType = typename CommT::template HandleType<Transferer<CommT>>;
 
-  Transferer(CommT& comm, model::PhaseData& pd)
+  /**
+   * @brief Construct a new Transferer object
+   *
+   * @note If one is not transferring clusters, clusterer can be nullptr
+   * and global_max_clusters can be 0
+   *
+   * @param comm The communicator to use for transfers
+   * @param pd The phase data containing tasks and communication information
+   * @param clusterer (optional) ptr to a Clusterer object for cluster-based transfers
+   * @param global_max_clusters The maximum number of clusters on any rank
+   */
+  Transferer(CommT& comm, model::PhaseData& pd, Clusterer* clusterer = nullptr, int global_max_clusters = 0)
     : comm_(comm.clone()),
       handle_(comm_.template registerInstanceCollective<Transferer<CommT>>(this)),
-      pd_(pd)
+      pd_(pd),
+      clusterer_(clusterer),
+      global_max_clusters_(global_max_clusters)
   {}
 
   virtual ~Transferer() = default;
@@ -80,6 +93,45 @@ struct Transferer {
       s | shared_blocks;
     }
   };
+
+  void migrateCluster(
+    int const rank,
+    int cluster_gid,
+    int request_cluster_gid
+  ) {
+    auto local_cluster_id = ClusterSummarizerUtil::globalToLocalClusterID(
+      cluster_gid,
+      global_max_clusters_
+    );
+    std::vector<model::Task> tasks_to_migrate;
+    std::vector<model::Edge> edges_to_migrate;
+    std::set<model::SharedBlockType> shared_blocks_id_set;
+    std::vector<model::SharedBlock> shared_blocks_to_migrate;
+    for (auto const& [task_id, task_cluster_id] : clusterer_->taskToCluster()) {
+      if (task_cluster_id == local_cluster_id) {
+        auto const* task = pd_.getTask(task_id);
+        assert(task != nullptr && "Task must exist locally to migrate");
+        tasks_to_migrate.push_back(*task);
+
+        for (auto const& edge : pd_.getCommunications()) {
+          if (edge.getFrom() == task->getId() || edge.getTo() == task->getId()) {
+            edges_to_migrate.push_back(edge);
+          }
+        }
+
+        for (auto const& sb_id : task->getSharedBlocks()) {
+          if (shared_blocks_id_set.find(sb_id) == shared_blocks_id_set.end()) {
+            shared_blocks_id_set.insert(sb_id);
+            shared_blocks_to_migrate.push_back(*pd_.getSharedBlock(sb_id));
+          }
+        }
+      }
+    }
+    handle_[rank].template send<&Transferer::migrationClusterHandler>(
+      comm_.getRank(), cluster_gid, tasks_to_migrate, edges_to_migrate, shared_blocks_to_migrate,
+      request_cluster_gid
+    );
+  }
 
   void migrateTask(int const rank, model::Task const& task, bool include_comm = false) {
     std::vector<model::Edge> edges;
@@ -153,6 +205,36 @@ private:
     }
   }
 
+  void migrationClusterHandler(
+    int from_rank,
+    int cluster_gid,
+    std::vector<model::Task> const& tasks,
+    std::vector<model::Edge> const& edges,
+    std::vector<model::SharedBlock> const& shared_blocks,
+    int request_cluster_gid
+  ) {
+    if (acceptIncomingClusterSwap(cluster_gid, request_cluster_gid)) {
+      // Add all received tasks to local PhaseData
+      for (auto const& task : tasks) {
+        pd_.addTask(task);
+      }
+      // Add all received edges
+      for (auto const& edge : edges) {
+        pd_.addCommunication(edge);
+      }
+      // Add all received shared blocks
+      for (auto const& sb : shared_blocks) {
+        if (!pd_.hasSharedBlock(sb.getId())) {
+          pd_.addSharedBlock(sb);
+        }
+      }
+      if (request_cluster_gid != -1) {
+        // Send back the requested cluster
+        migrateCluster(from_rank, request_cluster_gid, -1);
+      }
+    }
+  }
+
   void cleanup() {
     // 1) Remove communications where neither endpoint exists locally
     pd_.purgeDanglingCommunications();
@@ -174,13 +256,38 @@ private:
   }
 
 protected:
-  virtual bool acceptIncomingTask(model::Task const& task) = 0;
+  /**
+   * \brief The transfer scheme that inherits from this class can choose
+   * whether to not to accept an incoming task by overriding this method
+   *
+   * \param[in] task the incoming task
+   *
+   * \return true to accept the task, false to reject it
+   */
+  virtual bool acceptIncomingTask(
+    [[maybe_unused]] model::Task const& task
+  ) { return true; }
+
+  /**
+   * \brief The transfer scheme that inherits from this class can choose
+   * whether to not to accept an incoming cluster swap by overriding this method
+   *
+   * \param[in] give_cluster_gid the cluster GID being given away
+   * \param[in] recv_cluster_gid the cluster GID being received
+   *
+   * \return true to accept the cluster swap, false to reject it
+   */
+  virtual bool acceptIncomingClusterSwap(
+    [[maybe_unused]] int give_cluster_gid, [[maybe_unused]] int recv_cluster_gid
+  ) { return true; }
 
 protected:
   CommT comm_;
   HandleType handle_;
   model::PhaseData& pd_;
   std::unordered_map<int, std::vector<TransferTask>> migrate_tasks_;
+  Clusterer* clusterer_ = nullptr;
+  int global_max_clusters_ = 0;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

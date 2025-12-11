@@ -308,8 +308,16 @@ struct TemperedLB final : baselb::BaseLB {
         this->getPhaseData().getSharedBlockIdsHomed()
       };
       auto info = runInformationPropagation(rank_info);
-      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
-      RelaxedClusterTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
+
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "runTrial: gathered load info from {} ranks\n",
+        info.size()
+      );
+
+      RelaxedClusterTransfer<CommT> transfer(
+        comm_, *phase_data_, clusterer_.get(), global_max_clusters_, info, work_stats
+      );
       transfer.run(config_);
     }
   }

@@ -268,9 +268,13 @@ void generateIntraRankComm(
   }
   std::shuffle(endpoints.begin(), endpoints.end(), gen);
 
+  // used only if we need to use the fallback approach to break self-comm
+  TaskType first_task = *std::min_element(local_ids.begin(), local_ids.end());
+  TaskType last_task = *std::max_element(local_ids.begin(), local_ids.end());
+  std::uniform_int_distribution<> fix_self_edge_dist(first_task, last_task);
+
   // if we generated a odd number of endpoints, one will be dropped
   std::size_t edge_count = endpoints.size() / 2;
-  std::uniform_int_distribution<> fix_self_edge_dist(0, num_tasks-1);
   for (std::size_t e = 0; e < edge_count; ++e) {
     TaskType from = endpoints[e*2];
     TaskType to = endpoints[e*2+1];
@@ -292,7 +296,10 @@ void generateIntraRankComm(
         if (new_task != to) {
           to = new_task;
         } else {
-          to = (new_task + 1) % num_tasks;
+          to = new_task + 1;
+          if (to > last_task) {
+            to = first_task;
+          }
         }
       }
     }
@@ -388,7 +395,8 @@ void generateRankComm(
   assert(rank != invalid_node);
 
   auto local_ids = pd.getTaskIds();
-  if (num_ranks == 1 and local_ids.size() <= 1) {
+  const int local_tasks = local_ids.size();
+  if (local_tasks == 0 or (num_ranks == 1 and local_tasks == 1)) {
     return;
   }
 
@@ -412,16 +420,26 @@ void generateRankComm(
   for (std::size_t e = 0; e < from_edge_count; ++e) {
     TaskType from = local_endpoints[e];
     int remote_rank = remote_rank_dist(gen);
+    if (remote_rank == rank and local_tasks == 1) {
+      while ((remote_rank = remote_rank_dist(gen)) == rank) {}
+    }
     TaskType to = remote_task_dist(gen);
-    while ((remote_rank == rank) and ((to = remote_task_dist(gen)) == from)) {}
+    if (remote_rank == rank and to == from) {
+      while ((to = remote_task_dist(gen)) == from) {}
+    }
     double bytes = weight_per_edge_dist(gen);
     pd.addCommunication(Edge{from, to, bytes, rank, remote_rank});
   }
   for (std::size_t e = from_edge_count; e < local_endpoints.size(); ++e) {
     TaskType to = local_endpoints[e];
     int remote_rank = remote_rank_dist(gen);
+    if (remote_rank == rank and local_tasks == 1) {
+      while ((remote_rank = remote_rank_dist(gen)) == rank) {}
+    }
     TaskType from = remote_task_dist(gen);
-    while ((remote_rank == rank) and ((from = remote_task_dist(gen)) == to)) {}
+    if (remote_rank == rank and from == to) {
+      while ((from = remote_task_dist(gen)) == to) {}
+    }
     double bytes = weight_per_edge_dist(gen);
     pd.addCommunication(Edge{from, to, bytes, remote_rank, rank});
   }

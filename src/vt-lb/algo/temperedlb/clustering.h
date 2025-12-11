@@ -74,8 +74,13 @@ struct Clusterer {
   using BytesType = vt_lb::model::BytesType;
   virtual ~Clusterer() = default;
   virtual void compute() = 0;
-  virtual std::unordered_map<TaskType,int> const& taskToCluster() const = 0;
-  virtual std::vector<Cluster> const& clusters() const = 0;
+
+  std::unordered_map<TaskType,int> const& taskToCluster() const { return task_to_cluster_; }
+  std::vector<Cluster> const& clusters() const { return clusters_; }
+
+protected:
+  std::unordered_map<TaskType,int> task_to_cluster_;
+  std::vector<Cluster> clusters_;
 };
 
 // Communication-based clustering, strawman method
@@ -118,9 +123,6 @@ struct CommunicationClusterer : Clusterer {
         task_to_cluster_[t] = next_cid++;
     materializeClusters();
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
 
 private:
   void clear() {
@@ -174,8 +176,6 @@ private:
   PhaseData const& pd_;
   std::vector<TaskType> tasks_;
   std::vector<std::tuple<TaskType,TaskType,BytesType>> agg_edges_;
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
 };
 
 // Shared-block-based clustering
@@ -224,9 +224,6 @@ struct SharedBlockClusterer : Clusterer {
     }
     materializeClusters();
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
 
 private:
   void clear() {
@@ -304,8 +301,6 @@ private:
   std::vector<TaskType> tasks_;
   // aggregated undirected shared-block edges: (u,v,weight)
   std::vector<std::tuple<TaskType,TaskType,BytesType>> sb_edges_;
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
 };
 
 // Standalone Leiden-style clustering using CPM (Constant Potts Model) objective.
@@ -372,9 +367,6 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     }
   }
 
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
-
 private:
   // ---------- Graph state for current level ----------
   // nodes are indexed [0..N-1], each super-node maps to a vector of original tasks
@@ -394,9 +386,6 @@ private:
   double gamma_ = 1.0;
   int max_passes_ = 10;
   int max_levels_ = 4;
-
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
 
   // ---------- Utils ----------
   bool rank0() const { return pd_.getRank() == 0; }

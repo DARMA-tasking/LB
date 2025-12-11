@@ -98,14 +98,14 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
   // Task -> local cluster id
   auto const& t2c = clusterer_->taskToCluster();
 
-  // Prepare summary per local cluster id
-  std::unordered_map<int, TaskClusterSummaryInfo> summary_by_local;
+  // Prepare summary per cluster id, saved as the global cluster ID
+  std::unordered_map<int, TaskClusterSummaryInfo> summary_by_global;
   for (auto const& cl : clusterer_->clusters()) {
     TaskClusterSummaryInfo info;
     info.cluster_id = localToGlobalClusterID(cl.id, rank, global_max_clusters_);
     info.num_tasks_ = static_cast<int>(cl.members.size());
     info.cluster_load = cl.load;
-    summary_by_local.emplace(cl.id, std::move(info));
+    summary_by_global.emplace(info.cluster_id, std::move(info));
   }
 
   std::vector<model::Edge> to_resolve_later;
@@ -122,6 +122,8 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     auto itv = t2c.find(v);
     int cu = (itu != t2c.end()) ? itu->second : -1; // local cluster id or -1 if cluster is elsewhere
     int cv = (itv != t2c.end()) ? itv->second : -1;
+    int cug = (cu != -1) ? localToGlobalClusterID(cu, rank, global_max_clusters_) : -1;
+    int cvg = (cv != -1) ? localToGlobalClusterID(cv, rank, global_max_clusters_) : -1;
     auto vol = e.getVolume();
 
     // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
@@ -130,7 +132,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
         e.getFromRank() == e.getToRank() && e.getFromRank() == rank &&
         "Intra-cluster edge must be intra-rank"
       );
-      auto& sum = summary_by_local.at(cu);
+      auto& sum = summary_by_global.at(cug);
       sum.cluster_intra_send_bytes += vol;
       sum.cluster_intra_recv_bytes += vol;
       continue;
@@ -139,23 +141,22 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     if (cu != -1 && cv != -1 && cu != cv) {
       // Inter-cluster on same rank: do not count as intra, but add to inter edges for both clusters
       model::ClusterEdge cluster_edge(
-        localToGlobalClusterID(cu, rank, global_max_clusters_), // from cu
-        localToGlobalClusterID(cv, rank, global_max_clusters_), // to cv
+        cug, // from cu
+        cvg, // to cv
         vol
       );
-      summary_by_local.at(cu).inter_edges_.push_back(cluster_edge);
-      summary_by_local.at(cv).inter_edges_.push_back(cluster_edge);
+      summary_by_global.at(cug).inter_edges_.push_back(cluster_edge);
+      summary_by_global.at(cvg).inter_edges_.push_back(cluster_edge);
       continue;
     }
 
     // Now, discover the target clusters that are not local to this rank
     if (cu != -1) {
-      auto global_cu = localToGlobalClusterID(cu, rank, global_max_clusters_);
       // Source cluster is local; destination is remote
       auto to_rank = e.getToRank();
       // Request cluster ID for destination task, send cluster ID for source task
       handle_[to_rank].template send<&ClusterSummarizer::resolveClusterIDForTask>(
-        e.getTo(), e.getFrom(), global_cu, vol
+        e.getTo(), e.getFrom(), cug, vol
       );
       to_resolve_later.push_back(e);
     } else if (cv != -1) {
@@ -199,7 +200,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
       vol
     );
 
-    summary_by_local.at(local_cluster).inter_edges_.push_back(cluster_edge);
+    summary_by_global.at(local_global_cluster_id).inter_edges_.push_back(cluster_edge);
   }
 
   // Memory summaries per cluster (only if enabled)
@@ -211,7 +212,8 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     }
 
     for (auto const& cl : clusterer_->clusters()) {
-      auto& sum = summary_by_local.at(cl.id);
+      int global_cluster_id = localToGlobalClusterID(cl.id, rank, global_max_clusters_);
+      auto& sum = summary_by_global.at(global_cluster_id);
 
       // Build set of tasks in this cluster
       std::unordered_set<model::TaskType> cluster_tasks(cl.members.begin(), cl.members.end());
@@ -287,7 +289,8 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
 
   // Emit summaries
   for (auto const& cl : clusterer_->clusters()) {
-    auto const& sum = summary_by_local.at(cl.id);
+    auto global_cl_id = localToGlobalClusterID(cl.id, rank, global_max_clusters_);
+    auto const& sum = summary_by_global.at(global_cl_id);
     VT_LB_LOG(
       LoadBalancer,
       normal,
@@ -309,7 +312,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     );
   }
 
-  return summary_by_local;
+  return summary_by_global;
 }
 
 } /* end namespace vt_lb::algo::temperedlb */

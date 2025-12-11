@@ -68,19 +68,18 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       stats_(stats)
   {}
 
-  void run(
-    Configuration const& config
-  ) {
+  void run(Configuration const& config) {
     int this_rank = this->comm_.getRank();
     std::vector<int> dest_ranks;
     dest_ranks.reserve(cluster_info_.size());
-    for (auto const& kv : cluster_info_) {
-      if (kv.first == this_rank) continue;
-      dest_ranks.push_back(kv.first);
+    for (auto const& [rank, _] : cluster_info_) {
+      if (rank != this_rank) {
+        dest_ranks.push_back(rank);
+      }
     }
 
     RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
-    auto local_cluster_summaries = this_rank_info.cluster_summaries;
+    auto const& local_cluster_summaries = this_rank_info.cluster_summaries;
 
     // Precompute "before" work per known rank
     std::unordered_map<int, double> before_work;
@@ -108,23 +107,10 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       TaskClusterSummaryInfo to_remove_this{};
 
       if (give_gid != -1) {
-        auto it_local = std::find_if(
-          local_cluster_summaries.begin(), local_cluster_summaries.end(),
-          [&](auto const& kv) { return kv.second.cluster_id == give_gid; }
-        );
-        if (it_local != local_cluster_summaries.end()) {
-          to_remove_this = it_local->second;
-        }
+        to_remove_this = local_cluster_summaries.at(give_gid);
       }
       if (recv_gid != -1) {
-        auto const& dst_summaries = cluster_info_.at(dst_rank).cluster_summaries;
-        auto it_dst = std::find_if(
-          dst_summaries.begin(), dst_summaries.end(),
-          [&](auto const& kv) { return kv.second.cluster_id == recv_gid; }
-        );
-        if (it_dst != dst_summaries.end()) {
-          to_add_this = it_dst->second;
-        }
+        to_add_this = cluster_info_.at(dst_rank).cluster_summaries.at(recv_gid);
       }
 
       c.this_work_after = WorkModelCalculator::computeWorkUpdateSummary(
@@ -136,23 +122,10 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       TaskClusterSummaryInfo to_remove_dst{};
 
       if (give_gid != -1) {
-        auto it_local = std::find_if(
-          local_cluster_summaries.begin(), local_cluster_summaries.end(),
-          [&](auto const& kv) { return kv.second.cluster_id == give_gid; }
-        );
-        if (it_local != local_cluster_summaries.end()) {
-          to_add_dst = it_local->second;
-        }
+        to_add_dst = local_cluster_summaries.at(give_gid);
       }
       if (recv_gid != -1) {
-        auto const& dst_summaries = dst_info.cluster_summaries;
-        auto it_dst = std::find_if(
-          dst_summaries.begin(), dst_summaries.end(),
-          [&](auto const& kv) { return kv.second.cluster_id == recv_gid; }
-        );
-        if (it_dst != dst_summaries.end()) {
-          to_remove_dst = it_dst->second;
-        }
+        to_remove_dst = dst_info.cluster_summaries.at(recv_gid);
       }
 
       c.dst_work_after = WorkModelCalculator::computeWorkUpdateSummary(
@@ -170,8 +143,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     };
 
     // Null swap candidates
-    for (auto const& kv_local : local_cluster_summaries) {
-      int give_gid = kv_local.second.cluster_id;
+    for (auto const& [give_gid, _] : local_cluster_summaries) {
       for (int dst : dest_ranks) {
         candidates.emplace_back(eval_swap(dst, give_gid, -1));
       }
@@ -180,8 +152,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     // Receive-only candidates
     for (int dst : dest_ranks) {
       auto const& dst_summaries = cluster_info_.at(dst).cluster_summaries;
-      for (auto const& kv_dst : dst_summaries) {
-        int recv_gid = kv_dst.second.cluster_id;
+      for (auto const& [recv_gid, _] : dst_summaries) {
         candidates.emplace_back(eval_swap(dst, -1, recv_gid));
       }
     }

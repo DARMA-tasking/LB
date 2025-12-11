@@ -53,6 +53,7 @@
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 
 #include <unordered_map>
+#include <limits>
 
 namespace vt_lb::algo::temperedlb {
 
@@ -83,9 +84,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
 
     // Precompute "before" work per known rank
     std::unordered_map<int, double> before_work;
-    for (auto const& kv : cluster_info_) {
-      before_work[kv.first] = WorkModelCalculator::computeWork(
-        config.work_model_, kv.second.rank_breakdown
+    for (auto const& [rank, info] : cluster_info_) {
+      before_work[rank] = WorkModelCalculator::computeWork(
+        config.work_model_, info.rank_breakdown
       );
     }
 
@@ -113,6 +114,17 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         to_add_this = cluster_info_.at(dst_rank).cluster_summaries.at(recv_gid);
       }
 
+      if (config.hasMemoryInfo()) {
+        bool fits = WorkModelCalculator::checkMemoryFitUpdate(
+          config, this_rank_info, to_add_this, to_remove_this,
+          this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
+        );
+        if (!fits) {
+          c.improvement = -std::numeric_limits<double>::infinity();
+          return c;
+        }
+      }
+
       c.this_work_after = WorkModelCalculator::computeWorkUpdateSummary(
         config.work_model_, this_rank_info, to_add_this, to_remove_this
       );
@@ -126,6 +138,17 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
       if (recv_gid != -1) {
         to_remove_dst = dst_info.cluster_summaries.at(recv_gid);
+      }
+
+      if (config.hasMemoryInfo()) {
+        bool fits = WorkModelCalculator::checkMemoryFitUpdate(
+          config, dst_info, to_add_dst, to_remove_dst,
+          this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
+        );
+        if (!fits) {
+          c.improvement = -std::numeric_limits<double>::infinity();
+          return c;
+        }
       }
 
       c.dst_work_after = WorkModelCalculator::computeWorkUpdateSummary(

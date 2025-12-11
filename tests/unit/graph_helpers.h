@@ -433,6 +433,7 @@ void generateRankComm(
  *
  * @param pd The PhaseData for this rank
  * @param gen The seeded generator for this rank
+ * @param max_endpoints The maximum number of endpoints
  * @param weight_per_edge_dist Random edge weights distribution
  * @param min_tasks_per_rank The minimum number of tasks on each rank
  * @param num_ranks The number of ranks being used
@@ -440,9 +441,9 @@ void generateRankComm(
  */
 template <typename WeightPerEdgeDistType>
 void generateRankComm(
-  vt_lb::model::PhaseData& pd, std::mt19937 &gen,
+  vt_lb::model::PhaseData& pd, std::mt19937 &gen, int max_endpoints,
   WeightPerEdgeDistType &weight_per_edge_dist, int min_tasks_per_rank,
-  int num_ranks, int max_endpoints, double locally_gen_in_edge_frac = 0.1
+  int num_ranks, double locally_gen_in_edge_frac = 0.1
 ) {
   std::uniform_int_distribution<> endpoints_per_local_task_dist(
     0, max_endpoints
@@ -680,8 +681,8 @@ void generateGraphWithSharedBlocks(
     // with such a poor estimate of min_tasks_per_rank, this will generate
     // a very odd distribution of edges
     generateRankComm(
-      pd, gen_diff_each_rank, edge_weight_dist, min_tasks_per_rank, num_ranks,
-      max_endpoints, locally_gen_in_edge_frac
+      pd, gen_diff_each_rank, max_endpoints, edge_weight_dist,
+      min_tasks_per_rank, num_ranks, locally_gen_in_edge_frac
     );
   }
 }
@@ -734,8 +735,8 @@ void generateGraphWithoutSharedBlocks(
 
     std::exponential_distribution<> edge_weight_dist(edge_weight_lambda);
     generateRankComm(
-      pd, gen_diff_each_rank, edge_weight_dist, min_tasks_per_rank, num_ranks,
-      max_endpoints
+      pd, gen_diff_each_rank, max_endpoints, edge_weight_dist,
+      min_tasks_per_rank, num_ranks
     );
   }
 }

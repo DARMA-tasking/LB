@@ -256,7 +256,7 @@ void generateIntraRankComm(
   auto local_ids = pd.getTaskIds();
   std::size_t num_tasks = local_ids.size();
 
-  if (num_tasks == 1) {
+  if (num_tasks <= 1) {
     return;
   }
 
@@ -389,7 +389,7 @@ void generateRankComm(
   assert(rank != invalid_node);
 
   auto local_ids = pd.getTaskIds();
-  if (num_ranks == 1 and local_ids.size() == 1) {
+  if (num_ranks == 1 and local_ids.size() <= 1) {
     return;
   }
 

@@ -78,6 +78,27 @@ struct Clusterer {
   std::unordered_map<TaskType,int> const& taskToCluster() const { return task_to_cluster_; }
   std::vector<Cluster> const& clusters() const { return clusters_; }
 
+  /**
+   * @brief Add a cluster given its member tasks (used when a cluster migrates in)
+   *
+   * @param tasks The tasks in the cluster
+   */
+  void addCluster(std::vector<TaskType> const& tasks) {
+    int next_id = 0;
+    for (const auto& cl : clusters_) {
+      if (cl.id >= next_id) {
+        next_id = cl.id + 1;
+      }
+    }
+    Cluster cl;
+    cl.id = next_id;
+    cl.members = tasks;
+    for (const auto& t : tasks) {
+      task_to_cluster_[t] = next_id;
+    }
+    clusters_.push_back(std::move(cl));
+  }
+
 protected:
   std::unordered_map<TaskType,int> task_to_cluster_;
   std::vector<Cluster> clusters_;

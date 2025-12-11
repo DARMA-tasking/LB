@@ -624,15 +624,15 @@ std::pair<int, int> generateScaleAbs(
  *
  * @param pd The PhaseData for this rank
  * @param num_ranks The number of ranks
- * @param uniform_shared_blocks Should all ranks have the same number of shared blocks
- * @param uniform_tasks Should all shared blocks have the same number of tasks
+ * @param uniform_shared_block_count Should all ranks have the same number of shared blocks
+ * @param uniform_task_count Should all shared blocks have the same number of tasks
  * @param include_comm Should communication be generated
  * @param seed_same_across_ranks Seed that matches across ranks so they agree on scale
  * @param seed_diff_each_rank Seed that defines what gets generated on this rank
  */
 void generateGraphWithSharedBlocks(
-  vt_lb::model::PhaseData &pd, int num_ranks, bool uniform_shared_blocks,
-  bool uniform_tasks, bool include_comm, int seed_same_across_ranks,
+  vt_lb::model::PhaseData &pd, int num_ranks, bool uniform_shared_block_count,
+  bool uniform_task_count, bool include_comm, int seed_same_across_ranks,
   int seed_diff_each_rank
 ) {
   std::mt19937 gen_same_across_ranks(seed_same_across_ranks);
@@ -642,7 +642,7 @@ void generateGraphWithSharedBlocks(
   int largest_allowed_max_blocks = 25;
   int smallest_allowed_max_blocks = 15;
   // tune the allowed imbalance in the number of blocks
-  double min_allowed_blocks_frac = uniform_shared_blocks ? 1.0 : 0.25;
+  double min_allowed_blocks_frac = uniform_shared_block_count ? 1.0 : 0.25;
 
   auto [max_blocks_per_rank, min_blocks_per_rank] = generateScaleRel(
     gen_same_across_ranks, largest_allowed_max_blocks,
@@ -653,12 +653,12 @@ void generateGraphWithSharedBlocks(
   int largest_allowed_max_tasks_per_block = 20;
   int smallest_allowed_max_tasks_per_block = 5;
   // tune the allowed imbalance in the number of tasks per block
-  int largest_allowed_min_tasks_per_block
-    = uniform_tasks ? largest_allowed_max_tasks_per_block : 2;
+  int limit_min_tasks_per_block
+    = uniform_task_count ? largest_allowed_max_tasks_per_block : 2;
 
   auto [max_tasks_per_block, min_tasks_per_block] = generateScaleAbs(
     gen_same_across_ranks, largest_allowed_max_tasks_per_block,
-    smallest_allowed_max_tasks_per_block, largest_allowed_min_tasks_per_block
+    smallest_allowed_max_tasks_per_block, limit_min_tasks_per_block
   );
   auto min_tasks_per_rank = min_blocks_per_rank * min_tasks_per_block;
 
@@ -698,13 +698,13 @@ void generateGraphWithSharedBlocks(
  *
  * @param pd The PhaseData for this rank
  * @param num_ranks The number of ranks
- * @param uniform_tasks Should all shared blocks have the same number of tasks
+ * @param uniform_task_count Should all shared blocks have the same number of tasks
  * @param include_comm Should communication be generated
  * @param seed_same_across_ranks Seed that matches across ranks so they agree on scale
  * @param seed_diff_each_rank Seed that defines what gets generated on this rank
  */
 void generateGraphWithoutSharedBlocks(
-  vt_lb::model::PhaseData &pd, int num_ranks, bool uniform_tasks,
+  vt_lb::model::PhaseData &pd, int num_ranks, bool uniform_task_count,
   bool include_comm, int seed_same_across_ranks, int seed_diff_each_rank
 ) {
   std::mt19937 gen_same_across_ranks(seed_same_across_ranks);
@@ -714,7 +714,7 @@ void generateGraphWithoutSharedBlocks(
   int max_allowed_max_tasks = 30;
   int min_allowed_max_tasks = 10;
   // tune the allowed imbalance in the number of tasks
-  double min_allowed_tasks_frac = uniform_tasks ? 1.0 : 0.5;
+  double min_allowed_tasks_frac = uniform_task_count ? 1.0 : 0.5;
 
   auto [max_tasks_per_rank, min_tasks_per_rank] = generateScaleRel(
     gen_same_across_ranks, max_allowed_max_tasks, min_allowed_max_tasks,

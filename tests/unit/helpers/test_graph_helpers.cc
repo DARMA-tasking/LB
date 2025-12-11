@@ -1017,4 +1017,215 @@ TYPED_TEST(TestGraphHelpers, test_generate_scale_abs) {
   EXPECT_GE(min_chosen, min_allowed);
 };
 
+void sanityCheckBlockMem(const vt_lb::model::PhaseData &pd) {
+  // check block memory
+  auto block_ids = pd.getSharedBlockIds();
+  for (auto bid : block_ids) {
+    auto b = pd.getSharedBlock(bid);
+    EXPECT_GT(b->getSize(), 0);
+  }
+}
+
+void sanityCheckBlocks(const vt_lb::model::PhaseData &pd, bool mem_required) {
+  // check block count
+  auto block_ids = pd.getSharedBlockIds();
+  int block_count = block_ids.size();
+  EXPECT_GT(block_count, 0);
+
+  if (mem_required) {
+    sanityCheckBlockMem(pd);
+  }
+}
+
+void sanityCheckBlockTasks(
+  const vt_lb::model::PhaseData &pd, bool uni_across_blocks
+) {
+  // check task count per block
+  auto task_ids = pd.getTaskIds();
+  auto block_ids = pd.getSharedBlockIds();
+  int first_count = -1;
+  for (auto bid : block_ids) {
+    int count_this_block = 0;
+    for (auto tid : task_ids) {
+      auto t = pd.getTask(tid);
+      auto &bids_this_task = t->getSharedBlocks();
+      for (auto block_id : bids_this_task) {
+        if (block_id == bid) {
+          ++count_this_block;
+        }
+      }
+    }
+    if (!uni_across_blocks or first_count < 0) {
+      EXPECT_GT(count_this_block, 0);
+      first_count = count_this_block;
+    } else {
+      EXPECT_EQ(count_this_block, first_count);
+    }
+  }
+}
+
+void sanityCheckTaskLoads(const vt_lb::model::PhaseData &pd) {
+  // check task loads
+  auto task_ids = pd.getTaskIds();
+  for (auto tid : task_ids) {
+    auto t = pd.getTask(tid);
+    EXPECT_GT(t->getLoad(), 0.0);
+  }
+}
+
+void sanityCheckTaskMem(const vt_lb::model::PhaseData &pd) {
+  // check task memory
+  auto task_ids = pd.getTaskIds();
+  for (auto tid : task_ids) {
+    auto t = pd.getTask(tid);
+    auto &tm = t->getMemory();
+    EXPECT_GT(tm.getWorking(), 0);
+    EXPECT_GT(tm.getFootprint(), 0);
+    EXPECT_GT(tm.getSerialized(), 0);
+  }
+}
+
+void sanityCheckTasks(
+  const vt_lb::model::PhaseData &pd, bool mem_required, bool uni_across_blocks
+) {
+  auto block_ids = pd.getSharedBlockIds();
+  int block_count = block_ids.size();
+
+  // check task count
+  auto task_ids = pd.getTaskIds();
+  int task_count = task_ids.size();
+  EXPECT_GE(task_count, block_count);
+
+  if (block_count > 0) {
+    sanityCheckBlockTasks(pd, uni_across_blocks);
+  }
+
+  sanityCheckTaskLoads(pd);
+
+  if (mem_required) {
+    sanityCheckTaskMem(pd);
+  }
+}
+
+void sanityCheckEdges(const vt_lb::model::PhaseData &pd, bool expect_edges) {
+  // check edges
+  auto &edges = pd.getCommunications();
+  if (!expect_edges) {
+    EXPECT_EQ(edges.size(), 0);
+  }
+
+  // check edge weights
+  for (auto &e : edges) {
+    EXPECT_GT(e.getVolume(), 0.0);
+  }
+}
+
+TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  int seed_same_across_ranks = 12;
+  int seed_diff_each_rank = 34 * rank;
+
+  bool uniform_shared_block_count = false;
+  bool uniform_task_count = false;
+  bool include_comm = false;
+
+  generateGraphWithSharedBlocks(
+    pd, num_ranks, uniform_shared_block_count, uniform_task_count, include_comm,
+    seed_same_across_ranks, seed_diff_each_rank
+  );
+
+  sanityCheckBlocks(pd, true);
+  sanityCheckTasks(pd, true, uniform_task_count);
+  sanityCheckEdges(pd, include_comm);
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_with_comm) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  int seed_same_across_ranks = 13;
+  int seed_diff_each_rank = 35 * rank;
+
+  bool uniform_shared_block_count = false;
+  bool uniform_task_count = false;
+  bool include_comm = true;
+
+  generateGraphWithSharedBlocks(
+    pd, num_ranks, uniform_shared_block_count, uniform_task_count, include_comm,
+    seed_same_across_ranks, seed_diff_each_rank
+  );
+
+  sanityCheckBlocks(pd, true);
+  sanityCheckTasks(pd, true, uniform_task_count);
+  sanityCheckEdges(pd, include_comm);
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm_unib) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  int seed_same_across_ranks = 14;
+  int seed_diff_each_rank = 36 * rank;
+
+  bool uniform_shared_block_count = true;
+  bool uniform_task_count = false;
+  bool include_comm = false;
+
+  generateGraphWithSharedBlocks(
+    pd, num_ranks, uniform_shared_block_count, uniform_task_count, include_comm,
+    seed_same_across_ranks, seed_diff_each_rank
+  );
+
+  sanityCheckBlocks(pd, true);
+  sanityCheckTasks(pd, true, uniform_task_count);
+  sanityCheckEdges(pd, include_comm);
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm_unibt) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  int seed_same_across_ranks = 15;
+  int seed_diff_each_rank = 37 * rank;
+
+  bool uniform_shared_block_count = true;
+  bool uniform_task_count = true;
+  bool include_comm = false;
+
+  generateGraphWithSharedBlocks(
+    pd, num_ranks, uniform_shared_block_count, uniform_task_count, include_comm,
+    seed_same_across_ranks, seed_diff_each_rank
+  );
+
+  sanityCheckBlocks(pd, true);
+  sanityCheckTasks(pd, true, uniform_task_count);
+  sanityCheckEdges(pd, include_comm);
+};
+
+TYPED_TEST(TestGraphHelpers, test_generate_graph_without_shared_blocks_with_comm) {
+  auto num_ranks = this->comm.numRanks();
+  auto rank = this->comm.getRank();
+  vt_lb::model::PhaseData pd(rank);
+
+  int seed_same_across_ranks = 16;
+  int seed_diff_each_rank = 38 * rank;
+
+  bool uniform_task_count = false;
+  bool include_comm = true;
+
+  generateGraphWithoutSharedBlocks(
+    pd, num_ranks, uniform_task_count, include_comm, seed_same_across_ranks,
+    seed_diff_each_rank
+  );
+
+  sanityCheckTasks(pd, true, false);
+  sanityCheckEdges(pd, include_comm);
+};
+
 }}} // end namespace vt_lb::tests::unit

@@ -195,7 +195,7 @@ struct BasicTransfer final : Transferer<CommT> {
     this->doMigrations();
   }
 
-  /*virutal*/ bool acceptIncomingTask(model::Task const& task) override final {
+  /*virtual*/ bool acceptIncomingTask(model::Task const& task) override final {
     RankInfo& cur_load = load_info_.at(this->pd_.getRank());
     VT_LB_LOG(
       LoadBalancer, verbose,

@@ -130,11 +130,13 @@ struct ClusterSummarizer : ClusterSummarizerUtil {
   /**
    * @brief Resolve cluster ID for a given task
    *
+   * @param[in] from_rank Rank from which the request originated
    * @param[in] task_id Task ID
    * @param[in] source_task_id Source task ID (for inter-cluster edges)
    * @param[in] source_global_cluster_id Source global cluster ID
    */
   void resolveClusterIDForTask(
+    int from_rank,
     model::TaskType task_id,
     model::TaskType source_task_id,
     int source_global_cluster_id

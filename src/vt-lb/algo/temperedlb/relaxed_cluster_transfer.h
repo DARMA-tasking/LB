@@ -230,7 +230,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     }
   }
 
-  /*virutal*/ bool acceptIncomingTask(model::Task const& task) override final {
+  /*virtual*/ bool acceptIncomingTask(model::Task const& task) override final {
     (void)task;
     return true;
   }

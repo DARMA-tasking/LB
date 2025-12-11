@@ -57,6 +57,7 @@ namespace vt_lb::algo::temperedlb {
 
 template <typename CommT>
 void ClusterSummarizer<CommT>::resolveClusterIDForTask(
+  int from_rank,
   model::TaskType task_id,
   model::TaskType source_task_id,
   int source_global_cluster_id
@@ -69,7 +70,7 @@ void ClusterSummarizer<CommT>::resolveClusterIDForTask(
     comm_.getRank(),
     global_max_clusters_
   );
-  handle_.template send<&ClusterSummarizer::recvClusterIDForTask>(
+  handle_[from_rank].template send<&ClusterSummarizer::recvClusterIDForTask>(
     task_id, global_cluster_id
   );
   recvClusterIDForTask(source_task_id, source_global_cluster_id);
@@ -156,7 +157,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
       auto to_rank = e.getToRank();
       // Request cluster ID for destination task, send cluster ID for source task
       handle_[to_rank].template send<&ClusterSummarizer::resolveClusterIDForTask>(
-        e.getTo(), e.getFrom(), cug, vol
+        comm_.getRank(), e.getTo(), e.getFrom(), cug
       );
       to_resolve_later.push_back(e);
     } else if (cv != -1) {

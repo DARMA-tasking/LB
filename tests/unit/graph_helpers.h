@@ -715,7 +715,7 @@ void generateGraphWithSharedBlocks(
  *
  * @param pd The PhaseData for this rank
  * @param num_ranks The number of ranks
- * @param uniform_task_count Should all shared blocks have the same number of tasks
+ * @param uniform_task_count Should all ranks have the same number of tasks
  * @param include_comm Should communication be generated
  * @param seed_same_across_ranks Seed that matches across ranks so they agree on scale
  * @param seed_diff_each_rank Seed that defines what gets generated on this rank

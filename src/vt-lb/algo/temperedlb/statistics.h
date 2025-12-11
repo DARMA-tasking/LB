@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                             cluster_summarizer.cc
+//                               statistics.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,13 +41,20 @@
 //@HEADER
 */
 
-#include <vt-lb/model/PhaseData.h>
-#include <vt-lb/model/Communication.h>
-#include <vt-lb/algo/temperedlb/cluster_summarizer.h>
-#include <vt-lb/algo/temperedlb/clustering.h>
-#include <vt-lb/algo/temperedlb/configuration.h>
-#include <vt-lb/util/logging.h>
+#if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_STATISTICS_H
+#define INCLUDED_VT_LB_ALGO_TEMPEREDLB_STATISTICS_H
+
+#include <limits>
 
 namespace vt_lb::algo::temperedlb {
 
+struct Statistics {
+  double min = std::numeric_limits<double>::max();
+  double max = std::numeric_limits<double>::lowest();
+  double avg = 0.0;
+  double I = 0.0;
+};
+
 } /* end namespace vt_lb::algo::temperedlb */
+
+#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_STATISTICS_H*/

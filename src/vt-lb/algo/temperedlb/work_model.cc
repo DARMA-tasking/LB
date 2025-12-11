@@ -46,6 +46,7 @@
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
+#include <vt-lb/algo/temperedlb/transfer_util.h>
 
 #include <cassert>
 #include <unordered_set>
@@ -219,6 +220,159 @@ namespace vt_lb::algo::temperedlb {
   return computeWork(model, new_bd);
 }
 
+/*static*/ double WorkModelCalculator::computeWorkUpdateSummary(
+  WorkModel const& model,
+  RankClusterInfo rank_cluster_info,
+  TaskClusterSummaryInfo to_add,
+  TaskClusterSummaryInfo to_remove
+) {
+  WorkBreakdown new_bd = rank_cluster_info.rank_breakdown;
+
+  // Build sets of local clusters BEFORE and AFTER (global IDs)
+  std::unordered_set<int> local_before;
+  for (const auto& kv : rank_cluster_info.cluster_summaries) {
+    local_before.insert(kv.second.cluster_id);
+  }
+  auto local_after = local_before;
+  if (to_add.cluster_id != -1) {
+    local_after.insert(to_add.cluster_id);
+  }
+  if (to_remove.cluster_id != -1) {
+    local_after.erase(to_remove.cluster_id);
+  }
+
+  // Adjust compute and intra bytes for add/remove
+  if (to_remove.cluster_id != -1) {
+    new_bd.compute -= to_remove.cluster_load;
+    new_bd.intra_node_send_comm -= to_remove.cluster_intra_send_bytes;
+    new_bd.intra_node_recv_comm -= to_remove.cluster_intra_recv_bytes;
+  }
+  if (to_add.cluster_id != -1) {
+    new_bd.compute += to_add.cluster_load;
+    new_bd.intra_node_send_comm += to_add.cluster_intra_send_bytes;
+    new_bd.intra_node_recv_comm += to_add.cluster_intra_recv_bytes;
+  }
+
+  // Deduplicate inter-edges by unordered pair of global cluster IDs
+  auto encode_pair = [](int a, int b) -> long long {
+    if (a > b) std::swap(a, b);
+    return (static_cast<long long>(a) << 32) | static_cast<unsigned long long>(b);
+  };
+  std::unordered_set<long long> seen;
+
+  auto process_edges_reclass = [&](std::vector<model::ClusterEdge> const& edges) {
+    for (auto const& e : edges) {
+      int g_from = e.getFromCluster();
+      int g_to   = e.getToCluster();
+      double vol = e.getVolume();
+
+      long long key = encode_pair(g_from, g_to);
+      if (!seen.insert(key).second) continue;
+
+      int init_locals =
+        (local_before.count(g_from) ? 1 : 0) +
+        (local_before.count(g_to)   ? 1 : 0);
+      int final_locals =
+        (local_after.count(g_from) ? 1 : 0) +
+        (local_after.count(g_to)   ? 1 : 0);
+
+      // intra: 2 local; inter: 1 local; none: 0 local
+      if (init_locals == 2 && final_locals < 2) {
+        // intra -> inter or none
+        new_bd.intra_node_send_comm -= vol;
+        new_bd.intra_node_recv_comm -= vol;
+        if (final_locals == 1) {
+          // treat inter as undirected, add to both send/recv
+          new_bd.inter_node_send_comm += vol;
+          new_bd.inter_node_recv_comm += vol;
+        }
+      } else if (init_locals == 1 && final_locals == 2) {
+        // inter -> intra
+        new_bd.inter_node_send_comm -= vol;
+        new_bd.inter_node_recv_comm -= vol;
+        new_bd.intra_node_send_comm += vol;
+        new_bd.intra_node_recv_comm += vol;
+      } else if (init_locals == 0 && final_locals == 1) {
+        // none -> inter (newly relevant to this rank)
+        new_bd.inter_node_send_comm += vol;
+        new_bd.inter_node_recv_comm += vol;
+      } else if (init_locals == 1 && final_locals == 0) {
+        // inter -> none (no longer relevant)
+        new_bd.inter_node_send_comm -= vol;
+        new_bd.inter_node_recv_comm -= vol;
+      }
+      // 2->2, 0->0, 1->1: no change
+    }
+  };
+
+  if (to_add.cluster_id != -1) {
+    process_edges_reclass(to_add.inter_edges_);
+  }
+  if (to_remove.cluster_id != -1) {
+    process_edges_reclass(to_remove.inter_edges_);
+  }
+
+  auto const& homed_blocks = rank_cluster_info.shared_blocks_homed;
+
+  // Gather present-before and present-after maps
+  std::unordered_map<model::SharedBlockType, model::BytesType> present_before;
+  for (const auto& kv : rank_cluster_info.cluster_summaries) {
+    for (const auto& sb_kv : kv.second.shared_block_bytes_) {
+      present_before.insert(sb_kv);
+    }
+  }
+  std::unordered_map<model::SharedBlockType, model::BytesType> present_after = present_before;
+  if (to_remove.cluster_id != -1) {
+    for (const auto& sb_kv : to_remove.shared_block_bytes_) {
+      present_after.erase(sb_kv.first);
+    }
+  }
+  if (to_add.cluster_id != -1) {
+    for (const auto& sb_kv : to_add.shared_block_bytes_) {
+      present_after.insert(sb_kv);
+    }
+  }
+
+  // Union of all blocks to find size
+  std::unordered_map<model::SharedBlockType, model::BytesType> all_sbs = present_before;
+  all_sbs.insert(to_add.shared_block_bytes_.begin(), to_add.shared_block_bytes_.end());
+  all_sbs.insert(to_remove.shared_block_bytes_.begin(), to_remove.shared_block_bytes_.end());
+
+  auto size_of = [&](model::SharedBlockType sb) -> double {
+    assert(all_sbs.find(sb) != all_sbs.end() && "Shared block size missing");
+    return all_sbs.find(sb)->second;
+  };
+
+  for (auto const& sb : all_sbs) {
+    bool before = present_before.contains(sb.first);
+    bool removed_here = (to_remove.cluster_id != -1) &&
+                        (to_remove.shared_block_bytes_.contains(sb.first));
+    bool added_here = (to_add.cluster_id != -1) &&
+                      (to_add.shared_block_bytes_.contains(sb.first));
+    bool after = (before && !removed_here) || added_here;
+
+    bool is_homed_here = homed_blocks.contains(sb.first);
+    if (is_homed_here) {
+      continue;
+    }
+
+    if (before && !after) {
+      new_bd.shared_mem_comm -= size_of(sb.first);
+    } else if (!before && after) {
+      new_bd.shared_mem_comm += size_of(sb.first);
+    }
+  }
+
+  new_bd.compute              = std::max(0.0, new_bd.compute);
+  new_bd.inter_node_recv_comm = std::max(0.0, new_bd.inter_node_recv_comm);
+  new_bd.inter_node_send_comm = std::max(0.0, new_bd.inter_node_send_comm);
+  new_bd.intra_node_recv_comm = std::max(0.0, new_bd.intra_node_recv_comm);
+  new_bd.intra_node_send_comm = std::max(0.0, new_bd.intra_node_send_comm);
+  new_bd.shared_mem_comm      = std::max(0.0, new_bd.shared_mem_comm);
+
+  return computeWork(model, new_bd);
+}
+
 /*static*/ double WorkModelCalculator::computeWork(
   WorkModel const& model, WorkBreakdown const& breakdown
 ) {
@@ -297,122 +451,78 @@ namespace vt_lb::algo::temperedlb {
 
 /*static*/ bool WorkModelCalculator::checkMemoryFitUpdate(
   Configuration const& config,
-  model::PhaseData const& phase_data,
-  Clusterer const& clusterer,
-  int global_max_clusters,
-  WorkBreakdown const& breakdown,
+  RankClusterInfo rank_cluster_info,
   TaskClusterSummaryInfo to_add,
-  TaskClusterSummaryInfo to_remove
+  TaskClusterSummaryInfo to_remove,
+  double rank_available_memory
 ) {
   if (!config.hasMemoryInfo()) {
     return true;
   }
 
-  // New maxima from add/remove summaries
-  double new_max_task_working_bytes    = breakdown.memory_breakdown.current_max_task_working_bytes;
-  double new_max_task_serialized_bytes = breakdown.memory_breakdown.current_max_task_serialized_bytes;
+  MemoryBreakdown const& cur = rank_cluster_info.rank_breakdown.memory_breakdown;
+  double updated_usage = cur.current_memory_usage;
+
+  double new_max_working = cur.current_max_task_working_bytes;
+  double new_max_serialized = cur.current_max_task_serialized_bytes;
 
   if (config.hasTaskWorkingMemoryInfo()) {
-    new_max_task_working_bytes = std::max(
+    new_max_working = std::max(
       (double)to_remove.max_object_working_bytes_outside,
       (double)to_add.max_object_working_bytes
     );
+    updated_usage += (new_max_working - cur.current_max_task_working_bytes);
   }
   if (config.hasTaskSerializedMemoryInfo()) {
-    new_max_task_serialized_bytes = std::max(
+    new_max_serialized = std::max(
       (double)to_remove.max_object_serialized_bytes_outside,
       (double)to_add.max_object_serialized_bytes
     );
+    updated_usage += (new_max_serialized - cur.current_max_task_serialized_bytes);
   }
 
-  // Footprint delta
-  double delta_footprint = 0.0;
   if (config.hasTaskFootprintMemoryInfo()) {
-    delta_footprint = (double)to_add.cluster_footprint - (double)to_remove.cluster_footprint;
+    updated_usage += (double)to_add.cluster_footprint - (double)to_remove.cluster_footprint;
   }
 
-  // Shared-block delta with remote add and local remove
-  double delta_shared_blocks = 0.0;
+  // Shared-block delta
   if (config.hasSharedBlockMemoryInfo()) {
-    // Current refcounts from all tasks on this rank
-    std::unordered_map<model::SharedBlockType, int> refcount_current;
-    for (auto const& [id, task] : phase_data.getTasksMap()) {
-      for (auto const& sb : task.getSharedBlocks()) {
-        ++refcount_current[sb];
+    // Track current presence
+    std::unordered_map<model::SharedBlockType, model::BytesType> present_before;
+    for (auto const& kv : rank_cluster_info.cluster_summaries) {
+      TaskClusterSummaryInfo const& sum = kv.second;
+      for (auto const& sb_kv : sum.shared_block_bytes_) {
+        present_before.insert(sb_kv);
       }
     }
 
-    // Determine tasks belonging to the local cluster being removed
-    std::unordered_set<model::TaskType> remove_tasks;
-    int local_cid = ClusterSummarizer::globalToLocalClusterID(to_remove.cluster_id, global_max_clusters);
-    for (auto const& kv : clusterer.taskToCluster()) {
-      if (kv.second == local_cid) {
-        remove_tasks.insert(kv.first);
-      }
-    }
+    // Union of candidates to check
+    std::unordered_map<model::SharedBlockType, model::BytesType> all_sbs = present_before;
+    all_sbs.insert(to_add.shared_block_bytes_.begin(), to_add.shared_block_bytes_.end());
+    all_sbs.insert(to_remove.shared_block_bytes_.begin(), to_remove.shared_block_bytes_.end());
 
-    // Count how many references the remove cluster makes to each shared block
-    std::unordered_map<model::SharedBlockType, int> refcount_remove;
-    for (auto tid : remove_tasks) {
-      auto it = phase_data.getTasksMap().find(tid);
-      if (it == phase_data.getTasksMap().end()) continue;
-      for (auto const& sb : it->second.getSharedBlocks()) {
-        ++refcount_remove[sb];
-      }
-    }
-
-    // Helper to get size: prefer phase_data block info; fallback to to_add summary map
-    auto get_shared_size_fn = [&](model::SharedBlockType sb) -> double {
-      if (phase_data.hasSharedBlock(sb)) {
-        return (double)phase_data.getSharedBlock(sb)->getSize();
-      }
-      auto it = to_add.shared_block_bytes_.find(sb);
-      if (it != to_add.shared_block_bytes_.end()) {
-        return (double)it->second;
-      }
-      return 0.0;
+    auto size_of = [&](model::SharedBlockType sb) -> double {
+      assert(all_sbs.find(sb) != all_sbs.end() && "Shared block size missing");
+      return all_sbs.find(sb)->second;
     };
 
-    // Build union of shared blocks to inspect
-    std::unordered_set<model::SharedBlockType> all_sbs;
-    for (auto const& kv : refcount_current) all_sbs.insert(kv.first);
-    for (auto const& kv : to_add.shared_block_bytes_) all_sbs.insert(kv.first);
-    for (auto const& kv : refcount_remove) all_sbs.insert(kv.first);
-
     for (auto const& sb : all_sbs) {
-      int cur = refcount_current.count(sb) ? refcount_current[sb] : 0;
-      int rem = refcount_remove.count(sb) ? refcount_remove[sb] : 0;
-      bool cur_present = (cur > 0);
-      bool remove_would_zero = (cur > 0) && (cur - rem <= 0);
+      bool before = present_before.contains(sb.first);
+      bool removed_here = (to_remove.cluster_id != -1) &&
+                          (to_remove.shared_block_bytes_.contains(sb.first));
+      bool added_here = (to_add.cluster_id != -1) &&
+                        (to_add.shared_block_bytes_.contains(sb.first));
+      bool after = (before && !removed_here) || added_here;
 
-      bool add_will_use = (to_add.shared_block_bytes_.find(sb) != to_add.shared_block_bytes_.end());
-
-      bool final_present = (cur_present && !remove_would_zero) || add_will_use;
-
-      if (cur_present && !final_present) {
-        // Block was present but will not be after update
-        delta_shared_blocks -= get_shared_size_fn(sb);
-      } else if (!cur_present && final_present) {
-        // Block was not present but will be after update
-        delta_shared_blocks += get_shared_size_fn(sb);
+      if (before && !after) {
+        updated_usage -= size_of(sb.first);
+      } else if (!before && after) {
+        updated_usage += size_of(sb.first);
       }
-      // Otherwise, no delta.
     }
   }
 
-  // Update memory usage
-  double updated_usage = breakdown.memory_breakdown.current_memory_usage;
-  if (config.hasTaskWorkingMemoryInfo()) {
-    updated_usage += (new_max_task_working_bytes - breakdown.memory_breakdown.current_max_task_working_bytes);
-  }
-  if (config.hasTaskSerializedMemoryInfo()) {
-    updated_usage += (new_max_task_serialized_bytes - breakdown.memory_breakdown.current_max_task_serialized_bytes);
-  }
-  updated_usage += delta_footprint;
-  updated_usage += delta_shared_blocks;
-
-  double max_memory_available = phase_data.getRankMaxMemoryAvailable();
-  return updated_usage <= max_memory_available;
+  return updated_usage <= rank_available_memory;
 }
 
 } /* end namespace vt_lb::algo::temperedlb */

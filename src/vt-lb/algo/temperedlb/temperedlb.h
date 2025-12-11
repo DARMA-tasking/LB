@@ -46,7 +46,15 @@
 
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/algo/baselb/baselb.h>
+
+// Include all model types
+#include <vt-lb/model/types.h>
 #include <vt-lb/model/PhaseData.h>
+#include <vt-lb/model/Task.h>
+#include <vt-lb/model/Communication.h>
+#include <vt-lb/model/SharedBlock.h>
+
+// Include various temperedlb components
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
@@ -54,6 +62,13 @@
 #include <vt-lb/algo/temperedlb/visualize.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/algo/temperedlb/full_graph_visualizer.h>
+#include <vt-lb/algo/temperedlb/info_propagation.h>
+#include <vt-lb/algo/temperedlb/transfer.h>
+#include <vt-lb/algo/temperedlb/basic_transfer.h>
+#include <vt-lb/algo/temperedlb/relaxed_cluster_transfer.h>
+#include <vt-lb/algo/temperedlb/statistics.h>
+
+// Logging include
 #include <vt-lb/util/logging.h>
 
 #include <limits>
@@ -65,121 +80,6 @@
 #include <mpi.h>
 
 namespace vt_lb::algo::temperedlb {
-
-template <typename CommT, typename DataT, typename JoinT>
-struct InformationPropagation {
-  using ThisType = InformationPropagation<CommT, DataT, JoinT>;
-  using JoinedDataType = std::unordered_map<int, DataT>;
-  using HandleType = typename CommT::template HandleType<ThisType>;
-
-  /**
-   * @brief Construct information propagation instance
-   *
-   * @param comm Communication interface -- n.b., we clone comm to create a new termination scope
-   * @param f Fanout parameter
-   * @param k_max Maximum number of rounds
-   * @param deterministic Whether to use deterministic selection
-   *
-   */
-  InformationPropagation(CommT& comm, Configuration const& config)
-    : comm_(comm.clone()), // collective operation
-      f_(config.f_),
-      k_max_(config.k_max_),
-      deterministic_(config.deterministic_)
-  {
-    handle_ = comm_.template registerInstanceCollective<ThisType>(this);
-
-    if (deterministic_) {
-      gen_select_.seed(config.seed_ + comm_.getRank());
-    }
-  }
-
-  JoinedDataType run(DataT initial_data) {
-    // Insert this rank to avoid self-selection
-    already_selected_.insert(comm_.getRank());
-
-    local_data_[comm_.getRank()] = initial_data;
-
-    sendToFanout(1, local_data_);
-
-    // Wait for termination to happen
-    while (comm_.poll()) {
-      // do nothing
-    }
-
-    VT_LB_LOG(LoadBalancer, normal, "done with poll: local_data size={}\n", local_data_.size());
-
-    return local_data_;
-  }
-
-  void sendToFanout(int round, JoinedDataType const& data) {
-    int const rank = comm_.getRank();
-    int const num_ranks = comm_.numRanks();
-
-    sent_count_ = 0;
-    recv_count_ = 0;
-
-    for (int i = 1; i <= f_; ++i) {
-      if (already_selected_.size() >= static_cast<size_t>(num_ranks)) {
-        return;
-      }
-
-      std::uniform_int_distribution<int> dist(0, num_ranks - 1);
-      int target = -1;
-      do {
-        target = dist(gen_select_);
-      } while (already_selected_.find(target) != already_selected_.end());
-
-      already_selected_.insert(target);
-
-      //printf("rank %d sending to rank %d\n", comm_.getRank(), target);
-      sent_count_++;
-      handle_[target].template send<&ThisType::infoPropagateHandler>(rank, round, data);
-    }
-
-    if (deterministic_) {
-      // In deterministic mode, we expect an ack from each sent message
-      while (sent_count_ != recv_count_) {
-        comm_.poll();
-      }
-
-      if (round < k_max_) {
-        sendToFanout(round + 1, local_data_);
-      }
-    }
-  }
-
-  void infoAckHandler() {
-    recv_count_++;
-    //printf("rank %d received ack %d/%d\n", comm_.getRank(), recv_count_, sent_count_);
-  }
-
-  void infoPropagateHandler(int from_rank, int round, JoinedDataType incoming_data) {
-    // Process incoming data and add to local data
-    local_data_.insert(incoming_data.begin(), incoming_data.end());
-
-    if (deterministic_) {
-      // Acknowledge receipt of message to sender before we go to the next round
-      handle_[from_rank].template send<&ThisType::infoAckHandler>();
-    } else {
-      if (round < k_max_) {
-        sendToFanout(round + 1, local_data_);
-      }
-    }
-  }
-
-private:
-  CommT comm_;
-  int f_ = 2;
-  int k_max_ = 2;
-  bool deterministic_ = false;
-  int sent_count_ = 0;
-  int recv_count_ = 0;
-  std::unordered_set<int> already_selected_;
-  std::unordered_map<int, DataT> local_data_;
-  std::mt19937 gen_select_{std::random_device{}()};
-  HandleType handle_;
-};
 
 template <typename CommT>
 struct TemperedLB final : baselb::BaseLB {
@@ -223,8 +123,9 @@ struct TemperedLB final : baselb::BaseLB {
   }
 
   std::unordered_map<int, TaskClusterSummaryInfo> buildClusterSummaries() {
-    return ClusterSummarizer::buildClusterSummaries(
-      this->getPhaseData(), config_, getClusterer(), global_max_clusters_
+    ClusterSummarizer<CommT> cs(comm_, getClusterer(), global_max_clusters_);
+    return cs.buildClusterSummaries(
+      this->getPhaseData(), config_
     );
   }
 
@@ -269,13 +170,13 @@ struct TemperedLB final : baselb::BaseLB {
 
   template <typename T>
   std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
-    InformationPropagation<CommT, T, TemperedLB<CommT>> ip(comm_, config_);
+    InformationPropagation<CommT, T> ip(comm_, config_);
     auto gathered_info = ip.run(initial_data);
     VT_LB_LOG(LoadBalancer, normal, "gathered load info size={}\n", gathered_info.size());
     return gathered_info;
   }
 
-  void run() {
+  std::unordered_set<model::TaskType> run() {
     // Make communications symmetric before running trials so we only have to do it once
     makeCommunicationsSymmetric();
 
@@ -284,20 +185,63 @@ struct TemperedLB final : baselb::BaseLB {
       runTrial(trial);
       VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
     }
+
+    // Sort trial work distribution by max work
+    std::sort(
+      trial_work_distribution_.begin(),
+      trial_work_distribution_.end(),
+      [](auto const& a, auto const& b) {
+        return std::get<0>(a) < std::get<0>(b);
+      }
+    );
+
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
+    );
+
+    return std::get<1>(trial_work_distribution_.front());
   }
 
   void runTrial(int trial) {
     // Save a clone of the phase data before load balancing
     savePhaseData();
 
-    double total_load = computeLoad();
-    computeStatistics(total_load, "Compute Load");
+    for (int iter = 0; iter < config_.num_iters_; ++iter) {
+      VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
+      runIteration(trial, iter);
+      VT_LB_LOG(LoadBalancer, normal, "  Finished iteration {}/{}\n", iter + 1, config_.num_iters_);
+    }
 
-    double const total_work = WorkModelCalculator::computeWork(
+    // Before we restore phase data for the next trial, save the work and task distribution
+    // @todo: for now, we recompute work from scratch but we probably can use the breakdown
+    auto after_iters_work = WorkModelCalculator::computeWork(
       config_.work_model_,
       WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
     );
-    computeStatistics(total_work, "Work");
+    auto final_stats = computeStatistics(after_iters_work, "Final Work After Iters");
+
+    // Save the max work and task distribution for this trial
+    trial_work_distribution_.emplace_back(
+      final_stats.max,
+      this->getPhaseData().getTaskIds()
+    );
+
+    // Restore phase data
+    restorePhaseData();
+  }
+
+  void runIteration(int trial, int iter) {
+    double total_load = computeLoad();
+    auto load_stats = computeStatistics(total_load, "Compute Load");
+
+    auto work_breakdown = WorkModelCalculator::computeWorkBreakdown(
+      this->getPhaseData(), config_
+    );
+    double const total_work = WorkModelCalculator::computeWork(
+      config_.work_model_, work_breakdown
+    );
+    auto work_stats = computeStatistics(total_work, "Work");
 
     if (config_.hasMemoryInfo()) {
       double const total_memory_usage = WorkModelCalculator::computeMemoryUsage(
@@ -311,7 +255,11 @@ struct TemperedLB final : baselb::BaseLB {
     doClustering();
 
     // Generate visualization after clustering
-    visualizeGraph("temperedlb_rank" + std::to_string(comm_.getRank()) + "_trial" + std::to_string(trial));
+    visualizeGraph(
+      "temperedlb_rank" + std::to_string(comm_.getRank()) +
+      "_trial" + std::to_string(trial) +
+      "_iter" + std::to_string(iter)
+    );
 
     visualizeFullGraphIfNeeded(
       comm_,
@@ -324,34 +272,54 @@ struct TemperedLB final : baselb::BaseLB {
 
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
-      auto info = runInformationPropagation(total_load);
+      auto rank_info = RankInfo{total_work, config_.work_model_.rank_alpha};
+      auto info = runInformationPropagation(rank_info);
       VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      BasicTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
+      std::mt19937 gen_select_;
+      std::random_device seed_;
+      transfer.run(
+        config_.cmf_type_,
+        config_.obj_ordering_,
+        config_.criterion_,
+        config_.deterministic_,
+        load_stats.avg,
+        gen_select_,
+        seed_
+      );
+      double const after_work = WorkModelCalculator::computeWork(
+        config_.work_model_,
+        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+      );
+      computeStatistics(after_work, "After Work");
     } else {
-#if 0
-      computeGlobalMaxClusters();
-#else
+      // computeGlobalMaxClusters();
       // Just assume max of 1000 clusters per rank for now, until we have bcast
-#endif
+
       // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
       // Every task could be its own cluster, but clusters must exist
       assert(clusterer_ != nullptr && "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
-      auto info = runInformationPropagation(local_summary);
-      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      auto rank_info = RankClusterInfo{
+        local_summary,
+        this->getPhaseData().getRankFootprintBytes(),
+        config_.work_model_.rank_alpha,
+        work_breakdown,
+        this->getPhaseData().getSharedBlockIdsHomed()
+      };
+      auto info = runInformationPropagation(rank_info);
+
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "runTrial: gathered load info from {} ranks\n",
+        info.size()
+      );
+
+      RelaxedClusterTransfer<CommT> transfer(
+        comm_, *phase_data_, clusterer_.get(), global_max_clusters_, info, work_stats
+      );
+      transfer.run(config_);
     }
-
-    // Before we restore phase data for the next trial, save the work and task distribution
-    // @todo: for now, we recompute work from scratch but we probably can use the breakdown
-    trial_work_distribution_.emplace_back(
-      WorkModelCalculator::computeWork(
-        config_.work_model_,
-        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
-      ),
-      this->getPhaseData().getTaskIds()
-    );
-
-    // Restore phase data
-    restorePhaseData();
   }
 
   Clusterer const* getClusterer() const { return clusterer_.get(); }
@@ -375,15 +343,18 @@ private:
   }
 
   template <typename T>
-  void computeStatistics(T quantity, std::string const& name) {
+  Statistics computeStatistics(T quantity, std::string const& name) {
     // Compute min, max, avg of quantity across all ranks
     double local_value = static_cast<double>(quantity);
     double global_min = 0.0;
     double global_max = 0.0;
     double global_sum = 0.0;
-    handle_.reduce(0, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
-    handle_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
-    handle_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    // For now, do P reductions since we don't have broadcast yet
+    for (int p = 0; p < comm_.numRanks(); ++p) {
+      handle_.reduce(p, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
+      handle_.reduce(p, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
+      handle_.reduce(p, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    }
     double global_avg = global_sum / static_cast<double>(comm_.numRanks());
     double I = 0;
     if (global_avg > 0.0) {
@@ -395,6 +366,7 @@ private:
         name, global_min, global_max, global_avg, I
       );
     }
+    return Statistics{global_min, global_max, global_avg, I};
   }
 
 private:

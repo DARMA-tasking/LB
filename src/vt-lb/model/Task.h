@@ -126,4 +126,13 @@ public:
 
 } /* end namespace vt_lb::model */
 
+namespace std {
+template <>
+struct hash<vt_lb::model::Task> {
+  std::size_t operator()(const vt_lb::model::Task& t) const noexcept {
+    return std::hash<vt_lb::model::TaskType>{}(t.getId());
+  }
+};
+} /* end namespace std */
+
 #endif /*INCLUDED_VT_LB_MODEL_TASK_H*/

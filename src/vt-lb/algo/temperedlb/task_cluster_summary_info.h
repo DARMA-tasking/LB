@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                             cluster_summarizer.cc
+//                          task_cluster_summary_info.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,13 +41,64 @@
 //@HEADER
 */
 
+#if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_TASK_CLUSTER_SUMMARY_INFO_H
+#define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TASK_CLUSTER_SUMMARY_INFO_H
+
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Communication.h>
-#include <vt-lb/algo/temperedlb/cluster_summarizer.h>
-#include <vt-lb/algo/temperedlb/clustering.h>
-#include <vt-lb/algo/temperedlb/configuration.h>
-#include <vt-lb/util/logging.h>
+
+#include <unordered_map>
+#include <vector>
 
 namespace vt_lb::algo::temperedlb {
 
-} /* end namespace vt_lb::algo::temperedlb */
+struct TaskClusterSummaryInfo {
+  TaskClusterSummaryInfo() = default;
+
+  /// @brief The global cluster ID
+  int cluster_id = -1;
+  /// @brief Number of tasks in the cluster
+  int num_tasks_ = 0;
+  /// @brief The cluster compute load
+  double cluster_load = 0.0;
+  /// @brief Intra-cluster communication volume (send)
+  double cluster_intra_send_bytes = 0.0;
+  /// @brief Intra-cluster communication volume (recv)
+  double cluster_intra_recv_bytes = 0.0;
+  /// @brief Inter-cluster edges
+  std::vector<model::ClusterEdge> inter_edges_;
+
+  // Memory info
+  /// @brief Shared blocks (along with bytes) accessed by tasks in this cluster
+  std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
+  /// @brief Maximum working set size of any task in the cluster
+  model::BytesType max_object_working_bytes = 0;
+  /// @brief Maximum working set size of any task outside the cluster on this rank
+  model::BytesType max_object_working_bytes_outside = 0;
+  /// @brief Maximum serialized size of any task in the cluster
+  model::BytesType max_object_serialized_bytes = 0;
+  /// @brief Maximum serialized size of any task outside the cluster on this rank
+  model::BytesType max_object_serialized_bytes_outside = 0;
+  /// @brief Total footprint of the cluster
+  model::BytesType cluster_footprint = 0;
+
+  template <typename SerializerT>
+  void serialize(SerializerT& s) {
+    s | cluster_id;
+    s | num_tasks_;
+    s | cluster_load;
+    s | cluster_intra_send_bytes;
+    s | cluster_intra_recv_bytes;
+    s | inter_edges_;
+    s | shared_block_bytes_;
+    s | max_object_working_bytes;
+    s | max_object_working_bytes_outside;
+    s | max_object_serialized_bytes;
+    s | max_object_serialized_bytes_outside;
+    s | cluster_footprint;
+  }
+};
+
+} /* namespace vt_lb::algo::temperedlb */
+
+#endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_TASK_CLUSTER_SUMMARY_INFO_H*/

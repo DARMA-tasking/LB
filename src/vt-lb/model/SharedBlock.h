@@ -50,28 +50,28 @@
 namespace vt_lb::model {
 
 struct SharedBlock {
-    SharedBlock() = default;
-    SharedBlock(SharedBlockType id, BytesType size, RankType home)
-      : id_(id), size_(size), home_(home)
-    {}
+  SharedBlock() = default;
+  SharedBlock(SharedBlockType id, BytesType size, RankType home)
+    : id_(id), size_(size), home_(home)
+  {}
 
-    SharedBlockType getId() const { return id_; }
-    BytesType getSize() const { return size_; }
-    RankType getHome() const { return home_; }
+  SharedBlockType getId() const { return id_; }
+  BytesType getSize() const { return size_; }
+  RankType getHome() const { return home_; }
 
-    void setSize(BytesType size) { size_ = size; }
+  void setSize(BytesType size) { size_ = size; }
 
-    template <typename Serializer>
-    void serialize(Serializer& s) {
-      s | id_;
-      s | size_;
-      s | home_;
-    }
+  template <typename Serializer>
+  void serialize(Serializer& s) {
+    s | id_;
+    s | size_;
+    s | home_;
+  }
 
 private:
-    SharedBlockType id_ = no_shared_block;
-    BytesType size_ = 0.0;
-    RankType home_ = invalid_node;
+  SharedBlockType id_ = no_shared_block;
+  BytesType size_ = 0.0;
+  RankType home_ = invalid_node;
 };
 
 } /* end namespace vt_lb::model */

@@ -103,6 +103,15 @@ struct PhaseData {
     }
     return ids;
   }
+  std::unordered_set<SharedBlockType> getSharedBlockIdsHomed() const {
+    std::unordered_set<SharedBlockType> ids;
+    for (auto const& [id, sb] : shared_blocks_) {
+      if (sb.getHome() == rank_) {
+        ids.insert(id);
+      }
+    }
+    return ids;
+  }
 
   BytesType getRankFootprintBytes() const { return rank_footprint_bytes_; }
   void setRankFootprintBytes(BytesType bytes) { rank_footprint_bytes_ = bytes; }
@@ -116,6 +125,20 @@ struct PhaseData {
     shared_blocks_.clear();
     rank_footprint_bytes_ = 0.0;
     rank_max_memory_available_ = 0.0;
+  }
+
+  void purgeDanglingCommunications() {
+    std::vector<Edge> filtered;
+    filtered.reserve(communications_.size());
+    for (auto const& e : communications_) {
+      bool from_present = hasTask(e.getFrom());
+      bool to_present   = hasTask(e.getTo());
+      // Keep edge unless both sides are missing
+      if (from_present || to_present) {
+        filtered.push_back(e);
+      }
+    }
+    communications_.swap(filtered);
   }
 
   template <typename Serializer>

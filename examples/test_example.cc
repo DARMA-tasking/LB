@@ -38,7 +38,7 @@ static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks)
 
   (void)num_ranks;
 
-  int const local_tasks = 10 + rank*2; // Varying number of tasks per rank
+  int const local_tasks = 20 + rank*2; // Varying number of tasks per rank
   std::vector<TaskType> local_ids;
   local_ids.reserve(local_tasks);
 
@@ -118,9 +118,12 @@ int main(int argc, char** argv) {
   config.deterministic_ = true;
   config.seed_ = 97;
   config.visualize_task_graph_ = true;
-  config.visualize_clusters_ = true;
-  config.cluster_based_on_communication_ = true;
-  config.work_model_.beta = 0.5;
+  //config.visualize_clusters_ = true;
+  //config.cluster_based_on_communication_ = true;
+  config.work_model_.beta = 0.0;
+  //config.visualize_full_graph_ = true;
+  config.num_iters_ = 8;
+  config.num_trials_ = 1;
   //config.k_max_ = 1;
 
   vt_lb::model::PhaseData phase_data{comm.getRank()};

@@ -47,6 +47,7 @@
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Communication.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
+#include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
 
 #include <unordered_map>
 #include <vector>
@@ -55,62 +56,9 @@
 
 namespace vt_lb::algo::temperedlb {
 
-struct TaskClusterSummaryInfo {
-  TaskClusterSummaryInfo() = default;
-
-  int cluster_id = -1;
-  int num_tasks_ = 0;
-  double cluster_load = 0.0;
-  double cluster_intra_send_bytes = 0.0;
-  double cluster_intra_recv_bytes = 0.0;
-  std::vector<model::Edge> inter_edges_;
-
-  // Memory info
-  std::unordered_map<model::SharedBlockType, model::BytesType> shared_block_bytes_;
-  model::BytesType max_object_working_bytes = 0;
-  model::BytesType max_object_working_bytes_outside = 0;
-  model::BytesType max_object_serialized_bytes = 0;
-  model::BytesType max_object_serialized_bytes_outside = 0;
-  model::BytesType cluster_footprint = 0;
-
-  template <typename SerializerT>
-  void serialize(SerializerT& s) {
-    s | cluster_id;
-    s | num_tasks_;
-    s | cluster_load;
-    s | cluster_intra_send_bytes;
-    s | cluster_intra_recv_bytes;
-    s | inter_edges_;
-    s | shared_block_bytes_;
-    s | max_object_working_bytes;
-    s | max_object_working_bytes_outside;
-    s | max_object_serialized_bytes;
-    s | max_object_serialized_bytes_outside;
-    s | cluster_footprint;
-  }
-};
-
 struct Clusterer;
 
-struct ClusterSummarizer {
-  /**
-   * @brief Build cluster summaries from phase data and a clusterer
-   *
-   * @param[in] pd Phase data
-   * @param[in] clusterer_ Clusterer instance
-   * @param[in] global_max_clusters Global maximum number of clusters
-   * @param[in] config Configuration object
-   *
-   * @return Map from global cluster ID to summary info
-   */
-  static std::unordered_map<int, TaskClusterSummaryInfo>
-  buildClusterSummaries(
-    model::PhaseData const& pd,
-    Configuration const& config,
-    Clusterer const* clusterer_,
-    int global_max_clusters
-);
-
+struct ClusterSummarizerUtil {
   /**
    * @brief Convert local cluster ID to global cluster ID
    *
@@ -151,6 +99,70 @@ struct ClusterSummarizer {
   }
 };
 
+template <typename CommT>
+struct ClusterSummarizer : ClusterSummarizerUtil {
+  using HandleType = typename CommT::template HandleType<ClusterSummarizer<CommT>>;
+
+  ClusterSummarizer(
+    CommT& comm,
+    Clusterer const* clusterer,
+    int global_max_clusters
+  ) : comm_(comm.clone()),
+      handle_(comm_.template registerInstanceCollective<ClusterSummarizer<CommT>>(this)),
+      clusterer_(clusterer),
+      global_max_clusters_(global_max_clusters)
+  {}
+
+  /**
+   * @brief Build cluster summaries from phase data and a clusterer
+   *
+   * @param[in] pd Phase data
+   * @param[in] config Configuration object
+   *
+   * @return Map from global cluster ID to summary info
+   */
+  std::unordered_map<int, TaskClusterSummaryInfo>
+  buildClusterSummaries(
+    model::PhaseData const& pd,
+    Configuration const& config
+  );
+
+  /**
+   * @brief Resolve cluster ID for a given task
+   *
+   * @param[in] from_rank Rank from which the request originated
+   * @param[in] task_id Task ID
+   * @param[in] source_task_id Source task ID (for inter-cluster edges)
+   * @param[in] source_global_cluster_id Source global cluster ID
+   */
+  void resolveClusterIDForTask(
+    int from_rank,
+    model::TaskType task_id,
+    model::TaskType source_task_id,
+    int source_global_cluster_id
+  );
+
+  /**
+   * @brief Handler receiving cluster ID for a task
+   *
+   * @param[in] task_id Task ID
+   * @param[in] global_cluster_id Global cluster ID
+   */
+  void recvClusterIDForTask(
+    model::TaskType task_id,
+    int global_cluster_id
+  );
+
+private:
+  CommT comm_;
+  HandleType handle_;
+  Clusterer const* clusterer_ = nullptr;
+  int global_max_clusters_ = 1000;
+  std::unordered_map<model::TaskType, int> task_to_global_cluster_id_;
+};
+
 } /* end namespace vt_lb::algo::temperedlb */
+
+#include <vt-lb/algo/temperedlb/cluster_summarizer.impl.h>
 
 #endif /*INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTER_SUMMARIZER_H*/

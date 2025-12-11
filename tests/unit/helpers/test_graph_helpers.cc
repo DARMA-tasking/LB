@@ -1107,11 +1107,18 @@ void sanityCheckTasks(
   }
 }
 
-void sanityCheckEdges(const vt_lb::model::PhaseData &pd, bool expect_edges) {
+void sanityCheckEdges(const vt_lb::model::PhaseData &pd, bool expect_edges, int num_ranks) {
   // check edges
+  auto task_ids = pd.getTaskIds();
+  int task_count = task_ids.size();
   auto &edges = pd.getCommunications();
-  if (!expect_edges) {
+  if (!expect_edges or (num_ranks == 1 and task_count <= 1)) {
     EXPECT_EQ(edges.size(), 0);
+  } else {
+    // this allows zero because we could have drawn all zero endpoint counts;
+    // we should figure out how to test this better because it will still pass
+    // if edge-generation was skipped altogether
+    EXPECT_GE(edges.size(), 0);
   }
 
   // check edge weights
@@ -1139,7 +1146,7 @@ TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm) {
 
   sanityCheckBlocks(pd, true);
   sanityCheckTasks(pd, true, uniform_task_count);
-  sanityCheckEdges(pd, include_comm);
+  sanityCheckEdges(pd, include_comm, num_ranks);
 };
 
 TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_with_comm) {
@@ -1161,7 +1168,7 @@ TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_with_comm) {
 
   sanityCheckBlocks(pd, true);
   sanityCheckTasks(pd, true, uniform_task_count);
-  sanityCheckEdges(pd, include_comm);
+  sanityCheckEdges(pd, include_comm, num_ranks);
 };
 
 TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm_unib) {
@@ -1183,7 +1190,7 @@ TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm_unib
 
   sanityCheckBlocks(pd, true);
   sanityCheckTasks(pd, true, uniform_task_count);
-  sanityCheckEdges(pd, include_comm);
+  sanityCheckEdges(pd, include_comm, num_ranks);
 };
 
 TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm_unibt) {
@@ -1205,7 +1212,7 @@ TYPED_TEST(TestGraphHelpers, test_generate_graph_with_shared_blocks_no_comm_unib
 
   sanityCheckBlocks(pd, true);
   sanityCheckTasks(pd, true, uniform_task_count);
-  sanityCheckEdges(pd, include_comm);
+  sanityCheckEdges(pd, include_comm, num_ranks);
 };
 
 TYPED_TEST(TestGraphHelpers, test_generate_graph_without_shared_blocks_with_comm) {
@@ -1225,7 +1232,7 @@ TYPED_TEST(TestGraphHelpers, test_generate_graph_without_shared_blocks_with_comm
   );
 
   sanityCheckTasks(pd, true, false);
-  sanityCheckEdges(pd, include_comm);
+  sanityCheckEdges(pd, include_comm, num_ranks);
 };
 
 }}} // end namespace vt_lb::tests::unit

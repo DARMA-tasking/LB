@@ -230,11 +230,6 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     }
   }
 
-  /*virtual*/ bool acceptIncomingTask(model::Task const& task) override final {
-    (void)task;
-    return true;
-  }
-
 private:
   std::unordered_map<int, RankClusterInfo> cluster_info_;
   Statistics stats_;

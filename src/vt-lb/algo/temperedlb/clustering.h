@@ -97,8 +97,10 @@ struct CommunicationClusterer : Clusterer {
       materializeClusters();
       return;
     }
-    std::sort(agg_edges_.begin(), agg_edges_.end(),
-              [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); });
+    std::sort(
+      agg_edges_.begin(), agg_edges_.end(),
+      [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); }
+    );
     std::unordered_set<TaskType> matched;
     int next_cid = 0;
     for (auto const& e : agg_edges_) {
@@ -122,12 +124,18 @@ struct CommunicationClusterer : Clusterer {
 
 private:
   void clear() {
-    tasks_.clear(); agg_edges_.clear();
-    task_to_cluster_.clear(); clusters_.clear();
+    tasks_.clear();
+    agg_edges_.clear();
+    task_to_cluster_.clear();
+    clusters_.clear();
   }
+
   void collectTasks() {
-    for (auto const& kv : pd_.getTasksMap()) tasks_.push_back(kv.first);
+    for (auto const& kv : pd_.getTasksMap()) {
+      tasks_.push_back(kv.first);
+    }
   }
+
   void buildAggregatedEdges() {
     struct PairHash {
       size_t operator()(std::pair<TaskType,TaskType> const& p) const noexcept {
@@ -147,6 +155,7 @@ private:
     for (auto const& kv : agg)
       agg_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
   }
+
   void materializeClusters() {
     std::unordered_map<int, Cluster> tmp;
     for (auto const& [t,cid] : task_to_cluster_) {
@@ -183,13 +192,18 @@ struct SharedBlockClusterer : Clusterer {
     buildAggregatedEdgesFromSharedBlocks(); // only shared-block-derived edges
     collectTasks();
     if (sb_edges_.empty()) {
+      // Each task its own cluster
       int cid = 0;
-      for (auto const& t : tasks_) task_to_cluster_[t] = cid++;
+      for (auto const& t : tasks_) {
+        task_to_cluster_[t] = cid++;
+      }
       materializeClusters();
       return;
     }
-    std::sort(sb_edges_.begin(), sb_edges_.end(),
-              [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); });
+    std::sort(
+      sb_edges_.begin(), sb_edges_.end(),
+      [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); }
+    );
     std::unordered_set<TaskType> matched;
     int next_cid = 0;
     for (auto const& e : sb_edges_) {
@@ -198,13 +212,16 @@ struct SharedBlockClusterer : Clusterer {
       if (!matched.count(u) && !matched.count(v)) {
         task_to_cluster_[u] = next_cid;
         task_to_cluster_[v] = next_cid;
-        matched.insert(u); matched.insert(v);
+        matched.insert(u);
+        matched.insert(v);
         ++next_cid;
       }
     }
-    for (auto const& t : tasks_)
-      if (!task_to_cluster_.count(t))
+    for (auto const& t : tasks_) {
+      if (!task_to_cluster_.count(t)) {
         task_to_cluster_[t] = next_cid++;
+      }
+    }
     materializeClusters();
   }
 
@@ -220,8 +237,11 @@ private:
   }
 
   void collectTasks() {
-    for (auto const& kv : pd_.getTasksMap()) tasks_.push_back(kv.first);
+    for (auto const& kv : pd_.getTasksMap()) {
+      tasks_.push_back(kv.first);
+    }
   }
+
   void buildAggregatedEdgesFromSharedBlocks() {
     // Build edges exclusively from shared block co-access (communication edges are ignored)
     // Map shared block -> tasks
@@ -251,24 +271,29 @@ private:
       for (size_t i=0;i<vec.size();++i) {
         for (size_t j=i+1;j<vec.size();++j) {
           auto u = vec[i]; auto v = vec[j];
-            auto key = (u < v) ? std::make_pair(u,v) : std::make_pair(v,u);
-            agg[key] += size;
+          auto key = (u < v) ? std::make_pair(u,v) : std::make_pair(v,u);
+          agg[key] += size;
         }
       }
     }
     sb_edges_.reserve(agg.size());
-    for (auto const& kv : agg)
+    for (auto const& kv : agg) {
       sb_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
+    }
   }
+
   void materializeClusters() {
     std::unordered_map<int, Cluster> tmp;
     for (auto const& [t,cid] : task_to_cluster_) {
-      auto& cl = tmp[cid]; cl.id = cid; cl.members.push_back(t);
+      auto& cl = tmp[cid];
+      cl.id = cid;
+      cl.members.push_back(t);
     }
     for (auto& kv : tmp) {
       auto& cl = kv.second;
-      for (auto const& t : cl.members)
+      for (auto const& t : cl.members) {
         cl.load += pd_.getTasksMap().at(t).getLoad();
+      }
       clusters_.push_back(std::move(cl));
     }
     std::sort(clusters_.begin(), clusters_.end(), [](auto const& a, auto const& b){ return a.id < b.id; });
@@ -292,11 +317,16 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
   using BytesType = vt_lb::model::BytesType;
   using PhaseData = vt_lb::model::PhaseData;
 
-  LeidenCPMStandaloneClusterer(PhaseData const& pd,
-                               double resolution = 50.0,
-                               int max_passes = 10,
-                               int max_levels = 4)
-    : pd_(pd), gamma_(resolution), max_passes_(max_passes), max_levels_(max_levels) {}
+  LeidenCPMStandaloneClusterer(
+    PhaseData const& pd,
+    double resolution = 50.0,
+    int max_passes = 10,
+    int max_levels = 4
+  ) : pd_(pd),
+      gamma_(resolution),
+      max_passes_(max_passes),
+      max_levels_(max_levels)
+  {}
 
   void compute() override {
     clear();

@@ -78,6 +78,7 @@ struct RankClusterInfo {
   double rank_footprint_bytes = 0.0;
   double rank_alpha = 0.0;
   WorkBreakdown rank_breakdown;
+  std::unordered_set<model::SharedBlockType> shared_blocks_homed;
 
   template <typename SerializerT>
   void serialize(SerializerT& s) {
@@ -85,6 +86,7 @@ struct RankClusterInfo {
     s | rank_footprint_bytes;
     s | rank_alpha;
     s | rank_breakdown;
+    s | shared_blocks_homed;
   }
 };
 

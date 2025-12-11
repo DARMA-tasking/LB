@@ -242,29 +242,6 @@ struct WorkModelCalculator {
   );
 
   /**
-   * @brief Check if the memory usage fits within available memory after updates
-   *
-   * @param config The configuration
-   * @param phase_data The phase data
-   * @param clusterer The clusterer
-   * @param global_max_clusters The global maximum number of clusters
-   * @param breakdown The current work breakdown
-   * @param to_add The cluster of tasks to add
-   * @param to_remove The cluster of tasks to remove
-   *
-   * @return True if it fits, false otherwise
-   */
-  static bool checkMemoryFitUpdate(
-    Configuration const& config,
-    model::PhaseData const& phase_data,
-    Clusterer const& clusterer,
-    int global_max_clusters,
-    WorkBreakdown const& breakdown,
-    TaskClusterSummaryInfo to_add,
-    TaskClusterSummaryInfo to_remove
-  );
-
-  /**
    * @brief Check if the memory usage fits within available memory using just summaries
    *
    * @param config The configuration

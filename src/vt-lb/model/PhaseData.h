@@ -103,6 +103,15 @@ struct PhaseData {
     }
     return ids;
   }
+  std::unordered_set<SharedBlockType> getSharedBlockIdsHomed() const {
+    std::unordered_set<SharedBlockType> ids;
+    for (auto const& [id, sb] : shared_blocks_) {
+      if (sb.getHome() == rank_) {
+        ids.insert(id);
+      }
+    }
+    return ids;
+  }
 
   BytesType getRankFootprintBytes() const { return rank_footprint_bytes_; }
   void setRankFootprintBytes(BytesType bytes) { rank_footprint_bytes_ = bytes; }

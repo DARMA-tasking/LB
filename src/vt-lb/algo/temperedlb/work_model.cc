@@ -260,7 +260,7 @@ namespace vt_lb::algo::temperedlb {
   };
   std::unordered_set<long long> seen;
 
-  auto process_edges_reclass = [&](const std::vector<model::ClusterEdge>& edges) {
+  auto process_edges_reclass = [&](std::vector<model::ClusterEdge> const& edges) {
     for (auto const& e : edges) {
       int g_from = e.getFromCluster();
       int g_to   = e.getToCluster();
@@ -310,6 +310,57 @@ namespace vt_lb::algo::temperedlb {
   }
   if (to_remove.cluster_id != -1) {
     process_edges_reclass(to_remove.inter_edges_);
+  }
+
+  auto const& homed_blocks = rank_cluster_info.shared_blocks_homed;
+
+  // Gather present-before and present-after maps
+  std::unordered_map<model::SharedBlockType, model::BytesType> present_before;
+  for (const auto& kv : rank_cluster_info.cluster_summaries) {
+    for (const auto& sb_kv : kv.second.shared_block_bytes_) {
+      present_before.insert(sb_kv);
+    }
+  }
+  std::unordered_map<model::SharedBlockType, model::BytesType> present_after = present_before;
+  if (to_remove.cluster_id != -1) {
+    for (const auto& sb_kv : to_remove.shared_block_bytes_) {
+      present_after.erase(sb_kv.first);
+    }
+  }
+  if (to_add.cluster_id != -1) {
+    for (const auto& sb_kv : to_add.shared_block_bytes_) {
+      present_after.insert(sb_kv);
+    }
+  }
+
+  // Union of all blocks to find size
+  std::unordered_map<model::SharedBlockType, model::BytesType> all_sbs = present_before;
+  all_sbs.insert(to_add.shared_block_bytes_.begin(), to_add.shared_block_bytes_.end());
+  all_sbs.insert(to_remove.shared_block_bytes_.begin(), to_remove.shared_block_bytes_.end());
+
+  auto size_of = [&](model::SharedBlockType sb) -> double {
+    assert(all_sbs.find(sb) != all_sbs.end() && "Shared block size missing");
+    return all_sbs.find(sb)->second;
+  };
+
+  for (auto const& sb : all_sbs) {
+    bool before = present_before.contains(sb.first);
+    bool removed_here = (to_remove.cluster_id != -1) &&
+                        (to_remove.shared_block_bytes_.contains(sb.first));
+    bool added_here = (to_add.cluster_id != -1) &&
+                      (to_add.shared_block_bytes_.contains(sb.first));
+    bool after = (before && !removed_here) || added_here;
+
+    bool is_homed_here = homed_blocks.contains(sb.first);
+    if (is_homed_here) {
+      continue;
+    }
+
+    if (before && !after) {
+      new_bd.shared_mem_comm -= size_of(sb.first);
+    } else if (!before && after) {
+      new_bd.shared_mem_comm += size_of(sb.first);
+    }
   }
 
   new_bd.compute              = std::max(0.0, new_bd.compute);
@@ -446,10 +497,9 @@ namespace vt_lb::algo::temperedlb {
     }
 
     // Union of candidates to check
-    std::unordered_map<model::SharedBlockType, model::BytesType> all_sbs;
-    for (auto const& sb : present_before) all_sbs.insert(sb);
-    for (auto const& kv : to_add.shared_block_bytes_) all_sbs.insert(kv);
-    for (auto const& kv : to_remove.shared_block_bytes_) all_sbs.insert(kv);
+    std::unordered_map<model::SharedBlockType, model::BytesType> all_sbs = present_before;
+    all_sbs.insert(to_add.shared_block_bytes_.begin(), to_add.shared_block_bytes_.end());
+    all_sbs.insert(to_remove.shared_block_bytes_.begin(), to_remove.shared_block_bytes_.end());
 
     auto size_of = [&](model::SharedBlockType sb) -> double {
       assert(all_sbs.find(sb) != all_sbs.end() && "Shared block size missing");

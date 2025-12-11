@@ -304,7 +304,8 @@ struct TemperedLB final : baselb::BaseLB {
         local_summary,
         this->getPhaseData().getRankFootprintBytes(),
         config_.work_model_.rank_alpha,
-        work_breakdown
+        work_breakdown,
+        this->getPhaseData().getSharedBlockIdsHomed()
       };
       auto info = runInformationPropagation(rank_info);
       VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());

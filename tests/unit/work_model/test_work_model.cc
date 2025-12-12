@@ -45,6 +45,7 @@
 
 #include "test_parallel_harness.h"
 #include "test_helpers.h"
+#include "graph_helpers.h"
 
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
@@ -53,7 +54,247 @@
 namespace vt_lb { namespace tests { namespace unit {
 
 template <comm::Communicator CommType>
-struct TestWorkModelBasic : TestParallelHarness<CommType> {};
+struct TestWorkModelBasic : TestParallelHarness<CommType> {
+  static constexpr int num_seeds = 100;
+
+  void setupRandomNonzeroWorkModel(
+    std::mt19937 &gen, algo::temperedlb::WorkModel &wm
+  );
+  void setupNoMemoryInfo(algo::temperedlb::Configuration &cfg);
+  void setupRandomTaskMemory(std::mt19937 &gen, model::PhaseData &pd);
+
+  double setupRandomUniformLoadOnlyNoMemProblem(
+    std::mt19937 &gen, model::PhaseData &pd,
+    algo::temperedlb::Configuration &cfg,
+    algo::temperedlb::WorkBreakdown &expected_bd,
+    algo::temperedlb::WorkModel &wm
+  );
+  double setupRandomLoadOnlyNoMemProblem(
+    std::mt19937 &gen, model::PhaseData &pd,
+    algo::temperedlb::Configuration &cfg,
+    algo::temperedlb::WorkBreakdown &expected_bd,
+    algo::temperedlb::WorkModel &wm
+  );
+  double setupRandomUniformSharedBlocksProblem(
+    std::mt19937 &gen, model::PhaseData &pd,
+    algo::temperedlb::Configuration &cfg,
+    algo::temperedlb::WorkBreakdown &expected_bd,
+    algo::temperedlb::WorkModel &wm
+  );
+
+  void verifyNoChangeUpdate(
+    const model::PhaseData &pd, const algo::temperedlb::Configuration &cfg,
+    const algo::temperedlb::WorkBreakdown &expected_bd,
+    const algo::temperedlb::WorkModel &wm, double expected_work
+  );
+};
+
+template <comm::Communicator CommType>
+void TestWorkModelBasic<CommType>::setupRandomNonzeroWorkModel(
+  std::mt19937 &gen, algo::temperedlb::WorkModel &wm
+) {
+  std::uniform_real_distribution<> uni_dist(0.0, 1.0);
+  wm.rank_alpha = 2.0 * uni_dist(gen);
+  wm.beta = uni_dist(gen);
+  wm.gamma = uni_dist(gen);
+  wm.delta = uni_dist(gen);
+}
+
+template <comm::Communicator CommType>
+void TestWorkModelBasic<CommType>::setupNoMemoryInfo(
+  algo::temperedlb::Configuration &cfg
+) {
+  cfg.work_model_.has_memory_info = false;
+  // Make sure that the above always overrides the below by leaving them on
+  cfg.work_model_.has_shared_block_memory_info = true;
+  cfg.work_model_.has_task_footprint_memory_info = true;
+  cfg.work_model_.has_task_working_memory_info = true;
+  cfg.work_model_.has_task_serialized_memory_info = true;
+}
+
+template <comm::Communicator CommType>
+void TestWorkModelBasic<CommType>::setupRandomTaskMemory(
+  std::mt19937 &gen, model::PhaseData &pd
+) {
+  std::exponential_distribution<> expo_dist(100.0);
+  int smem = static_cast<int>(expo_dist(gen));
+  int fmem = smem + static_cast<int>(expo_dist(gen));
+  generateTaskMemory(pd, gen, expo_dist, fmem, smem);
+}
+
+template <comm::Communicator CommType>
+double TestWorkModelBasic<CommType>::setupRandomUniformLoadOnlyNoMemProblem(
+  std::mt19937 &gen, model::PhaseData &pd, algo::temperedlb::Configuration &cfg,
+  algo::temperedlb::WorkBreakdown &expected_bd, algo::temperedlb::WorkModel &wm
+) {
+  // We're using all non-zero coefficients but there will only be load
+  setupRandomNonzeroWorkModel(gen, wm);
+
+  // Do not consider memory even though we will define some
+  setupNoMemoryInfo(cfg);
+
+  // Generate graph: task load will be uniform across all tasks on a given rank;
+  // there will be no shared blocks or communication
+  int min_tasks_per_rank = 0;
+  int max_tasks_per_rank = 100;
+  double expo_lambda = 100.0;
+  std::exponential_distribution<> expo_dist(expo_lambda);
+  double uniform_load = expo_dist(gen);
+  std::uniform_real_distribution<> load_dist(uniform_load, uniform_load);
+  generateTasksWithoutSharedBlocks(
+    pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
+  );
+
+  // Define random task memory even though we will not use it
+  setupRandomTaskMemory(gen, pd);
+
+  // Define expected breakdown and work
+  expected_bd.compute = pd.getTasksMap().size() * uniform_load;
+  expected_bd.inter_node_recv_comm = 0.0;
+  expected_bd.inter_node_send_comm = 0.0;
+  expected_bd.intra_node_recv_comm = 0.0;
+  expected_bd.intra_node_send_comm = 0.0;
+  expected_bd.shared_mem_comm = 0.0;
+  expected_bd.memory_breakdown = {0.0, 0.0, 0.0};
+
+  // Compute expected work
+  double expected_work = expected_bd.compute * wm.rank_alpha;
+  return expected_work;
+}
+
+template <comm::Communicator CommType>
+double TestWorkModelBasic<CommType>::setupRandomLoadOnlyNoMemProblem(
+  std::mt19937 &gen, model::PhaseData &pd, algo::temperedlb::Configuration &cfg,
+  algo::temperedlb::WorkBreakdown &expected_bd, algo::temperedlb::WorkModel &wm
+) {
+  // We're using all non-zero coefficients but there will only be load
+  setupRandomNonzeroWorkModel(gen, wm);
+
+  // Do not consider memory even though we will define some
+  setupNoMemoryInfo(cfg);
+
+  // Generate graph: task load will be uniform across all tasks on a given rank;
+  // there will be no shared blocks or communication
+  int min_tasks_per_rank = 0;
+  int max_tasks_per_rank = 100;
+  double expo_lambda = 10.0;
+  std::exponential_distribution<> load_dist(expo_lambda);
+  generateTasksWithoutSharedBlocks(
+    pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
+  );
+
+  // Define random task memory even though we will not use it
+  setupRandomTaskMemory(gen, pd);
+
+  // Define expected breakdown and work
+  double expected_compute = 0.0;
+  auto &taskmap = pd.getTasksMap();
+  for (auto &t : taskmap) {
+    expected_compute += t.second.getLoad();
+  }
+  expected_bd.compute = expected_compute;
+  expected_bd.inter_node_recv_comm = 0.0;
+  expected_bd.inter_node_send_comm = 0.0;
+  expected_bd.intra_node_recv_comm = 0.0;
+  expected_bd.intra_node_send_comm = 0.0;
+  expected_bd.shared_mem_comm = 0.0;
+  expected_bd.memory_breakdown = {0.0, 0.0, 0.0};
+
+  // Compute expected work
+  double expected_work = expected_bd.compute * wm.rank_alpha;
+  return expected_work;
+}
+
+template <comm::Communicator CommType>
+double TestWorkModelBasic<CommType>::setupRandomUniformSharedBlocksProblem(
+  std::mt19937 &gen, model::PhaseData &pd, algo::temperedlb::Configuration &cfg,
+  algo::temperedlb::WorkBreakdown &expected_bd, algo::temperedlb::WorkModel &wm
+) {
+  // We're using all non-zero coefficients but there will only be load
+  setupRandomNonzeroWorkModel(gen, wm);
+
+  // Consider all types of memory even though only shared blocks have it
+  cfg.work_model_.has_memory_info = true;
+  cfg.work_model_.has_shared_block_memory_info = true;
+  cfg.work_model_.has_task_footprint_memory_info = true;
+  cfg.work_model_.has_task_working_memory_info = true;
+  cfg.work_model_.has_task_serialized_memory_info = true;
+
+  // Generate graph: task load will be uniform across all tasks on a given rank;
+  // there will be no shared blocks or communication
+  int min_blocks_per_rank = 0;
+  int max_blocks_per_rank = 100;
+  double expo_lambda = 100.0;
+  std::exponential_distribution<> expo_dist(expo_lambda);
+  int uniform_mem = static_cast<int>(expo_dist(gen));
+  int min_tasks_per_block = 1;
+  int max_tasks_per_block = 10;
+  double uniform_load = expo_dist(gen);
+  std::uniform_real_distribution<> load_dist(uniform_load, uniform_load);
+  generateSharedBlocksWithTasks(
+    pd, gen, min_blocks_per_rank, max_blocks_per_rank, uniform_mem, uniform_mem,
+    min_tasks_per_block, max_tasks_per_block, load_dist
+  );
+
+  // Define expected breakdown and work
+  double expected_block_mem =
+    static_cast<double>(uniform_mem) * pd.getSharedBlocksMap().size();
+  expected_bd.compute = pd.getTasksMap().size() * uniform_load;
+  expected_bd.inter_node_recv_comm = 0.0;
+  expected_bd.inter_node_send_comm = 0.0;
+  expected_bd.intra_node_recv_comm = 0.0;
+  expected_bd.intra_node_send_comm = 0.0;
+  expected_bd.shared_mem_comm = expected_block_mem;
+  expected_bd.memory_breakdown = {expected_block_mem, 0.0, 0.0};
+
+  // Compute expected work
+  double expected_work =
+    expected_bd.compute * wm.rank_alpha +
+    expected_bd.shared_mem_comm * wm.delta;
+
+  return expected_work;
+}
+
+template <comm::Communicator CommType>
+void TestWorkModelBasic<CommType>::verifyNoChangeUpdate(
+  const model::PhaseData &pd, const algo::temperedlb::Configuration &cfg,
+  const algo::temperedlb::WorkBreakdown &expected_bd,
+  const algo::temperedlb::WorkModel &wm, double expected_work
+) {
+  auto bd = algo::temperedlb::WorkModelCalculator::computeWorkBreakdown(pd, cfg);
+  auto &mb = bd.memory_breakdown;
+  auto &emb = expected_bd.memory_breakdown;
+
+  // Verify computed work breakdown
+  EXPECT_FLOAT_EQ(bd.compute, expected_bd.compute);
+  EXPECT_DOUBLE_EQ(bd.inter_node_recv_comm, expected_bd.inter_node_recv_comm);
+  EXPECT_DOUBLE_EQ(bd.inter_node_send_comm, expected_bd.inter_node_send_comm);
+  EXPECT_DOUBLE_EQ(bd.intra_node_recv_comm, expected_bd.intra_node_recv_comm);
+  EXPECT_DOUBLE_EQ(bd.intra_node_send_comm, expected_bd.intra_node_send_comm);
+  EXPECT_DOUBLE_EQ(bd.shared_mem_comm, expected_bd.shared_mem_comm);
+
+  // Verify computed memory breakdown
+  EXPECT_DOUBLE_EQ(mb.current_memory_usage, emb.current_memory_usage);
+  EXPECT_DOUBLE_EQ(
+    mb.current_max_task_working_bytes, emb.current_max_task_working_bytes
+  );
+  EXPECT_DOUBLE_EQ(
+    mb.current_max_task_serialized_bytes, emb.current_max_task_serialized_bytes
+  );
+
+  // Verify baseline work
+  double base = algo::temperedlb::WorkModelCalculator::computeWork(wm, bd);
+  EXPECT_FLOAT_EQ(base, expected_work);
+
+  // Verify update under no changes
+  std::vector<model::Task> add_tasks;
+  std::vector<model::Edge> add_edges;
+  std::vector<model::TaskType> remove_ids;
+  double updated = algo::temperedlb::WorkModelCalculator::computeWorkUpdate(
+    pd, wm, bd, add_tasks, add_edges, remove_ids
+  );
+  EXPECT_DOUBLE_EQ(updated, base);
+}
 
 TYPED_TEST_SUITE(TestWorkModelBasic, CommTypesForTesting, CommNameGenerator);
 
@@ -166,6 +407,66 @@ TYPED_TEST(TestWorkModelBasic, compute_work_update_no_changes_is_identity) {
   );
 
   EXPECT_DOUBLE_EQ(updated, base);
+}
+
+TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesUniformLoadOnlyNoMem) {
+  auto& the_comm = this->comm;
+  auto rank = the_comm.getRank();
+
+  algo::temperedlb::Configuration cfg;
+  algo::temperedlb::WorkBreakdown bd;
+  algo::temperedlb::WorkModel wm;
+
+  std::mt19937 gen;
+  for (int i=0; i<this->num_seeds; ++i) {
+    gen.seed(rank * 89 + i * 3);
+    model::PhaseData pd(rank);
+    double expected_work = this->setupRandomUniformLoadOnlyNoMemProblem(
+      gen, pd, cfg, bd, wm
+    );
+
+    this->verifyNoChangeUpdate(pd, cfg, bd, wm, expected_work);
+  }
+}
+
+TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadOnlyNoMem) {
+  auto& the_comm = this->comm;
+  auto rank = the_comm.getRank();
+
+  algo::temperedlb::Configuration cfg;
+  algo::temperedlb::WorkBreakdown bd;
+  algo::temperedlb::WorkModel wm;
+
+  std::mt19937 gen;
+  for (int i=0; i<this->num_seeds; ++i) {
+    gen.seed(rank * 21 + i * 4);
+    model::PhaseData pd(rank);
+    double expected_work = this->setupRandomLoadOnlyNoMemProblem(
+      gen, pd, cfg, bd, wm
+    );
+
+    this->verifyNoChangeUpdate(pd, cfg, bd, wm, expected_work);
+  }
+}
+
+TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesUniformSharedBlocks) {
+  auto& the_comm = this->comm;
+  auto rank = the_comm.getRank();
+
+  algo::temperedlb::Configuration cfg;
+  algo::temperedlb::WorkBreakdown bd;
+  algo::temperedlb::WorkModel wm;
+
+  std::mt19937 gen;
+  for (int i=0; i<this->num_seeds; ++i) {
+    gen.seed(rank * 191 + i * 5);
+    model::PhaseData pd(rank);
+    double expected_work = this->setupRandomUniformSharedBlocksProblem(
+      gen, pd, cfg, bd, wm
+    );
+
+    this->verifyNoChangeUpdate(pd, cfg, bd, wm, expected_work);
+  }
 }
 
 }}} // end namespace vt_lb::tests::unit

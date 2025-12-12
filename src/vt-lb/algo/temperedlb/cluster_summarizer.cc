@@ -41,13 +41,30 @@
 //@HEADER
 */
 
-#include <vt-lb/model/PhaseData.h>
-#include <vt-lb/model/Communication.h>
+
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
-#include <vt-lb/algo/temperedlb/configuration.h>
-#include <vt-lb/util/logging.h>
+
+#include <unordered_map>
+#include <vector>
 
 namespace vt_lb::algo::temperedlb {
+
+/*static*/ std::unordered_map<int, int> ClusterSummarizerUtil::buildLocalToGlobalClusterIDMap(
+  int rank,
+  int global_max_clusters,
+  std::vector<Cluster> const& clusters
+) {
+  std::unordered_map<int, int> local_to_global;
+  for (auto const& cluster : clusters) {
+    int global_cluster_id = ClusterSummarizerUtil::localToGlobalClusterID(
+      cluster.id,
+      rank,
+      global_max_clusters
+    );
+    local_to_global[cluster.id] = global_cluster_id;
+  }
+  return local_to_global;
+}
 
 } /* end namespace vt_lb::algo::temperedlb */

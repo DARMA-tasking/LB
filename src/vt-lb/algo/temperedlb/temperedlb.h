@@ -102,7 +102,7 @@ struct TemperedLB final : baselb::BaseLB {
 
   void clusterBasedOnCommunication() {
     auto& pd = this->getPhaseData();
-    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 80.0);
+    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 10000.0);
     clusterer_->compute();
   }
 

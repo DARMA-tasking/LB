@@ -77,7 +77,15 @@ struct Transferer {
       pd_(pd),
       clusterer_(clusterer),
       global_max_clusters_(global_max_clusters)
-  {}
+  {
+    // Remap all local cluster IDs to global IDs
+    // This is required so that when we migrate clusters we don't have to remap the IDs
+    clusterer_->remapClusterIDs(ClusterSummarizerUtil::buildLocalToGlobalClusterIDMap(
+      comm_.getRank(),
+      global_max_clusters_,
+      clusterer_->clusters()
+    ));
+  }
 
   virtual ~Transferer() = default;
 
@@ -97,21 +105,23 @@ struct Transferer {
   void migrateCluster(
     int const rank,
     int cluster_gid,
+    TaskClusterSummaryInfo cluster_gid_summary,
     int request_cluster_gid
   ) {
-    auto local_cluster_id = ClusterSummarizerUtil::globalToLocalClusterID(
-      cluster_gid,
-      global_max_clusters_
-    );
+    // Assume all clusters have been converted to global IDs already
+    assert(clusterer_ != nullptr && "Clusterer must be initialized to migrate clusters");
     std::vector<model::Task> tasks_to_migrate;
     std::vector<model::Edge> edges_to_migrate;
     std::set<model::SharedBlockType> shared_blocks_id_set;
     std::vector<model::SharedBlock> shared_blocks_to_migrate;
     for (auto const& [task_id, task_cluster_id] : clusterer_->taskToCluster()) {
-      if (task_cluster_id == local_cluster_id) {
+      if (task_cluster_id == cluster_gid) {
         auto const* task = pd_.getTask(task_id);
         assert(task != nullptr && "Task must exist locally to migrate");
         tasks_to_migrate.push_back(*task);
+
+        // Erase the tasks.. they are gone. If it is rejected, then we add them back
+        pd_.eraseTask(task->getId());
 
         for (auto const& edge : pd_.getCommunications()) {
           if (edge.getFrom() == task->getId() || edge.getTo() == task->getId()) {
@@ -127,8 +137,13 @@ struct Transferer {
         }
       }
     }
+
+    // Tell the transfer scheme that the cluster should be removed
+    outgoingCluster(cluster_gid, cluster_gid_summary);
+
     handle_[rank].template send<&Transferer::migrationClusterHandler>(
-      comm_.getRank(), cluster_gid, tasks_to_migrate, edges_to_migrate, shared_blocks_to_migrate,
+      comm_.getRank(), cluster_gid, cluster_gid_summary,
+      tasks_to_migrate, edges_to_migrate, shared_blocks_to_migrate,
       request_cluster_gid
     );
   }
@@ -208,15 +223,18 @@ private:
   void migrationClusterHandler(
     int from_rank,
     int cluster_gid,
+    TaskClusterSummaryInfo cluster_gid_summary,
     std::vector<model::Task> const& tasks,
     std::vector<model::Edge> const& edges,
     std::vector<model::SharedBlock> const& shared_blocks,
     int request_cluster_gid
   ) {
-    if (acceptIncomingClusterSwap(cluster_gid, request_cluster_gid)) {
+    if (acceptIncomingClusterSwap(from_rank, cluster_gid, request_cluster_gid)) {
+      std::vector<model::TaskType> task_ids;
       // Add all received tasks to local PhaseData
       for (auto const& task : tasks) {
         pd_.addTask(task);
+        task_ids.push_back(task.getId());
       }
       // Add all received edges
       for (auto const& edge : edges) {
@@ -228,9 +246,16 @@ private:
           pd_.addSharedBlock(sb);
         }
       }
+
+      // Add new cluster of tasks to the clusterer, used to extract tasks for future migrations
+      clusterer_->addCluster(task_ids, cluster_gid);
+
+      // Add the cluster to the bookkeeping
+      incomingCluster(cluster_gid, cluster_gid_summary);
+
       if (request_cluster_gid != -1) {
         // Send back the requested cluster
-        migrateCluster(from_rank, request_cluster_gid, -1);
+        migrateCluster(from_rank, request_cluster_gid, getClusterSummary(request_cluster_gid), -1);
       }
     }
   }
@@ -272,14 +297,53 @@ protected:
    * \brief The transfer scheme that inherits from this class can choose
    * whether to not to accept an incoming cluster swap by overriding this method
    *
+   * \param[in] from_rank the rank sending the cluster
    * \param[in] give_cluster_gid the cluster GID being given away
    * \param[in] recv_cluster_gid the cluster GID being received
    *
    * \return true to accept the cluster swap, false to reject it
    */
   virtual bool acceptIncomingClusterSwap(
-    [[maybe_unused]] int give_cluster_gid, [[maybe_unused]] int recv_cluster_gid
+    [[maybe_unused]] int from_rank,
+    [[maybe_unused]] int give_cluster_gid,
+    [[maybe_unused]] int recv_cluster_gid
   ) { return true; }
+
+  /**
+   * \brief The transfer scheme that inherits from this class can handle
+   * incoming cluster information by overriding this method
+   *
+   * \param[in] cluster_gid the cluster GID being received
+   * \param[in] cluster_gid_summary the summary info for the cluster being received
+   */
+  virtual void incomingCluster(
+    [[maybe_unused]] int cluster_gid,
+    [[maybe_unused]] TaskClusterSummaryInfo cluster_gid_summary
+  ) {}
+
+  /**
+   * \brief The transfer scheme that inherits from this class can handle
+   * outgoing cluster information by overriding this method
+   *
+   * \param[in] cluster_gid the cluster GID being removed
+   * \param[in] cluster_gid_summary the summary info for the cluster being removed
+   */
+  virtual void outgoingCluster(
+    [[maybe_unused]] int cluster_gid,
+    [[maybe_unused]] TaskClusterSummaryInfo cluster_gid_summary
+  ) {}
+
+  /**
+   * \brief The transfer scheme that inherits from this class can return
+   * the summary info for a cluster by overriding this method
+   *
+   * \param[in] cluster_gid the cluster GID to get the summary for
+   *
+   * \return the summary info for the cluster
+   */
+  virtual TaskClusterSummaryInfo getClusterSummary(
+    [[maybe_unused]] int cluster_gid
+  ) { return TaskClusterSummaryInfo{}; }
 
 protected:
   CommT comm_;

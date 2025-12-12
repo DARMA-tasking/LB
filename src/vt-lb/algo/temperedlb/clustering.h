@@ -82,12 +82,16 @@ struct Clusterer {
    * @brief Add a cluster given its member tasks (used when a cluster migrates in)
    *
    * @param tasks The tasks in the cluster
+   *
+   * @return The assigned cluster ID
    */
-  void addCluster(std::vector<TaskType> const& tasks) {
-    int next_id = 0;
-    for (const auto& cl : clusters_) {
-      if (cl.id >= next_id) {
-        next_id = cl.id + 1;
+  int addCluster(std::vector<TaskType> const& tasks, int cluster_global_id = -1) {
+    int next_id = cluster_global_id;
+    if (cluster_global_id == -1) {
+      for (const auto& cl : clusters_) {
+        if (cl.id >= next_id) {
+          next_id = cl.id + 1;
+        }
       }
     }
     Cluster cl;
@@ -97,6 +101,27 @@ struct Clusterer {
       task_to_cluster_[t] = next_id;
     }
     clusters_.push_back(std::move(cl));
+    return cl.id;
+  }
+
+  /**
+   * @brief Remap all cluster IDs using a local->global mapping.
+   *
+   * @param local_to_global Map from local cluster ID to global cluster ID.
+   */
+  void remapClusterIDs(std::unordered_map<int, int> const& local_to_global) {
+    // Update task_to_cluster_
+    for (auto& [task, cid] : task_to_cluster_) {
+      auto it = local_to_global.find(cid);
+      assert(it != local_to_global.end() && "All local cluster IDs must have a global mapping");
+      cid = it->second;
+    }
+    // Update clusters_
+    for (auto& cl : clusters_) {
+      auto it = local_to_global.find(cl.id);
+      assert(it != local_to_global.end() && "All local cluster IDs must have a global mapping");
+      cl.id = it->second;
+    }
   }
 
 protected:

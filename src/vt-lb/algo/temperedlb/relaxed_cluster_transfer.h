@@ -197,6 +197,19 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
     );
 
+    // Print top 10 candidates
+    int n_print = std::min(10, static_cast<int>(candidates.size()));
+    for (int i = 0; i < n_print; ++i) {
+      const auto& c = candidates[i];
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
+        "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+        i, c.dst_rank, c.give_cluster_gid, c.recv_cluster_gid,
+        c.this_work_after, c.dst_work_after, c.improvement
+      );
+    }
+
     auto const& best = candidates.front();
     VT_LB_LOG(
       LoadBalancer, normal,
@@ -225,9 +238,70 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
           best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
           best.this_work_after, best.dst_work_after, best.improvement
         );
-        this->migrateCluster(best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid);
+        auto give_cluster_summary = this_rank_info.cluster_summaries.at(best.give_cluster_gid);
+        this->migrateCluster(best.dst_rank, best.give_cluster_gid, give_cluster_summary, best.recv_cluster_gid);
       }
     }
+  }
+
+  /*virtual*/ TaskClusterSummaryInfo getClusterSummary(
+    int cluster_gid
+  ) override final {
+    auto iter = cluster_info_.at(this->comm_.getRank()).cluster_summaries.find(cluster_gid);
+    assert(
+      iter != cluster_info_.at(this->comm_.getRank()).cluster_summaries.end() &&
+      "RelaxedClusterTransfer::getClusterSummary: cluster_gid not found in local summaries"
+    );
+    return iter->second;
+  }
+
+  /*virtual*/ void outgoingCluster(
+    int cluster_gid,
+    [[maybe_unused]] TaskClusterSummaryInfo cluster_gid_summary
+  ) override final {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "RelaxedClusterTransfer::outgoingCluster removing cluster_gid={}\n",
+      cluster_gid
+    );
+    auto iter = cluster_info_[this->comm_.getRank()].cluster_summaries.find(cluster_gid);
+    assert(
+      iter != cluster_info_[this->comm_.getRank()].cluster_summaries.end() &&
+      "RelaxedClusterTransfer::outgoingCluster: cluster_gid not found in local summaries"
+    );
+    cluster_info_[this->comm_.getRank()].cluster_summaries.erase(iter);
+  }
+
+  /*virtual*/ void incomingCluster(
+    int cluster_gid,
+    TaskClusterSummaryInfo cluster_gid_summary
+  ) override final {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "RelaxedClusterTransfer::incomingCluster adding cluster_gid={}\n",
+      cluster_gid
+    );
+    cluster_info_[this->comm_.getRank()].cluster_summaries[cluster_gid] = cluster_gid_summary;
+  }
+
+  /*virtual*/ bool acceptIncomingClusterSwap(
+    [[maybe_unused]] int from_rank,
+    [[maybe_unused]] int give_cluster_gid,
+    int recv_cluster_gid
+  ) override final {
+    bool has_cluster = cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
+
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster={}\n",
+      recv_cluster_gid, has_cluster
+    );
+
+    // For relaxed approach, we accept if we still have the recv_cluster_gid
+    if (has_cluster) {
+      return true;
+    }
+    return false;
   }
 
 private:

@@ -57,6 +57,7 @@
 namespace vt_lb::algo::temperedlb {
 
 struct Clusterer;
+struct Cluster;
 
 struct ClusterSummarizerUtil {
   /**
@@ -97,6 +98,21 @@ struct ClusterSummarizerUtil {
   static inline int globalClusterToRank(int global_cluster_id, int global_max_clusters) {
     return global_cluster_id / global_max_clusters;
   }
+
+  /**
+   * @brief Build a mapping from local to global cluster IDs
+   *
+   * @param[in] rank This rank
+   * @param[in] global_max_clusters Maximum number of clusters on any rank
+   * @param[in] clusters Clusters on this rank
+   *
+   * @return Map from local cluster ID to global cluster ID
+   */
+  static std::unordered_map<int, int> buildLocalToGlobalClusterIDMap(
+    int rank,
+    int global_max_clusters,
+    std::vector<Cluster> const& clusters
+  );
 };
 
 template <typename CommT>

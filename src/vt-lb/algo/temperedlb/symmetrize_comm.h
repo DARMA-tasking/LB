@@ -73,8 +73,6 @@ struct CommunicationsSymmetrizer {
     auto const my_rank = pd_->getRank();
     auto comms = pd_->getCommunications();
 
-    // Remove local bidirectional enforcement; only synchronize with remote ranks
-
     // Batch edges per remote rank
     std::unordered_map<RankType, std::vector<Edge>> rank_batches;
 
@@ -82,11 +80,11 @@ struct CommunicationsSymmetrizer {
       RankType fr = e.getFromRank();
       RankType tr = e.getToRank();
 
-      // VT_LB_LOG(
-      //   LoadBalancer, normal,
-      //   "symmetrize_comm: rank={} processing edge from {}(rank={}) to {}(rank={}) vol={:.2f}\n",
-      //   my_rank, e.getFrom(), fr, e.getTo(), tr, e.getVolume()
-      // );
+      VT_LB_LOG(
+        LoadBalancer, verbose,
+        "symmetrize_comm: rank={} processing edge from {}(rank={}) to {}(rank={}) vol={:.2f}\n",
+        my_rank, e.getFrom(), fr, e.getTo(), tr, e.getVolume()
+      );
 
       if (tr != model::invalid_rank && tr != my_rank) {
         rank_batches[tr].push_back(e);

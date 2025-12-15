@@ -219,10 +219,6 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
         "BUG: Missing global cluster ID for remote_task={} (local_cluster={}, cu={}, cv={}, rank={})\n",
         remote_task, local_cluster, cu, cv, rank
       );
-      // Optionally, print all known task_to_global_cluster_id_ keys
-      for (const auto& kv : task_to_global_cluster_id_) {
-        VT_LB_LOG(LoadBalancer, normal, "  known remote task: {}\n", kv.first);
-      }
     }
     assert(
       it_remote_gid != task_to_global_cluster_id_.end() &&

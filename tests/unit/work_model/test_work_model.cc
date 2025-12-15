@@ -100,6 +100,12 @@ struct TestWorkModelBasic : TestParallelHarness<CommType> {
     algo::temperedlb::WorkBreakdown &expected_bd,
     algo::temperedlb::WorkModel &wm
   );
+  double setupRandomLoadAndMixedCommNoMemProblem(
+    std::mt19937 &gen, model::PhaseData &pd,
+    algo::temperedlb::Configuration &cfg,
+    algo::temperedlb::WorkBreakdown &expected_bd,
+    algo::temperedlb::WorkModel &wm
+  );
 
   void verifyNoChangeUpdate(
     const model::PhaseData &pd, const algo::temperedlb::Configuration &cfg,
@@ -420,7 +426,7 @@ double TestWorkModelBasic<CommType>::setupRandomLoadAndInterCommNoMemProblem(
   std::exponential_distribution<> weight_per_edge_dist(100.0);
   generateInterRankComm(
     pd, gen, eps_per_task_dist, weight_per_edge_dist, min_tasks_per_rank,
-    this->comm.numRanks(), 0.0
+    this->comm.numRanks(), 0.5
   );
 
   vt_lb::algo::temperedlb::CommunicationsSymmetrizer cs(this->comm, pd);
@@ -457,8 +463,86 @@ double TestWorkModelBasic<CommType>::setupRandomLoadAndInterCommNoMemProblem(
   double expected_work =
     expected_bd.compute * wm.rank_alpha +
     std::max(
-     expected_bd.inter_node_recv_comm, expected_bd.inter_node_send_comm
+      expected_bd.inter_node_recv_comm, expected_bd.inter_node_send_comm
     ) * wm.beta;
+  return expected_work;
+}
+
+template <comm::Communicator CommType>
+double TestWorkModelBasic<CommType>::setupRandomLoadAndMixedCommNoMemProblem(
+  std::mt19937 &gen, model::PhaseData &pd, algo::temperedlb::Configuration &cfg,
+  algo::temperedlb::WorkBreakdown &expected_bd, algo::temperedlb::WorkModel &wm
+) {
+  // We're using all non-zero coefficients but there will only be load
+  setupRandomNonzeroWorkModel(gen, wm);
+
+  // Do not consider memory even though we will define some
+  setupNoMemoryInfo(cfg);
+
+  // Generate graph: task load will be uniform across all tasks on a given rank;
+  // there will be no shared blocks or communication
+  int min_tasks_per_rank = 20;
+  int max_tasks_per_rank = 50;
+  double expo_lambda = 10.0;
+  std::exponential_distribution<> load_dist(expo_lambda);
+  generateTasksWithoutSharedBlocks(
+    pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
+  );
+
+  // Define random task memory even though we will not use it
+  setupRandomTaskMemory(gen, pd);
+
+  std::uniform_int_distribution<> eps_per_task_dist(0, 10);
+  std::exponential_distribution<> weight_per_edge_dist(1000.0);
+  generateRankComm(
+    pd, gen, eps_per_task_dist, weight_per_edge_dist, min_tasks_per_rank,
+    this->comm.numRanks(), 0.5
+  );
+
+  vt_lb::algo::temperedlb::CommunicationsSymmetrizer cs(this->comm, pd);
+  cs.run();
+
+  // Define expected breakdown and work
+  double expected_compute = 0.0;
+  auto &taskmap = pd.getTasksMap();
+  for (auto &t : taskmap) {
+    expected_compute += t.second.getLoad();
+  }
+  auto rank = this->comm.getRank();
+  double expected_intra_recv = 0.0;
+  double expected_intra_send = 0.0;
+  double expected_inter_recv = 0.0;
+  double expected_inter_send = 0.0;
+  auto &edges = pd.getCommunications();
+  for (auto &e : edges) {
+    if (e.getFromRank() != e.getToRank()) {
+      if (e.getToRank() == rank) {
+        expected_inter_recv += e.getVolume();
+      } else {
+        expected_inter_send += e.getVolume();
+      }
+    } else {
+      expected_intra_recv += e.getVolume();
+      expected_intra_send += e.getVolume();
+    }
+  }
+  expected_bd.compute = expected_compute;
+  expected_bd.inter_node_recv_comm = expected_inter_recv;
+  expected_bd.inter_node_send_comm = expected_inter_send;
+  expected_bd.intra_node_recv_comm = expected_intra_recv;
+  expected_bd.intra_node_send_comm = expected_intra_send;
+  expected_bd.shared_mem_comm = 0.0;
+  expected_bd.memory_breakdown = {0.0, 0.0, 0.0};
+
+  // Compute expected work
+  double expected_work =
+    expected_bd.compute * wm.rank_alpha +
+    std::max(
+      expected_bd.inter_node_recv_comm, expected_bd.inter_node_send_comm
+    ) * wm.beta +
+    std::max(
+      expected_bd.intra_node_recv_comm, expected_bd.intra_node_send_comm
+    ) * wm.gamma;
   return expected_work;
 }
 
@@ -616,7 +700,7 @@ TYPED_TEST(TestWorkModelBasic, compute_work_update_no_changes_is_identity) {
   EXPECT_DOUBLE_EQ(updated, base);
 }
 
-TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesUniformLoadOnlyNoMem) {
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesUniformLoadOnlyNoMem) {
   auto& the_comm = this->comm;
   auto rank = the_comm.getRank();
 
@@ -636,7 +720,7 @@ TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesUniformLoadOnlyNoMem) {
   }
 }
 
-TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadOnlyNoMem) {
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesLoadOnlyNoMem) {
   auto& the_comm = this->comm;
   auto rank = the_comm.getRank();
 
@@ -656,7 +740,7 @@ TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadOnlyNoMem) {
   }
 }
 
-TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesUniformSharedBlocks) {
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesUniformSharedBlocks) {
   auto& the_comm = this->comm;
   auto rank = the_comm.getRank();
 
@@ -676,7 +760,7 @@ TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesUniformSharedBlocks) {
   }
 }
 
-TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesSharedBlocks) {
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesSharedBlocks) {
   auto& the_comm = this->comm;
   auto rank = the_comm.getRank();
 
@@ -696,7 +780,7 @@ TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesSharedBlocks) {
   }
 }
 
-TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadAndIntraComm) {
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesLoadAndIntraComm) {
   auto& the_comm = this->comm;
   auto rank = the_comm.getRank();
 
@@ -716,7 +800,7 @@ TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadAndIntraComm) {
   }
 }
 
-TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadAndInterComm) {
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesLoadAndInterComm) {
   auto& the_comm = this->comm;
   auto rank = the_comm.getRank();
 
@@ -729,6 +813,26 @@ TYPED_TEST(TestWorkModelBasic, computeWokUpdateNoChangesLoadAndInterComm) {
     gen.seed(rank * 42 + i * 8);
     model::PhaseData pd(rank);
     double expected_work = this->setupRandomLoadAndInterCommNoMemProblem(
+      gen, pd, cfg, bd, wm
+    );
+
+    this->verifyNoChangeUpdate(pd, cfg, bd, wm, expected_work);
+  }
+}
+
+TYPED_TEST(TestWorkModelBasic, computeWorkUpdateNoChangesLoadAndMixedComm) {
+  auto& the_comm = this->comm;
+  auto rank = the_comm.getRank();
+
+  algo::temperedlb::Configuration cfg;
+  algo::temperedlb::WorkBreakdown bd;
+  algo::temperedlb::WorkModel wm;
+
+  std::mt19937 gen;
+  for (int i=0; i<this->num_seeds; ++i) {
+    gen.seed(rank * 11 + i * 9);
+    model::PhaseData pd(rank);
+    double expected_work = this->setupRandomLoadAndMixedCommNoMemProblem(
       gen, pd, cfg, bd, wm
     );
 

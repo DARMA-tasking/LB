@@ -72,21 +72,19 @@ namespace vt_lb::algo::temperedlb {
 
   // Communication terms
   for (auto const& e : phase_data.getCommunications()) {
-    assert(
-      (e.getFromRank() == rank || e.getToRank() == rank) &&
-      "Edge does not belong to this rank"
-    );
-    if (e.getFromRank() != e.getToRank()) {
-      if (e.getToRank() == rank) {
-        breakdown.inter_node_recv_comm += e.getVolume();
+    if (e.getFromRank() == rank || e.getToRank() == rank) {
+      if (e.getFromRank() != e.getToRank()) {
+        if (e.getToRank() == rank) {
+          breakdown.inter_node_recv_comm += e.getVolume();
+        } else {
+          breakdown.inter_node_send_comm += e.getVolume();
+        }
       } else {
-        breakdown.inter_node_send_comm += e.getVolume();
-      }
-    } else {
-      // Intra-node: for this rank, edge is both sent and received locally
-      if (e.getToRank() == rank) {
-        breakdown.intra_node_recv_comm += e.getVolume();
-        breakdown.intra_node_send_comm += e.getVolume();
+        // Intra-node: for this rank, edge is both sent and received locally
+        if (e.getToRank() == rank) {
+          breakdown.intra_node_recv_comm += e.getVolume();
+          breakdown.intra_node_send_comm += e.getVolume();
+        }
       }
     }
   }

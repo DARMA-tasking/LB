@@ -229,23 +229,45 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     if (WorkModelCalculator::computeWork(config.work_model_, this_rank_info.rank_breakdown) <= stats_.avg) {
       // do nothing
     } else {
-      auto best = findBestSwapCandidate(config);
-      if (best.improvement > 0.0) {
-        VT_LB_LOG(
-          LoadBalancer, normal,
-          "RelaxedClusterTransfer: executing swap dst_rank={} give_gid={} recv_gid={} "
-          "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
-          best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
-          best.this_work_after, best.dst_work_after, best.improvement
-        );
-        auto give_cluster_summary = this_rank_info.cluster_summaries.at(best.give_cluster_gid);
-        this->migrateCluster(best.dst_rank, best.give_cluster_gid, give_cluster_summary, best.recv_cluster_gid);
+      bool found_good_swap = true;
+
+      while (found_good_swap && transaction_status_ != TransactionStatus::Rejected) {
+        auto best = findBestSwapCandidate(config);
+        if (best.improvement > 0.0) {
+          VT_LB_LOG(
+            LoadBalancer, normal,
+            "RelaxedClusterTransfer: executing swap dst_rank={} give_gid={} recv_gid={} "
+            "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+            best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
+            best.this_work_after, best.dst_work_after, best.improvement
+          );
+          TaskClusterSummaryInfo give_cluster_summary{};
+          if (best.give_cluster_gid != -1) {
+            give_cluster_summary = this_rank_info.cluster_summaries.at(best.give_cluster_gid);
+          }
+          this->migrateCluster(best.dst_rank, best.give_cluster_gid, give_cluster_summary, best.recv_cluster_gid);
+        } else {
+          found_good_swap = false;
+          continue;
+        }
+
+        transaction_status_ = TransactionStatus::Pending;
+        while (transaction_status_ == TransactionStatus::Pending && this->comm_.poll()) {
+          // do nothing
+        }
       }
     }
 
+    // Just wait for termination and process requests
     while (this->comm_.poll()) {
       // do nothing
     }
+  }
+
+  /*virtual*/ void transactionComplete(
+    [[maybe_unused]] int cluster_gid, TransactionStatus status
+  ) override final {
+    transaction_status_ = status;
   }
 
   /*virtual*/ TaskClusterSummaryInfo getClusterSummary(
@@ -313,6 +335,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
 private:
   std::unordered_map<int, RankClusterInfo> cluster_info_;
   Statistics stats_;
+  TransactionStatus transaction_status_ = TransactionStatus::Pending;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

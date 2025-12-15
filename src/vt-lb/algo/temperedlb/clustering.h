@@ -86,6 +86,12 @@ struct Clusterer {
    * @return The assigned cluster ID
    */
   int addCluster(std::vector<TaskType> const& tasks, int cluster_global_id = -1) {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Clusterer: addCluster: cluster_global_id={}, num_tasks={}\n",
+      cluster_global_id, tasks.size()
+    );
+
     int next_id = cluster_global_id;
     if (cluster_global_id == -1) {
       for (const auto& cl : clusters_) {
@@ -98,6 +104,11 @@ struct Clusterer {
     cl.id = next_id;
     cl.members = tasks;
     for (const auto& t : tasks) {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Clusterer: addCluster: assigning task {} to cluster {}\n",
+        t, next_id
+      );
       task_to_cluster_[t] = next_id;
     }
     clusters_.push_back(std::move(cl));

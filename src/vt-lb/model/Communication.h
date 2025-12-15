@@ -69,6 +69,8 @@ struct Edge {
   // New rank accessors
   RankType getFromRank() const { return from_rank_; }
   RankType getToRank() const { return to_rank_; }
+  void setFromRank(RankType rank) { from_rank_ = rank; }
+  void setToRank(RankType rank) { to_rank_ = rank; }
 
   template <typename Serializer>
   void serialize(Serializer& s) {

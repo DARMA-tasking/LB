@@ -110,21 +110,26 @@ struct Transferer {
   ) {
     // Assume all clusters have been converted to global IDs already
     assert(clusterer_ != nullptr && "Clusterer must be initialized to migrate clusters");
+
     std::vector<model::Task> tasks_to_migrate;
     std::vector<model::Edge> edges_to_migrate;
     std::set<model::SharedBlockType> shared_blocks_id_set;
     std::vector<model::SharedBlock> shared_blocks_to_migrate;
+
     for (auto const& [task_id, task_cluster_id] : clusterer_->taskToCluster()) {
       if (task_cluster_id == cluster_gid) {
         auto const* task = pd_.getTask(task_id);
         assert(task != nullptr && "Task must exist locally to migrate");
         tasks_to_migrate.push_back(*task);
 
-        // Erase the tasks.. they are gone. If it is rejected, then we add them back
-        pd_.eraseTask(task->getId());
-
-        for (auto const& edge : pd_.getCommunications()) {
+        for (auto& edge : pd_.getCommunicationsRef()) {
           if (edge.getFrom() == task->getId() || edge.getTo() == task->getId()) {
+            if (edge.getFrom() == task->getId()) {
+              edge.setFromRank(rank);
+            }
+            if (edge.getTo() == task->getId()) {
+              edge.setToRank(rank);
+            }
             edges_to_migrate.push_back(edge);
           }
         }
@@ -135,11 +140,20 @@ struct Transferer {
             shared_blocks_to_migrate.push_back(*pd_.getSharedBlock(sb_id));
           }
         }
+
+        // Erase the tasks.. they are gone. If it is rejected, then we add them back
+        pd_.eraseTask(task->getId());
       }
     }
 
     // Tell the transfer scheme that the cluster should be removed
     outgoingCluster(cluster_gid, cluster_gid_summary);
+
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Transferer::migrateCluster: migrating cluster_gid={} with {} tasks {} edges to rank {}\n",
+      cluster_gid, tasks_to_migrate.size(), edges_to_migrate.size(), rank
+    );
 
     handle_[rank].template send<&Transferer::migrationClusterHandler>(
       comm_.getRank(), cluster_gid, cluster_gid_summary,
@@ -229,16 +243,34 @@ private:
     std::vector<model::SharedBlock> const& shared_blocks,
     int request_cluster_gid
   ) {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Transferer::migrationClusterHandler: received cluster_gid={} with {} tasks {} edges from rank {}\n",
+      cluster_gid, tasks.size(), edges.size(), from_rank
+    );
+
     if (acceptIncomingClusterSwap(from_rank, cluster_gid, request_cluster_gid)) {
       std::vector<model::TaskType> task_ids;
       // Add all received tasks to local PhaseData
       for (auto const& task : tasks) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "Transferer::migrationClusterHandler: adding task {} from cluster_gid={} received from rank {}\n",
+          task.getId(), cluster_gid, from_rank
+        );
         pd_.addTask(task);
         task_ids.push_back(task.getId());
       }
       // Add all received edges
-      for (auto const& edge : edges) {
-        pd_.addCommunication(edge);
+      for (auto& edge : edges) {
+        model::Edge e = edge;
+        if (pd_.getTask(e.getFrom()) != nullptr) {
+          e.setFromRank(comm_.getRank());
+        }
+         if (pd_.getTask(e.getTo()) != nullptr) {
+          e.setToRank(comm_.getRank());
+        }
+        pd_.addCommunication(e);
       }
       // Add all received shared blocks
       for (auto const& sb : shared_blocks) {
@@ -257,7 +289,36 @@ private:
         // Send back the requested cluster
         migrateCluster(from_rank, request_cluster_gid, getClusterSummary(request_cluster_gid), -1);
       }
+    } else {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Transferer::migrationClusterHandler: rejecting incoming cluster_gid={} from rank {}\n",
+        cluster_gid, from_rank
+      );
+      // Send back all tasks
+      handle_[from_rank].template send<&Transferer::sendBackClusterHandler>(
+        cluster_gid, cluster_gid_summary, tasks
+      );
     }
+  }
+
+  void sendBackClusterHandler(
+    int cluster_gid,
+    TaskClusterSummaryInfo cluster_gid_summary,
+    std::vector<model::Task> const& tasks
+  ) {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Transferer::sendBackClusterHandler: cluster sent back cluster_gid={} with {} tasks\n",
+      cluster_gid, tasks.size()
+    );
+
+    for (auto const& task : tasks) {
+      pd_.addTask(task);
+    }
+
+     // Add the cluster to the bookkeeping
+    incomingCluster(cluster_gid, cluster_gid_summary);
   }
 
   void cleanup() {

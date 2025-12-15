@@ -198,7 +198,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     );
 
     // Print top 10 candidates
-    int n_print = std::min(10, static_cast<int>(candidates.size()));
+    int n_print = std::min(5, static_cast<int>(candidates.size()));
     for (int i = 0; i < n_print; ++i) {
       const auto& c = candidates[i];
       VT_LB_LOG(
@@ -241,6 +241,10 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         auto give_cluster_summary = this_rank_info.cluster_summaries.at(best.give_cluster_gid);
         this->migrateCluster(best.dst_rank, best.give_cluster_gid, give_cluster_summary, best.recv_cluster_gid);
       }
+    }
+
+    while (this->comm_.poll()) {
+      // do nothing
     }
   }
 
@@ -289,7 +293,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     [[maybe_unused]] int give_cluster_gid,
     int recv_cluster_gid
   ) override final {
-    bool has_cluster = cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
+    bool has_cluster =
+      recv_cluster_gid == -1 ||
+      cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
 
     VT_LB_LOG(
       LoadBalancer, normal,

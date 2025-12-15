@@ -209,6 +209,9 @@ struct TemperedLB final : baselb::BaseLB {
 
     for (int iter = 0; iter < config_.num_iters_; ++iter) {
       VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
+      // Make communications symmetric before running trials so we only have to do it once
+      makeCommunicationsSymmetric();
+
       runIteration(trial, iter);
       VT_LB_LOG(LoadBalancer, normal, "  Finished iteration {}/{}\n", iter + 1, config_.num_iters_);
     }

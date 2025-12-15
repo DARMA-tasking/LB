@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_CONFIGURATION_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_CONFIGURATION_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/transfer_util.h>
 

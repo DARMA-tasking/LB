@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTER_SUMMARIZER_IMPL_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTER_SUMMARIZER_IMPL_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Communication.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>

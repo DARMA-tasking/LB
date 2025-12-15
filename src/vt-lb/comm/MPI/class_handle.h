@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
 #define INCLUDED_VT_LB_COMM_CLASS_HANDLE_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <mpi.h>
 
 namespace vt_lb::comm {

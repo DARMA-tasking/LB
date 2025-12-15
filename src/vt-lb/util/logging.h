@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_UTIL_LOGGING_H
 #define INCLUDED_VT_LB_UTIL_LOGGING_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <fmt-lb/format.h>
 #include <string_view>
 #include <utility>

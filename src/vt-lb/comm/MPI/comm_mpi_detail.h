@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_MPI_DETAIL_H
 #define INCLUDED_VT_LB_COMM_COMM_MPI_DETAIL_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vector>
 
 namespace vt_lb::comm::detail {

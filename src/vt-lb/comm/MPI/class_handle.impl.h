@@ -44,8 +44,10 @@
 #if !defined INCLUDED_VT_LB_COMM_CLASS_HANDLE_IMPL_H
 #define INCLUDED_VT_LB_COMM_CLASS_HANDLE_IMPL_H
 
-#include "class_handle.h"
-#include "vt-lb/comm/MPI/comm_mpi.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/comm/MPI/class_handle.h>
+#include <vt-lb/comm/MPI/comm_mpi.h>
 
 namespace vt_lb::comm {
 

@@ -44,8 +44,10 @@
 #if !defined INCLUDED_VT_LB_MODEL_BLOCK_H
 #define INCLUDED_VT_LB_MODEL_BLOCK_H
 
-#include "types.h"
-#include "Task.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/model/types.h>
+#include <vt-lb/model/Task.h>
 
 namespace vt_lb::model {
 

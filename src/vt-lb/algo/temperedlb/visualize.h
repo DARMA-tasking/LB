@@ -1,8 +1,10 @@
 #pragma once
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Communication.h>
-#include "clustering.h"
+#include <vt-lb/algo/temperedlb/clustering.h>
 
 #include <sstream>
 #include <iomanip>

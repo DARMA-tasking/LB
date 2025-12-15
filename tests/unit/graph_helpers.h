@@ -328,7 +328,7 @@ void generateInterRankComm(
 ) {
   using namespace vt_lb::model;
 
-  if (num_ranks == 1) {
+  if (num_ranks == 1 or min_tasks_per_rank == 0) {
     return;
   }
 

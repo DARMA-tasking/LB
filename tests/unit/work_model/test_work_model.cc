@@ -63,6 +63,10 @@ struct TestWorkModelBasic : TestParallelHarness<CommType> {
   );
   void setupNoMemoryInfo(algo::temperedlb::Configuration &cfg);
   void setupRandomTaskMemory(std::mt19937 &gen, model::PhaseData &pd);
+  void setupUniformTaskMemory(
+    std::mt19937 &gen, model::PhaseData &pd, double working_mem,
+    double footprint_mem, double serialized_mem
+  );
 
   double setupRandomUniformLoadOnlyNoMemProblem(
     std::mt19937 &gen, model::PhaseData &pd,
@@ -141,10 +145,19 @@ template <comm::Communicator CommType>
 void TestWorkModelBasic<CommType>::setupRandomTaskMemory(
   std::mt19937 &gen, model::PhaseData &pd
 ) {
-  std::exponential_distribution<> expo_dist(100.0);
+  std::exponential_distribution<> expo_dist(1000.0);
   int smem = static_cast<int>(expo_dist(gen));
   int fmem = smem + static_cast<int>(expo_dist(gen));
   generateTaskMemory(pd, gen, expo_dist, fmem, smem);
+}
+
+template <comm::Communicator CommType>
+void TestWorkModelBasic<CommType>::setupUniformTaskMemory(
+  std::mt19937 &gen, model::PhaseData &pd, double working_mem,
+  double footprint_mem, double serialized_mem
+) {
+  std::uniform_real_distribution<> dist(working_mem, working_mem);
+  generateTaskMemory(pd, gen, dist, footprint_mem, serialized_mem);
 }
 
 template <comm::Communicator CommType>
@@ -202,7 +215,7 @@ double TestWorkModelBasic<CommType>::setupRandomLoadOnlyNoMemProblem(
   // there will be no shared blocks or communication
   int min_tasks_per_rank = 0;
   int max_tasks_per_rank = 100;
-  double expo_lambda = 10.0;
+  double expo_lambda = 1000.0;
   std::exponential_distribution<> load_dist(expo_lambda);
   generateTasksWithoutSharedBlocks(
     pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
@@ -238,7 +251,7 @@ double TestWorkModelBasic<CommType>::setupRandomUniformSharedBlocksProblem(
   // We're using all non-zero coefficients but there will only be load
   setupRandomNonzeroWorkModel(gen, wm);
 
-  // Consider all types of memory even though only shared blocks have it
+  // Consider all types of memory
   cfg.work_model_.has_memory_info = true;
   cfg.work_model_.has_shared_block_memory_info = true;
   cfg.work_model_.has_task_footprint_memory_info = true;
@@ -249,7 +262,7 @@ double TestWorkModelBasic<CommType>::setupRandomUniformSharedBlocksProblem(
   // there will be no shared blocks or communication
   int min_blocks_per_rank = 0;
   int max_blocks_per_rank = 100;
-  double expo_lambda = 100.0;
+  double expo_lambda = 1000000.0;
   std::exponential_distribution<> expo_dist(expo_lambda);
   int uniform_mem = static_cast<int>(expo_dist(gen));
   int min_tasks_per_block = 1;
@@ -261,16 +274,31 @@ double TestWorkModelBasic<CommType>::setupRandomUniformSharedBlocksProblem(
     min_tasks_per_block, max_tasks_per_block, load_dist
   );
 
+  auto num_tasks = pd.getTasksMap().size();
+  std::uniform_int_distribution<> uni_dist(100, 1000);
+  double working_mem = 0.0;
+  double serialized_mem = 0.0;
+  if (num_tasks > 0) {
+    working_mem = uni_dist(gen);
+    serialized_mem = uni_dist(gen);
+  }
+  double footprint_mem = serialized_mem * 2.0;
+  setupUniformTaskMemory(gen, pd, working_mem, footprint_mem, serialized_mem);
+
   // Define expected breakdown and work
   double expected_block_mem =
     static_cast<double>(uniform_mem) * pd.getSharedBlocksMap().size();
-  expected_bd.compute = pd.getTasksMap().size() * uniform_load;
+  double expected_task_mem =
+    footprint_mem * num_tasks + working_mem + serialized_mem;
+  expected_bd.compute = num_tasks * uniform_load;
   expected_bd.inter_node_recv_comm = 0.0;
   expected_bd.inter_node_send_comm = 0.0;
   expected_bd.intra_node_recv_comm = 0.0;
   expected_bd.intra_node_send_comm = 0.0;
-  expected_bd.shared_mem_comm = expected_block_mem;
-  expected_bd.memory_breakdown = {expected_block_mem, 0.0, 0.0};
+  expected_bd.shared_mem_comm = 0.0;  // all at home
+  expected_bd.memory_breakdown = {
+    expected_block_mem + expected_task_mem, working_mem, serialized_mem
+  };
 
   // Compute expected work
   double expected_work =
@@ -299,7 +327,7 @@ double TestWorkModelBasic<CommType>::setupRandomSharedBlocksProblem(
   // there will be no shared blocks or communication
   int min_blocks_per_rank = 0;
   int max_blocks_per_rank = 100;
-  double expo_lambda = 100.0;
+  double expo_lambda = 10000000.0;
   std::exponential_distribution<> expo_dist(expo_lambda);
   int max_mem = static_cast<int>(expo_dist(gen));
   int min_mem = max_mem / 2;
@@ -327,7 +355,7 @@ double TestWorkModelBasic<CommType>::setupRandomSharedBlocksProblem(
   expected_bd.inter_node_send_comm = 0.0;
   expected_bd.intra_node_recv_comm = 0.0;
   expected_bd.intra_node_send_comm = 0.0;
-  expected_bd.shared_mem_comm = expected_block_mem;
+  expected_bd.shared_mem_comm = 0.0;  // all at home
   expected_bd.memory_breakdown = {expected_block_mem, 0.0, 0.0};
 
   // Compute expected work
@@ -353,7 +381,7 @@ double TestWorkModelBasic<CommType>::setupRandomLoadAndIntraCommNoMemProblem(
   // there will be no shared blocks or communication
   int min_tasks_per_rank = 0;
   int max_tasks_per_rank = 100;
-  double expo_lambda = 10.0;
+  double expo_lambda = 5000.0;
   std::exponential_distribution<> load_dist(expo_lambda);
   generateTasksWithoutSharedBlocks(
     pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
@@ -413,8 +441,7 @@ double TestWorkModelBasic<CommType>::setupRandomLoadAndInterCommNoMemProblem(
   // there will be no shared blocks or communication
   int min_tasks_per_rank = 20;
   int max_tasks_per_rank = 50;
-  double expo_lambda = 10.0;
-  std::exponential_distribution<> load_dist(expo_lambda);
+  std::uniform_real_distribution<> load_dist(1.0, 1000.0);
   generateTasksWithoutSharedBlocks(
     pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
   );
@@ -483,8 +510,7 @@ double TestWorkModelBasic<CommType>::setupRandomLoadAndMixedCommNoMemProblem(
   // there will be no shared blocks or communication
   int min_tasks_per_rank = 20;
   int max_tasks_per_rank = 50;
-  double expo_lambda = 10.0;
-  std::exponential_distribution<> load_dist(expo_lambda);
+  std::uniform_real_distribution<> load_dist(0.1, 50.0);
   generateTasksWithoutSharedBlocks(
     pd, gen, min_tasks_per_rank, max_tasks_per_rank, load_dist
   );

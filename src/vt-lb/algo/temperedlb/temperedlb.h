@@ -67,9 +67,11 @@
 #include <vt-lb/algo/temperedlb/basic_transfer.h>
 #include <vt-lb/algo/temperedlb/relaxed_cluster_transfer.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
+#include <vt-lb/algo/temperedlb/graph_edge_resolver.h>
 
 // Logging include
 #include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
 
 #include <limits>
 #include <random>
@@ -102,7 +104,7 @@ struct TemperedLB final : baselb::BaseLB {
 
   void clusterBasedOnCommunication() {
     auto& pd = this->getPhaseData();
-    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 10000.0);
+    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 1000.0);
     clusterer_->compute();
   }
 
@@ -132,6 +134,11 @@ struct TemperedLB final : baselb::BaseLB {
   void makeCommunicationsSymmetric() {
     CommunicationsSymmetrizer<CommT> symm(comm_, this->getPhaseData());
     symm.run();
+  }
+
+  void resolveGraphEdges() {
+    GraphEdgeResolver<CommT> resolver(comm_, this->getPhaseData());
+    resolver.run();
   }
 
   void visualizeGraph(const std::string& prefix) const {
@@ -209,10 +216,15 @@ struct TemperedLB final : baselb::BaseLB {
 
     for (int iter = 0; iter < config_.num_iters_; ++iter) {
       VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
-      // Make communications symmetric before running trials so we only have to do it once
+
+      // Edges might have the wrong rank after transfers, so fix them
+      resolveGraphEdges();
+
+      // Make communications symmetric
       makeCommunicationsSymmetric();
 
       runIteration(trial, iter);
+
       VT_LB_LOG(LoadBalancer, normal, "  Finished iteration {}/{}\n", iter + 1, config_.num_iters_);
     }
 
@@ -244,6 +256,9 @@ struct TemperedLB final : baselb::BaseLB {
     double const total_work = WorkModelCalculator::computeWork(
       config_.work_model_, work_breakdown
     );
+
+    VT_LB_LOG(LoadBalancer, normal, "Total work: {}\n", total_work);
+
     auto work_stats = computeStatistics(total_work, "Work");
 
     if (config_.hasMemoryInfo()) {
@@ -301,7 +316,7 @@ struct TemperedLB final : baselb::BaseLB {
 
       // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
       // Every task could be its own cluster, but clusters must exist
-      assert(clusterer_ != nullptr && "Clusterer must be valid");
+      vt_lb_assert(clusterer_ != nullptr, "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
       auto rank_info = RankClusterInfo{
         local_summary,

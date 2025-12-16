@@ -62,8 +62,16 @@ void ClusterSummarizer<CommT>::resolveClusterIDForTask(
   model::TaskType source_task_id,
   int source_global_cluster_id
 ) {
+  VT_LB_LOG(
+    LoadBalancer, verbose,
+    "ClusterSummarizer::resolveClusterIDForTask: trying to resolve task_id={}, source_task_id={}, "
+    "source_global_cluster_id={}, from_rank={}, found={}\n",
+    task_id, source_task_id, source_global_cluster_id, from_rank,
+    clusterer_->taskToCluster().find(task_id) != clusterer_->taskToCluster().end()
+  );
+
   auto iter = clusterer_->taskToCluster().find(task_id);
-  assert(iter != clusterer_->taskToCluster().end() && "Task must be clustered here");
+  vt_lb_assert(iter != clusterer_->taskToCluster().end(), "Task must be clustered here");
   int local_cluster_id = iter->second;
   int global_cluster_id = localToGlobalClusterID(
     local_cluster_id,
@@ -95,11 +103,11 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
   model::PhaseData const& pd,
   Configuration const& config
 ) {
-  assert(clusterer_ != nullptr && "Clusterer must be initialized to build summaries");
+  vt_lb_assert(clusterer_ != nullptr, "Clusterer must be initialized to build summaries");
   int const rank = pd.getRank();
 
   // Validate assumption: every task must be assigned to a cluster
-  assert(allTasksClustered(*clusterer_, pd) && "All tasks must exist in at least one cluster");
+  vt_lb_assert(allTasksClustered(*clusterer_, pd), "All tasks must exist in at least one cluster");
 
   // Task -> local cluster id
   auto const& t2c = clusterer_->taskToCluster();
@@ -121,12 +129,6 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     auto u = e.getFrom();
     auto v = e.getTo();
 
-    // VT_LB_LOG(
-    //   LoadBalancer, normal,
-    //   "buildClusterSummaries: rank={} processing edge from {} to {} vol={:.2f}\n",
-    //   rank, u, v, e.getVolume()
-    // );
-
     auto itu = t2c.find(u);
     auto itv = t2c.find(v);
     int cu = (itu != t2c.end()) ? itu->second : -1; // local cluster id or -1 if cluster is elsewhere
@@ -134,6 +136,11 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     int cug = (cu != -1) ? localToGlobalClusterID(cu, rank, global_max_clusters_) : -1;
     int cvg = (cv != -1) ? localToGlobalClusterID(cv, rank, global_max_clusters_) : -1;
     auto vol = e.getVolume();
+
+    if ((cu == -1 && cv == -1) || (pd.getTask(u) == nullptr && pd.getTask(v) == nullptr)) {
+      // Both endpoints are remote: nothing to do here; or one of the tasks does not exist on this rank
+      continue;
+    }
 
     // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
     if (cu != -1 && cv != -1 && cu == cv) {
@@ -181,14 +188,13 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
       );
       to_resolve_later.push_back(e);
     } else if (cv != -1) {
-      to_resolve_later.push_back(e);
-
       VT_LB_LOG(
         LoadBalancer, verbose,
-        "ClusterSummarizer: resolveClusterIDForTask: from_rank={} task_id={} source_task_id={} "
+        "ClusterSummarizer: resolveClusterIDForTask: from_rank={}, to_rank={} task_id={} source_task_id={} "
         "source_global_cluster_id={}\n",
-        rank, u, v, cvg
+        rank, e.getToRank(), u, v, cvg
       );
+      to_resolve_later.push_back(e);
     }
   }
 

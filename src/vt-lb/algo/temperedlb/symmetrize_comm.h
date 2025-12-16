@@ -94,13 +94,9 @@ struct CommunicationsSymmetrizer {
       }
     }
 
-    bool has_sends_ = false;
-
     // Send one message per remote rank
     for (auto& kv : rank_batches) {
-      auto dest = kv.first;
-      has_sends_ = true;
-      handle_[dest].template send<&ThisType::recvEdgesHandler>(kv.second);
+      handle_[kv.first].template send<&ThisType::recvEdgesHandler>(kv.second);
     }
 
     // Drain progress

@@ -45,6 +45,7 @@
 
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
 
 #include <algorithm>
 #include <tuple>
@@ -124,13 +125,13 @@ struct Clusterer {
     // Update task_to_cluster_
     for (auto& [task, cid] : task_to_cluster_) {
       auto it = local_to_global.find(cid);
-      assert(it != local_to_global.end() && "All local cluster IDs must have a global mapping");
+      vt_lb_assert(it != local_to_global.end(), "All local cluster IDs must have a global mapping");
       cid = it->second;
     }
     // Update clusters_
     for (auto& cl : clusters_) {
       auto it = local_to_global.find(cl.id);
-      assert(it != local_to_global.end() && "All local cluster IDs must have a global mapping");
+      vt_lb_assert(it != local_to_global.end(), "All local cluster IDs must have a global mapping");
       cl.id = it->second;
     }
   }

@@ -42,6 +42,7 @@
 */
 
 #include <vt-lb/algo/temperedlb/transfer_util.h>
+#include <vt-lb/util/assert.h>
 #include <vt-lb/model/types.h>
 #include <vt-lb/util/logging.h>
 
@@ -83,7 +84,7 @@ namespace vt_lb::algo::temperedlb {
       double l_max = 0.0;
       for (auto&& pe : under) {
         auto iter = load_info.find(pe);
-        assert(iter != load_info.end() && "Rank must be in load_info");
+        vt_lb_assert(iter != load_info.end(), "Rank must be in load_info");
         auto load = iter->second;
         if (load.getScaledLoad() > l_max) {
           l_max = load.getScaledLoad();
@@ -98,7 +99,7 @@ namespace vt_lb::algo::temperedlb {
 
   for (auto&& pe : under) {
     auto iter = load_info.find(pe);
-    assert(iter != load_info.end() && "Node must be in load_info");
+    vt_lb_assert(iter != load_info.end(), "Node must be in load_info");
 
     auto load = iter->second;
     sum_p += 1. - factor * load.getScaledLoad();
@@ -110,7 +111,7 @@ namespace vt_lb::algo::temperedlb {
     elm /= sum_p;
   }
 
-  assert(cmf.size() == under.size());
+  vt_lb_assert(cmf.size() == under.size(), "assertion failed: cmf.size() == under.size()");
 
   return cmf;
 }

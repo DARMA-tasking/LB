@@ -42,6 +42,7 @@
 */
 
 #include <vt-lb/algo/temperedlb/work_model.h>
+#include <vt-lb/util/assert.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
@@ -91,7 +92,7 @@ namespace vt_lb::algo::temperedlb {
 
   // Shared-memory communication term
   for (auto const& sb : shared_blocks_here) {
-    assert(phase_data.hasSharedBlock(sb) && "Shared block information missing");
+    vt_lb_assert(phase_data.hasSharedBlock(sb), "Shared block information missing");
     auto info = phase_data.getSharedBlock(sb);
     if (info->getHome() != rank) {
       breakdown.shared_mem_comm += info->getSize();
@@ -197,7 +198,7 @@ namespace vt_lb::algo::temperedlb {
 
     double shared_comm_bytes = 0.0;
     for (auto const& sb : final_shared_blocks) {
-      assert(phase_data.hasSharedBlock(sb) && "Shared block information missing");
+      vt_lb_assert(phase_data.hasSharedBlock(sb), "Shared block information missing");
       auto info = phase_data.getSharedBlock(sb);
       if (info->getHome() != rank) {
         shared_comm_bytes += info->getSize();
@@ -218,8 +219,7 @@ namespace vt_lb::algo::temperedlb {
   return computeWork(model, new_bd);
 }
 
-/*static*/ double WorkModelCalculator::computeWorkUpdateSummary(
-  WorkModel const& model,
+/*static*/ WorkBreakdown WorkModelCalculator::computeWorkUpdateSummary(
   RankClusterInfo rank_cluster_info,
   TaskClusterSummaryInfo to_add,
   TaskClusterSummaryInfo to_remove
@@ -337,7 +337,7 @@ namespace vt_lb::algo::temperedlb {
   all_sbs.insert(to_remove.shared_block_bytes_.begin(), to_remove.shared_block_bytes_.end());
 
   auto size_of = [&](model::SharedBlockType sb) -> double {
-    assert(all_sbs.find(sb) != all_sbs.end() && "Shared block size missing");
+    vt_lb_assert(all_sbs.find(sb) != all_sbs.end(), "Shared block size missing");
     return all_sbs.find(sb)->second;
   };
 
@@ -368,7 +368,7 @@ namespace vt_lb::algo::temperedlb {
   new_bd.intra_node_send_comm = std::max(0.0, new_bd.intra_node_send_comm);
   new_bd.shared_mem_comm      = std::max(0.0, new_bd.shared_mem_comm);
 
-  return computeWork(model, new_bd);
+  return new_bd;
 }
 
 /*static*/ double WorkModelCalculator::computeWork(
@@ -416,7 +416,7 @@ namespace vt_lb::algo::temperedlb {
     }
   }
   for (auto const& sb : shared_blocks_here) {
-    assert(phase_data.hasSharedBlock(sb) && "Shared block information missing");
+    vt_lb_assert(phase_data.hasSharedBlock(sb), "Shared block information missing");
     auto info = phase_data.getSharedBlock(sb);
     shared_blocks_bytes_ += info->getSize();
   }
@@ -500,7 +500,7 @@ namespace vt_lb::algo::temperedlb {
     all_sbs.insert(to_remove.shared_block_bytes_.begin(), to_remove.shared_block_bytes_.end());
 
     auto size_of = [&](model::SharedBlockType sb) -> double {
-      assert(all_sbs.find(sb) != all_sbs.end() && "Shared block size missing");
+      vt_lb_assert(all_sbs.find(sb) != all_sbs.end(), "Shared block size missing");
       return all_sbs.find(sb)->second;
     };
 

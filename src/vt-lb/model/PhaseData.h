@@ -59,7 +59,16 @@ struct PhaseData {
   explicit PhaseData(RankType rank) : rank_(rank) {}
 
   void addTask(Task const& t) { tasks_.emplace(t.getId(), t); }
-  void addCommunication(Edge const& e) { communications_.push_back(e); }
+  void addCommunication(Edge const& e) {
+    for (int i = 0; i < static_cast<int>(communications_.size()); ++i) {
+      auto& comm = communications_[i];
+      if (comm.getFrom() == e.getFrom() && comm.getTo() == e.getTo()) {
+        comm = e;
+        return;
+      }
+    }
+    communications_.push_back(e);
+  }
   void addSharedBlock(SharedBlock const& b) { shared_blocks_.emplace(b.getId(), b); }
 
   RankType getRank() const { return rank_; }

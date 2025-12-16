@@ -47,6 +47,7 @@
 #include <vt-lb/model/types.h>
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/algo/temperedlb/transfer_util.h>
@@ -116,7 +117,7 @@ struct Transferer {
     bool sending_requested_cluster = false
   ) {
     // Assume all clusters have been converted to global IDs already
-    assert(clusterer_ != nullptr && "Clusterer must be initialized to migrate clusters");
+    vt_lb_assert(clusterer_ != nullptr, "Clusterer must be initialized to migrate clusters");
 
     std::vector<model::Task> tasks_to_migrate;
     std::vector<model::Edge> edges_to_migrate;
@@ -127,7 +128,7 @@ struct Transferer {
       for (auto const& [task_id, task_cluster_id] : clusterer_->taskToCluster()) {
         if (task_cluster_id == cluster_gid) {
           auto const* task = pd_.getTask(task_id);
-          assert(task != nullptr && "Task must exist locally to migrate");
+          vt_lb_assert(task != nullptr, "Task must exist locally to migrate");
           tasks_to_migrate.push_back(*task);
 
           for (auto& edge : pd_.getCommunicationsRef()) {
@@ -138,6 +139,11 @@ struct Transferer {
               if (edge.getTo() == task->getId()) {
                 edge.setToRank(rank);
               }
+              VT_LB_LOG(
+                LoadBalancer, normal,
+                "Transferer::migrateCluster: migrating edge from task {} rank {} to task {} rank {} volume {}\n",
+                edge.getFrom(), edge.getFromRank(), edge.getTo(), edge.getToRank(), edge.getVolume()
+              );
               edges_to_migrate.push_back(edge);
             }
           }
@@ -348,6 +354,18 @@ private:
 
     for (auto const& task : tasks) {
       pd_.addTask(task);
+
+      // Reset the edge endpoints
+      for (auto& edge : pd_.getCommunicationsRef()) {
+        if (edge.getFrom() == task.getId() || edge.getTo() == task.getId()) {
+          if (edge.getFrom() == task.getId()) {
+            edge.setFromRank(comm_.getRank());
+          }
+          if (edge.getTo() == task.getId()) {
+            edge.setToRank(comm_.getRank());
+          }
+        }
+      }
     }
 
      // Add the cluster to the bookkeeping

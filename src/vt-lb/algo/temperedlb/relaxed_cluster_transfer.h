@@ -76,7 +76,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     int give_cluster_gid = -1;
     int recv_cluster_gid = -1;
     double this_work_after = 0.0;
+    WorkBreakdown this_work_breakdown_after = {};
     double dst_work_after = 0.0;
+    WorkBreakdown dst_work_breakdown_after = {};
     double improvement = 0.0; // w_max_0 - w_max_new
   };
 
@@ -127,8 +129,11 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         }
       }
 
-      c.this_work_after = WorkModelCalculator::computeWorkUpdateSummary(
-        config.work_model_, this_rank_info, to_add_this, to_remove_this
+      c.this_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
+        this_rank_info, to_add_this, to_remove_this
+      );
+      c.this_work_after = WorkModelCalculator::computeWork(
+        config.work_model_, c.this_work_breakdown_after
       );
 
       RankClusterInfo const& dst_info = cluster_info_.at(dst_rank);
@@ -153,8 +158,11 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         }
       }
 
-      c.dst_work_after = WorkModelCalculator::computeWorkUpdateSummary(
-        config.work_model_, dst_info, to_add_dst, to_remove_dst
+      c.dst_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
+        dst_info, to_add_dst, to_remove_dst
+      );
+      c.dst_work_after = WorkModelCalculator::computeWork(
+        config.work_model_, c.dst_work_breakdown_after
       );
 
       // Criterion: improvement in max work
@@ -197,18 +205,18 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
     );
 
-    // Print top 10 candidates
-    int n_print = std::min(5, static_cast<int>(candidates.size()));
-    for (int i = 0; i < n_print; ++i) {
-      const auto& c = candidates[i];
-      VT_LB_LOG(
-        LoadBalancer, normal,
-        "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
-        "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
-        i, c.dst_rank, c.give_cluster_gid, c.recv_cluster_gid,
-        c.this_work_after, c.dst_work_after, c.improvement
-      );
-    }
+    // // Print top N candidates
+    // int n_print = std::min(5, static_cast<int>(candidates.size()));
+    // for (int i = 0; i < n_print; ++i) {
+    //   const auto& c = candidates[i];
+    //   VT_LB_LOG(
+    //     LoadBalancer, normal,
+    //     "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
+    //     "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+    //     i, c.dst_rank, c.give_cluster_gid, c.recv_cluster_gid,
+    //     c.this_work_after, c.dst_work_after, c.improvement
+    //   );
+    // }
 
     auto const& best = candidates.front();
     VT_LB_LOG(
@@ -254,6 +262,33 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         transaction_status_ = TransactionStatus::Pending;
         while (transaction_status_ == TransactionStatus::Pending && this->comm_.poll()) {
           // do nothing
+        }
+
+        if (transaction_status_ == TransactionStatus::Accepted) {
+          VT_LB_LOG(
+            LoadBalancer, normal,
+            "RelaxedClusterTransfer: swap accepted dst_rank={} give_gid={} recv_gid={}\n",
+            best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid
+          );
+
+          auto& ci_r = cluster_info_[this_rank];
+          auto& ci_d = cluster_info_[best.dst_rank];
+
+          ci_r.rank_breakdown = best.this_work_breakdown_after;
+          ci_d.rank_breakdown = best.dst_work_breakdown_after;
+
+          if (best.give_cluster_gid != -1) {
+            if (auto it = ci_r.cluster_summaries.find(best.give_cluster_gid); it != ci_r.cluster_summaries.end()) {
+              ci_d.cluster_summaries[best.give_cluster_gid] = it->second;
+              ci_r.cluster_summaries.erase(it);
+            }
+          }
+          if (best.recv_cluster_gid != -1) {
+            if (auto it = ci_d.cluster_summaries.find(best.recv_cluster_gid); it != ci_d.cluster_summaries.end()) {
+              ci_r.cluster_summaries[best.recv_cluster_gid] = it->second;
+              ci_d.cluster_summaries.erase(it);
+            }
+          }
         }
       }
     }

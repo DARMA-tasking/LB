@@ -310,6 +310,82 @@ void generateIntraRankComm(
 }
 
 /**
+ * \brief Generate random intra-rank communications on each rank
+ * in a ring pattern
+ *
+ * \note Each task connects to its K nearest successors on the ID ring.
+ * Guarantees: no self-edges, at most one edge per task pair.
+ *
+ * @param pd The PhaseData for this rank
+ * @param gen The seeded generator for this rank
+ * @param min_neighbors Minimum number of neighbors per task
+ * @param max_neighbors Maximum number of neighbors per task
+ * @param weight_per_edge_dist Random edge weights distribution
+ * @param make_random_neighbors If true, randomly select neighbors rather than
+ *        using the closest neighbors in the ring
+ */
+template <typename WeightPerEdgeDistType>
+void generateIntraRankCommRing(
+  vt_lb::model::PhaseData& pd,
+  std::mt19937 &gen,
+  int min_neighbors,
+  int max_neighbors,
+  WeightPerEdgeDistType &weight_per_edge_dist,
+  bool make_random_neighbors
+) {
+  using namespace vt_lb::model;
+
+  int const rank = pd.getRank();
+  assert(rank != invalid_node);
+
+  auto local_ids_set = pd.getTaskIds();
+  std::vector<TaskType> local_ids(
+    local_ids_set.begin(), local_ids_set.end()
+  );
+  std::size_t const N = local_ids.size();
+  if (N <= 1) return;
+
+  if (max_neighbors <= 0) return;
+  if (min_neighbors <= 0) return;
+
+  assert(max_neighbors >= min_neighbors && "max_neighbors >= min_neighbors");
+
+  // Sort IDs so "distance" is by TaskType ordering, then build a ring
+  std::sort(local_ids.begin(), local_ids.end());
+
+  // To avoid duplicates when adding only forward neighbors,
+  // clamp K to floor((N-1)/2). This ensures each undirected pair is added once.
+  int const half_cap = static_cast<int>((N - 1) / 2);
+  int K_min = std::min(min_neighbors, half_cap);
+  int K_max = std::min(max_neighbors, half_cap);
+  if (K_max == 0) return;
+
+  std::uniform_int_distribution<> K_dist(K_min, K_max);
+
+  for (std::size_t i = 0; i < N; ++i) {
+    int K = K_dist(gen);
+    std::vector<int> neighbor_distances;
+    for (int d = 1; d <= K_max; ++d) {
+      neighbor_distances.push_back(d);
+    }
+    if (make_random_neighbors) {
+      std::shuffle(
+        neighbor_distances.begin(), neighbor_distances.end(), gen
+      );
+    }
+    // Add edges to the first K neighbors in the shuffled list
+    for (int d = 0; d < K; ++d) {
+      std::size_t j = (i + static_cast<std::size_t>(neighbor_distances[d])) % N; // ring successor by ID distance d
+      TaskType from = local_ids[i];
+      TaskType to   = local_ids[j];
+      double bytes = std::max(weight_per_edge_dist(gen), 1.0);
+      // d >= 1 ensures no self-edge; clamped K ensures no duplicate pairs
+      pd.addCommunication(Edge{from, to, bytes, rank, rank});
+    }
+  }
+}
+
+/**
  * Generate random inter-rank communications on each rank
  *
  * @param pd The PhaseData for this rank

@@ -85,13 +85,15 @@ struct Transferer {
       clusterer_(clusterer),
       global_max_clusters_(global_max_clusters)
   {
-    // Remap all local cluster IDs to global IDs
-    // This is required so that when we migrate clusters we don't have to remap the IDs
-    clusterer_->remapClusterIDs(ClusterSummarizerUtil::buildLocalToGlobalClusterIDMap(
-      comm_.getRank(),
-      global_max_clusters_,
-      clusterer_->clusters()
-    ));
+    if (clusterer_) {
+      // Remap all local cluster IDs to global IDs
+      // This is required so that when we migrate clusters we don't have to remap the IDs
+      clusterer_->remapClusterIDs(ClusterSummarizerUtil::buildLocalToGlobalClusterIDMap(
+        comm_.getRank(),
+        global_max_clusters_,
+        clusterer_->clusters()
+      ));
+    }
   }
 
   virtual ~Transferer() = default;

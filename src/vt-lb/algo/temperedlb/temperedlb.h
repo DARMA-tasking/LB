@@ -217,11 +217,14 @@ struct TemperedLB final : baselb::BaseLB {
     for (int iter = 0; iter < config_.num_iters_; ++iter) {
       VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
 
-      // Edges might have the wrong rank after transfers, so fix them
-      resolveGraphEdges();
+      auto const& wm = config_.work_model_;
+      if (!(wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0)) {
+        // Edges might have the wrong rank after transfers, so fix them
+        resolveGraphEdges();
 
-      // Make communications symmetric
-      makeCommunicationsSymmetric();
+        // Make communications symmetric
+        makeCommunicationsSymmetric();
+      }
 
       runIteration(trial, iter);
 

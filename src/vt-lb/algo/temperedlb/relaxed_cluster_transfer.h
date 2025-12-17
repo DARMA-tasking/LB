@@ -51,6 +51,8 @@
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
+#include <vt-lb/util/assert.h>
+#include <vt-lb/util/logging.h>
 
 #include <unordered_map>
 #include <limits>
@@ -318,8 +320,8 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     int cluster_gid
   ) override final {
     auto iter = cluster_info_.at(this->comm_.getRank()).cluster_summaries.find(cluster_gid);
-    assert(
-      iter != cluster_info_.at(this->comm_.getRank()).cluster_summaries.end() &&
+    vt_lb_assert(
+      iter != cluster_info_.at(this->comm_.getRank()).cluster_summaries.end(),
       "RelaxedClusterTransfer::getClusterSummary: cluster_gid not found in local summaries"
     );
     return iter->second;
@@ -335,8 +337,8 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       cluster_gid
     );
     auto iter = cluster_info_[this->comm_.getRank()].cluster_summaries.find(cluster_gid);
-    assert(
-      iter != cluster_info_[this->comm_.getRank()].cluster_summaries.end() &&
+    vt_lb_assert(
+      iter != cluster_info_[this->comm_.getRank()].cluster_summaries.end(),
       "RelaxedClusterTransfer::outgoingCluster: cluster_gid not found in local summaries"
     );
     cluster_info_[this->comm_.getRank()].cluster_summaries.erase(iter);

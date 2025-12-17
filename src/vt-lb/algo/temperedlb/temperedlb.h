@@ -285,7 +285,7 @@ struct TemperedLB final : baselb::BaseLB {
       getClusterer(),
       global_max_clusters_,
       config_,
-      "temperedlb_full_graph_trial" + std::to_string(trial)
+      "temperedlb_full_graph_trial" + std::to_string(trial) + "_iter" + std::to_string(iter)
     );
 
     auto& wm = config_.work_model_;

@@ -55,6 +55,8 @@
 #include <unordered_map>
 #include <limits>
 
+#define PRINT_TOP_N_CANDIDATES 0
+
 namespace vt_lb::algo::temperedlb {
 
 template <comm::Communicator CommT>
@@ -201,18 +203,20 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
     );
 
-    // // Print top N candidates
-    // int n_print = std::min(5, static_cast<int>(candidates.size()));
-    // for (int i = 0; i < n_print; ++i) {
-    //   const auto& c = candidates[i];
-    //   VT_LB_LOG(
-    //     LoadBalancer, normal,
-    //     "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
-    //     "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
-    //     i, c.dst_rank, c.give_cluster_gid, c.recv_cluster_gid,
-    //     c.this_work_after, c.dst_work_after, c.improvement
-    //   );
-    // }
+#if PRINT_TOP_N_CANDIDATES
+    // Print top N candidates
+    int n_print = std::min(5, static_cast<int>(candidates.size()));
+    for (int i = 0; i < n_print; ++i) {
+      const auto& c = candidates[i];
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
+        "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+        i, c.dst_rank, c.give_cluster_gid, c.recv_cluster_gid,
+        c.this_work_after, c.dst_work_after, c.improvement
+      );
+    }
+#endif
 
     auto const& best = candidates.front();
     VT_LB_LOG(

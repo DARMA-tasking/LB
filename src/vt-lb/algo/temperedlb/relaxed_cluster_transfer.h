@@ -108,16 +108,20 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     auto eval_swap = [&](int dst_rank, int give_gid, int recv_gid) -> Candidate {
       Candidate c{dst_rank, give_gid, recv_gid, 0.0, 0.0, 0.0};
 
+      RankClusterInfo const& dst_info = cluster_info_.at(dst_rank);
       TaskClusterSummaryInfo to_add_this{};
       TaskClusterSummaryInfo to_remove_this{};
+      TaskClusterSummaryInfo to_add_dst{};
+      TaskClusterSummaryInfo to_remove_dst{};
 
       if (give_gid != -1) {
-        to_remove_this = local_cluster_summaries.at(give_gid);
+        to_remove_this = to_add_dst = local_cluster_summaries.at(give_gid);
       }
       if (recv_gid != -1) {
-        to_add_this = cluster_info_.at(dst_rank).cluster_summaries.at(recv_gid);
+        to_add_this = to_remove_dst = dst_info.cluster_summaries.at(recv_gid);
       }
 
+      // Check memory fit on this rank
       if (config.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
           config, this_rank_info, to_add_this, to_remove_this,
@@ -129,24 +133,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         }
       }
 
-      c.this_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-        this_rank_info, to_add_this, to_remove_this
-      );
-      c.this_work_after = WorkModelCalculator::computeWork(
-        config.work_model_, c.this_work_breakdown_after
-      );
-
-      RankClusterInfo const& dst_info = cluster_info_.at(dst_rank);
-      TaskClusterSummaryInfo to_add_dst{};
-      TaskClusterSummaryInfo to_remove_dst{};
-
-      if (give_gid != -1) {
-        to_add_dst = local_cluster_summaries.at(give_gid);
-      }
-      if (recv_gid != -1) {
-        to_remove_dst = dst_info.cluster_summaries.at(recv_gid);
-      }
-
+      // Check memory fit on destination rank
       if (config.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
           config, dst_info, to_add_dst, to_remove_dst,
@@ -158,6 +145,15 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         }
       }
 
+      // Compute post-swap work on this rank
+      c.this_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
+        this_rank_info, to_add_this, to_remove_this
+      );
+      c.this_work_after = WorkModelCalculator::computeWork(
+        config.work_model_, c.this_work_breakdown_after
+      );
+
+      // Compute post-swap work on destination rank
       c.dst_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
         dst_info, to_add_dst, to_remove_dst
       );
@@ -289,6 +285,15 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
               ci_d.cluster_summaries.erase(it);
             }
           }
+
+          auto new_work = WorkModelCalculator::computeWork(
+            config.work_model_, ci_r.rank_breakdown
+          );
+          VT_LB_LOG(
+            LoadBalancer, normal,
+            "RelaxedClusterTransfer: post-swap this_rank={} new_work={:.2f}\n",
+            this_rank, new_work
+          );
         }
       }
     }

@@ -139,4 +139,3 @@ int main(int argc, char** argv) {
   comm.finalize();
   return 0;
 }
-

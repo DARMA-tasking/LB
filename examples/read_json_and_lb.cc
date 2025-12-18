@@ -72,6 +72,14 @@ static std::optional<std::string> find_rank_file(const std::string& dir, int ran
     }
   }
 
+  if (json_br_candidate && json_candidate) {
+    fprintf(
+      stderr,
+      "Warning: both compressed (%s) and uncompressed (%s) files found for rank %d; using compressed file\n",
+      json_br_candidate->c_str(), json_candidate->c_str(), rank
+    );
+  }
+
   if (json_br_candidate) return json_br_candidate;
   if (json_candidate) return json_candidate;
   return std::nullopt;
@@ -86,7 +94,7 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "Usage: %s <directory-containing-per-rank-json> <phase-id>\n", argv[0]);
     }
     comm.finalize();
-    return argc < 3 ? 1 : 0;
+    return 1;
   }
 
   std::string dir = argv[1];

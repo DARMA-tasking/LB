@@ -118,7 +118,7 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
   // Find the requested phase entry
   if (!root.contains("phases") || !root["phases"].is_array()) {
     fmt::print("JSON missing 'phases' array\n");
-    assert(false && "Invalid JSON: missing 'phases'");
+    assert(false);
     return {};
   }
 
@@ -139,45 +139,66 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
   auto get_int_opt = [](json const& j, char const* k) -> std::optional<int> {
     return j.contains(k) && j[k].is_number_integer() ? std::optional<int>{j[k].get<int>()} : std::nullopt;
   };
-  auto get_double_req = [](json const& j, char const* k) -> double {
+  // Small utility to stringify the json type we actually saw
+  auto type_name_of = [](json const& v) -> std::string {
+    // nlohmann::json exposes type_name(); fallback to string if needed
+    return v.type_name();
+  };
+  auto get_double_req = [&](json const& j, char const* k) -> double {
     if (!j.contains(k)) {
-      fmt::print("Missing required double '{}'\n", k);
+      fmt::print("Missing required key '{}' (expected number)\n", k);
       assert(false);
     }
-    if (!j[k].is_number_float() && !j[k].is_number_integer()) {
-      fmt::print("Expected '{}' to be number\n", k);
+    if (!(j[k].is_number_float() || j[k].is_number_integer())) {
+      fmt::print("Key '{}' has wrong type: got '{}', expected number\n", k, type_name_of(j[k]));
       assert(false);
     }
     return j[k].is_number_float() ? j[k].get<double>() : static_cast<double>(j[k].get<long long>());
   };
-  auto get_int_req = [](json const& j, char const* k) -> int {
-    if (!j.contains(k) || !j[k].is_number_integer()) {
-      fmt::print("Missing required int '{}'\n", k);
+  auto get_int_req = [&](json const& j, char const* k) -> int {
+    if (!j.contains(k)) {
+      fmt::print("Missing required key '{}' (expected integer)\n", k);
+      assert(false);
+    }
+    if (!j[k].is_number_integer()) {
+      fmt::print("Key '{}' has wrong type: got '{}', expected integer\n", k, type_name_of(j[k]));
       assert(false);
     }
     return j[k].get<int>();
   };
-  auto get_str_req = [](json const& j, char const* k) -> std::string {
-    if (!j.contains(k) || !j[k].is_string()) {
-      fmt::print("Missing required string '{}'\n", k);
+  auto get_str_req = [&](json const& j, char const* k) -> std::string {
+    if (!j.contains(k)) {
+      fmt::print("Missing required key '{}' (expected string)\n", k);
+      assert(false);
+    }
+    if (!j[k].is_string()) {
+      fmt::print("Key '{}' has wrong type: got '{}', expected string\n", k, type_name_of(j[k]));
       assert(false);
     }
     return j[k].get<std::string>();
   };
-  auto get_bool_req = [](json const& j, char const* k) -> bool {
-    if (!j.contains(k) || !j[k].is_boolean()) {
-      fmt::print("Missing required bool '{}'\n", k);
+  auto get_bool_req = [&](json const& j, char const* k) -> bool {
+    if (!j.contains(k)) {
+      fmt::print("Missing required key '{}' (expected boolean)\n", k);
+      assert(false);
+    }
+    if (!j[k].is_boolean()) {
+      fmt::print("Key '{}' has wrong type: got '{}', expected boolean\n", k, type_name_of(j[k]));
       assert(false);
     }
     return j[k].get<bool>();
   };
-  auto get_index_vec = [](json const& j) -> std::vector<int> {
+  auto get_index_vec = [&](json const& j) -> std::vector<int> {
     std::vector<int> idx;
-    if (j.contains("index") && j["index"].is_array()) {
+    if (j.contains("index")) {
+      if (!j["index"].is_array()) {
+        fmt::print("Key 'index' has wrong type: got '{}', expected array\n", type_name_of(j["index"]));
+        assert(false);
+      }
       idx.reserve(j["index"].size());
       for (auto const& v : j["index"]) {
         if (!v.is_number_integer()) {
-          fmt::print("Index entries must be integers\n");
+          fmt::print("Index entries must be integers; got element of type '{}'\n", type_name_of(v));
           assert(false);
         }
         idx.push_back(v.get<int>());
@@ -189,7 +210,9 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
     bool has_id = entity.contains("id");
     bool has_seq_id = entity.contains("seq_id");
     if (!has_id && !has_seq_id) {
-      fmt::print("Either id (bit-encoded) or seq_id must be provided for 'entity'\n");
+      // Print a compact view of the offending entity
+      fmt::print("Either 'id' (bit-encoded) or 'seq_id' must be provided for 'entity'. Offending entity: {}\n",
+                 entity.dump());
       assert(false);
     }
   };

@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Read and parse phase 1 for this rank
+  // Read and parse phase_id for this rank
   vt_lb::input::JSONReader reader(rank);
   reader.readFile(*maybe_file);
   auto phase_data = reader.parse(phase_id);
@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
   // config.visualize_task_graph_ = true;
   // config.visualize_full_graph_ = true;
 
-  std::printf("%d: Running TemperedLB on '%s' (phase=1)\n", rank, maybe_file->c_str());
+  std::printf("%d: Running TemperedLB on '%s' (phase=%d)\n", rank, maybe_file->c_str(), phase_id);
 
   vt_lb::runLB(
     vt_lb::DriverAlgoEnum::TemperedLB,

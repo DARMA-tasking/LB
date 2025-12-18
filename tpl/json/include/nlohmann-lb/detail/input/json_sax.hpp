@@ -5,10 +5,10 @@
 #include <utility> // move
 #include <vector> // vector
 
-#include <nlohmann-vt/detail/exceptions.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/exceptions.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 
 /*!
@@ -692,4 +692,4 @@ class json_sax_acceptor
 };
 }  // namespace detail
 
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

@@ -2,10 +2,10 @@
 
 #include <type_traits>
 
-#include <nlohmann-vt/detail/meta/void_t.hpp>
+#include <nlohmann-lb/detail/meta/void_t.hpp>
 
 // https://en.cppreference.com/w/cpp/experimental/is_detected
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -55,4 +55,4 @@ template<class To, template<class...> class Op, class... Args>
 using is_detected_convertible =
     std::is_convertible<detected_t<Op, Args...>, To>;
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

@@ -8,9 +8,9 @@
 #include <ostream> // basic_ostream
 #include <string> // basic_string
 #include <vector> // vector
-#include <nlohmann-vt/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -120,4 +120,4 @@ class output_adapter
     output_adapter_t<CharType> oa = nullptr;
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

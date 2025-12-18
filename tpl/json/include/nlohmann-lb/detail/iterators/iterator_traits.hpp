@@ -2,10 +2,10 @@
 
 #include <iterator> // random_access_iterator_tag
 
-#include <nlohmann-vt/detail/meta/void_t.hpp>
-#include <nlohmann-vt/detail/meta/cpp_future.hpp>
+#include <nlohmann-lb/detail/meta/void_t.hpp>
+#include <nlohmann-lb/detail/meta/cpp_future.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -48,4 +48,4 @@ struct iterator_traits<T*, enable_if_t<std::is_object<T>::value>>
     using reference = T&;
 };
 } // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

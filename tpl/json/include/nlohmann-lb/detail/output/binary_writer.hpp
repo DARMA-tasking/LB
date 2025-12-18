@@ -8,11 +8,11 @@
 #include <string> // string
 #include <cmath> // isnan, isinf
 
-#include <nlohmann-vt/detail/input/binary_reader.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/output/output_adapters.hpp>
+#include <nlohmann-lb/detail/input/binary_reader.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/output/output_adapters.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -1592,4 +1592,4 @@ class binary_writer
     output_adapter_t<CharType> oa = nullptr;
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

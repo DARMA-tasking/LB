@@ -12,13 +12,13 @@
 #include <utility> // pair, declval
 #include <valarray> // valarray
 
-#include <nlohmann-vt/detail/exceptions.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/meta/cpp_future.hpp>
-#include <nlohmann-vt/detail/meta/type_traits.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/exceptions.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/meta/cpp_future.hpp>
+#include <nlohmann-lb/detail/meta/type_traits.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -400,4 +400,4 @@ namespace
 {
 constexpr const auto& from_json = detail::static_const<detail::from_json_fn>::value;
 } // namespace
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

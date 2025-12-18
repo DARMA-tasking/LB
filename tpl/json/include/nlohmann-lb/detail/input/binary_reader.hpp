@@ -12,15 +12,15 @@
 #include <string> // char_traits, string
 #include <utility> // make_pair, move
 
-#include <nlohmann-vt/detail/exceptions.hpp>
-#include <nlohmann-vt/detail/input/input_adapters.hpp>
-#include <nlohmann-vt/detail/input/json_sax.hpp>
-#include <nlohmann-vt/detail/input/lexer.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/meta/is_sax.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/exceptions.hpp>
+#include <nlohmann-lb/detail/input/input_adapters.hpp>
+#include <nlohmann-lb/detail/input/json_sax.hpp>
+#include <nlohmann-lb/detail/input/lexer.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/meta/is_sax.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -2456,4 +2456,4 @@ class binary_reader
     json_sax_t* sax = nullptr;
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

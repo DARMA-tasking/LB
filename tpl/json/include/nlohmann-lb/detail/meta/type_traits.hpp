@@ -4,13 +4,13 @@
 #include <type_traits> // false_type, is_constructible, is_integral, is_same, true_type
 #include <utility> // declval
 
-#include <nlohmann-vt/detail/iterators/iterator_traits.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/meta/cpp_future.hpp>
-#include <nlohmann-vt/detail/meta/detected.hpp>
-#include <nlohmann-vt/json_fwd.hpp>
+#include <nlohmann-lb/detail/iterators/iterator_traits.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/meta/cpp_future.hpp>
+#include <nlohmann-lb/detail/meta/detected.hpp>
+#include <nlohmann-lb/json_fwd.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 /*!
 @brief detail namespace with internal helper functions
@@ -392,4 +392,4 @@ struct is_constructible_tuple : std::false_type {};
 template<typename T1, typename... Args>
 struct is_constructible_tuple<T1, std::tuple<Args...>> : conjunction<std::is_constructible<T1, Args>...> {};
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

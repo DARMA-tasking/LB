@@ -3,15 +3,15 @@
 #include <iterator> // iterator, random_access_iterator_tag, bidirectional_iterator_tag, advance, next
 #include <type_traits> // conditional, is_const, remove_const
 
-#include <nlohmann-vt/detail/exceptions.hpp>
-#include <nlohmann-vt/detail/iterators/internal_iterator.hpp>
-#include <nlohmann-vt/detail/iterators/primitive_iterator.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/meta/cpp_future.hpp>
-#include <nlohmann-vt/detail/meta/type_traits.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/exceptions.hpp>
+#include <nlohmann-lb/detail/iterators/internal_iterator.hpp>
+#include <nlohmann-lb/detail/iterators/primitive_iterator.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/meta/cpp_future.hpp>
+#include <nlohmann-lb/detail/meta/type_traits.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -634,4 +634,4 @@ class iter_impl
     internal_iterator<typename std::remove_const<BasicJsonType>::type> m_it {};
 };
 } // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

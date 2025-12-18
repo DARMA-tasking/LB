@@ -2,10 +2,10 @@
 
 #include <utility>
 
-#include <nlohmann-vt/detail/conversions/from_json.hpp>
-#include <nlohmann-vt/detail/conversions/to_json.hpp>
+#include <nlohmann-lb/detail/conversions/from_json.hpp>
+#include <nlohmann-lb/detail/conversions/to_json.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 
 template<typename, typename>
@@ -46,4 +46,4 @@ struct adl_serializer
     }
 };
 
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

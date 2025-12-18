@@ -8,11 +8,11 @@
 #include <utility> // move
 #include <vector> // vector
 
-#include <nlohmann-vt/detail/exceptions.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/exceptions.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 template<typename BasicJsonType>
 class json_pointer
@@ -972,4 +972,4 @@ class json_pointer
     /// the reference tokens
     std::vector<std::string> reference_tokens;
 };
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

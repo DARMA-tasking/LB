@@ -12,10 +12,10 @@
 #include <type_traits> // enable_if, is_base_of, is_pointer, is_integral, remove_pointer
 #include <utility> // pair, declval
 
-#include <nlohmann-vt/detail/iterators/iterator_traits.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/iterators/iterator_traits.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -451,4 +451,4 @@ class span_input_adapter
     contiguous_bytes_input_adapter ia;
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

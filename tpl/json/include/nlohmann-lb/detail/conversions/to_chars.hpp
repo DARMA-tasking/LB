@@ -7,9 +7,9 @@
 #include <limits> // numeric_limits
 #include <type_traits> // conditional
 
-#include <nlohmann-vt/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -1102,4 +1102,4 @@ char* to_chars(char* first, const char* last, FloatType value)
 }
 
 } // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

@@ -9,12 +9,12 @@
 #include <valarray> // valarray
 #include <vector> // vector
 
-#include <nlohmann-vt/detail/iterators/iteration_proxy.hpp>
-#include <nlohmann-vt/detail/meta/cpp_future.hpp>
-#include <nlohmann-vt/detail/meta/type_traits.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/iterators/iteration_proxy.hpp>
+#include <nlohmann-lb/detail/meta/cpp_future.hpp>
+#include <nlohmann-lb/detail/meta/type_traits.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -371,4 +371,4 @@ namespace
 {
 constexpr const auto& to_json = detail::static_const<detail::to_json_fn>::value;
 } // namespace
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

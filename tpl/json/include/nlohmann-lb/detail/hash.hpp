@@ -3,7 +3,7 @@
 #include <cstddef> // size_t, uint8_t
 #include <functional> // hash
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -116,4 +116,4 @@ std::size_t hash(const BasicJsonType& j)
 }
 
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

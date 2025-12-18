@@ -4,7 +4,7 @@
 #include <iterator> // reverse_iterator
 #include <utility> // declval
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -116,4 +116,4 @@ class json_reverse_iterator : public std::reverse_iterator<Base>
     }
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

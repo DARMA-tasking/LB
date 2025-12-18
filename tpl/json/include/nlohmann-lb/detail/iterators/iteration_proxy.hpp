@@ -5,10 +5,10 @@
 #include <string> // string, to_string
 #include <tuple> // tuple_size, get, tuple_element
 
-#include <nlohmann-vt/detail/meta/type_traits.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/meta/type_traits.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -147,7 +147,7 @@ auto get(const nlohmann::detail::iteration_proxy_value<IteratorType>& i) -> decl
     return i.value();
 }
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb
 
 // The Addition to the STD Namespace is required to add
 // Structured Bindings Support to the iteration_proxy_value class

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <utility> // pair
-#include <nlohmann-vt/thirdparty/hedley/hedley.hpp>
+#include <nlohmann-lb/thirdparty/hedley/hedley.hpp>
 
 // This file contains all internal macro definitions
 // You MUST include macro_unscope.hpp at the end of json.hpp to undef all of them

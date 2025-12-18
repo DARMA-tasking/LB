@@ -4,10 +4,10 @@
 #include <utility> // declval
 #include <string> // string
 
-#include <nlohmann-vt/detail/meta/detected.hpp>
-#include <nlohmann-vt/detail/meta/type_traits.hpp>
+#include <nlohmann-lb/detail/meta/detected.hpp>
+#include <nlohmann-lb/detail/meta/type_traits.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -146,4 +146,4 @@ struct is_sax_static_asserts
         "std::string&, const exception&)");
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

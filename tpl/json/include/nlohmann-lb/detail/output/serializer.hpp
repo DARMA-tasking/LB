@@ -12,15 +12,15 @@
 #include <type_traits> // is_same
 #include <utility> // move
 
-#include <nlohmann-vt/detail/conversions/to_chars.hpp>
-#include <nlohmann-vt/detail/exceptions.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
-#include <nlohmann-vt/detail/meta/cpp_future.hpp>
-#include <nlohmann-vt/detail/output/binary_writer.hpp>
-#include <nlohmann-vt/detail/output/output_adapters.hpp>
-#include <nlohmann-vt/detail/value_t.hpp>
+#include <nlohmann-lb/detail/conversions/to_chars.hpp>
+#include <nlohmann-lb/detail/exceptions.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/meta/cpp_future.hpp>
+#include <nlohmann-lb/detail/output/binary_writer.hpp>
+#include <nlohmann-lb/detail/output/output_adapters.hpp>
+#include <nlohmann-lb/detail/value_t.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -957,4 +957,4 @@ class serializer
     const error_handler_t error_handler;
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

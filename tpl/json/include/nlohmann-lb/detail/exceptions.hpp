@@ -4,10 +4,10 @@
 #include <stdexcept> // runtime_error
 #include <string> // to_string
 
-#include <nlohmann-vt/detail/input/position_t.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/input/position_t.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -354,4 +354,4 @@ class other_error : public exception
     other_error(int id_, const char* what_arg) : exception(id_, what_arg) {}
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

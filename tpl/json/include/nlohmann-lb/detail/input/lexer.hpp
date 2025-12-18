@@ -10,11 +10,11 @@
 #include <utility> // move
 #include <vector> // vector
 
-#include <nlohmann-vt/detail/input/input_adapters.hpp>
-#include <nlohmann-vt/detail/input/position_t.hpp>
-#include <nlohmann-vt/detail/macro_scope.hpp>
+#include <nlohmann-lb/detail/input/input_adapters.hpp>
+#include <nlohmann-lb/detail/input/position_t.hpp>
+#include <nlohmann-lb/detail/macro_scope.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -1620,4 +1620,4 @@ scan_number_done:
     const char_int_type decimal_point_char = '.';
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

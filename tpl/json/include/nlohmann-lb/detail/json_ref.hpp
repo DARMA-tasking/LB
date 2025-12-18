@@ -3,9 +3,9 @@
 #include <initializer_list>
 #include <utility>
 
-#include <nlohmann-vt/detail/meta/type_traits.hpp>
+#include <nlohmann-lb/detail/meta/type_traits.hpp>
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 namespace detail
 {
@@ -73,4 +73,4 @@ class json_ref
     const bool is_rvalue = true;
 };
 }  // namespace detail
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

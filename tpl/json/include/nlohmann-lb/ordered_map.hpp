@@ -5,7 +5,7 @@
 #include <utility> // pair
 #include <vector> // vector
 
-namespace nlohmann { inline namespace vt
+namespace nlohmann { inline namespace lb
 {
 
 /// ordered_map: a minimal map-like container that preserves insertion order
@@ -168,4 +168,4 @@ template <class Key, class T, class IgnoredLess = std::less<Key>,
     }
 };
 
-}} // namespace nlohmann::vt
+}} // namespace nlohmann::lb

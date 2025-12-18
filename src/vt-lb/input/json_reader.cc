@@ -52,8 +52,9 @@
 
 #include <fstream>
 #include <iostream>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdlib>
+#include <string>
+#include <optional>
 
 namespace vt_lb::input {
 
@@ -107,10 +108,212 @@ void JSONReader::readString(std::string const& in_json_string) {
   json_ = std::make_unique<json>(std::move(j));
 }
 
-std::unique_ptr<model::PhaseData> JSONReader::parse() {
+std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
   using json = nlohmann::json;
 
   assert(json_ != nullptr && "Must have valid json");
+
+  auto const& root = *json_;
+
+  // Find the requested phase entry
+  if (!root.contains("phases") || !root["phases"].is_array()) {
+    fmt::print("JSON missing 'phases' array\n");
+    assert(false && "Invalid JSON: missing 'phases'");
+    return {};
+  }
+
+  json const* phase_obj = nullptr;
+  for (auto const& p : root["phases"]) {
+    if (p.contains("id") && p["id"].is_number_integer() && p["id"].get<int>() == phase) {
+      phase_obj = &p;
+      break;
+    }
+  }
+
+  if (phase_obj == nullptr) {
+    fmt::print("Requested phase {} not found\n", phase);
+    return {}; // or assert if phase must exist
+  }
+
+  // Helpers
+  auto get_int_opt = [](json const& j, char const* k) -> std::optional<int> {
+    return j.contains(k) && j[k].is_number_integer() ? std::optional<int>{j[k].get<int>()} : std::nullopt;
+  };
+  auto get_double_req = [](json const& j, char const* k) -> double {
+    if (!j.contains(k)) {
+      fmt::print("Missing required double '{}'\n", k);
+      assert(false);
+    }
+    if (!j[k].is_number_float() && !j[k].is_number_integer()) {
+      fmt::print("Expected '{}' to be number\n", k);
+      assert(false);
+    }
+    return j[k].is_number_float() ? j[k].get<double>() : static_cast<double>(j[k].get<long long>());
+  };
+  auto get_int_req = [](json const& j, char const* k) -> int {
+    if (!j.contains(k) || !j[k].is_number_integer()) {
+      fmt::print("Missing required int '{}'\n", k);
+      assert(false);
+    }
+    return j[k].get<int>();
+  };
+  auto get_str_req = [](json const& j, char const* k) -> std::string {
+    if (!j.contains(k) || !j[k].is_string()) {
+      fmt::print("Missing required string '{}'\n", k);
+      assert(false);
+    }
+    return j[k].get<std::string>();
+  };
+  auto get_bool_req = [](json const& j, char const* k) -> bool {
+    if (!j.contains(k) || !j[k].is_boolean()) {
+      fmt::print("Missing required bool '{}'\n", k);
+      assert(false);
+    }
+    return j[k].get<bool>();
+  };
+  auto get_index_vec = [](json const& j) -> std::vector<int> {
+    std::vector<int> idx;
+    if (j.contains("index") && j["index"].is_array()) {
+      idx.reserve(j["index"].size());
+      for (auto const& v : j["index"]) {
+        if (!v.is_number_integer()) {
+          fmt::print("Index entries must be integers\n");
+          assert(false);
+        }
+        idx.push_back(v.get<int>());
+      }
+    }
+    return idx;
+  };
+  auto validate_entity_ids = [](json const& entity) {
+    bool has_id = entity.contains("id");
+    bool has_seq_id = entity.contains("seq_id");
+    if (!has_id && !has_seq_id) {
+      fmt::print("Either id (bit-encoded) or seq_id must be provided for 'entity'\n");
+      assert(false);
+    }
+  };
+
+  struct EntityDesc {
+    // Identification and placement
+    std::optional<int> id;
+    std::optional<int> seq_id;
+    std::optional<int> collection_id;
+    std::optional<int> home;
+    std::optional<int> objgroup_id;
+    bool migratable = false;
+    std::string type;
+    std::vector<int> index;
+  };
+
+  auto parse_entity = [&](json const& entity_json) -> EntityDesc {
+    validate_entity_ids(entity_json);
+    EntityDesc e;
+    e.type = get_str_req(entity_json, "type");
+    e.migratable = get_bool_req(entity_json, "migratable");
+    e.id = get_int_opt(entity_json, "id");
+    e.seq_id = get_int_opt(entity_json, "seq_id");
+    e.collection_id = get_int_opt(entity_json, "collection_id");
+    e.home = get_int_opt(entity_json, "home");
+    e.objgroup_id = get_int_opt(entity_json, "objgroup_id");
+    e.index = get_index_vec(entity_json);
+    return e;
+  };
+
+  struct SubphaseDesc { int id; double time; };
+  struct TaskDesc {
+    EntityDesc entity;
+    int node;
+    std::string resource;
+    double time;
+    std::vector<SubphaseDesc> subphases;
+    json attributes;     // optional dict
+    json user_defined;   // optional dict
+  };
+  struct CommDesc {
+    EntityDesc to;
+    EntityDesc from;
+    std::string type;
+    int messages;
+    double bytes;
+  };
+
+  std::vector<TaskDesc> tasks;
+  std::vector<CommDesc> comms;
+
+  // Parse tasks
+  if (phase_obj->contains("tasks") && (*phase_obj)["tasks"].is_array()) {
+    tasks.reserve((*phase_obj)["tasks"].size());
+    for (auto const& t : (*phase_obj)["tasks"]) {
+      if (!t.contains("entity") || !t["entity"].is_object()) {
+        fmt::print(fmt::runtime("Task missing 'entity' object\n")); assert(false);
+      }
+      TaskDesc td;
+      td.entity = parse_entity(t["entity"]);
+      td.node = get_int_req(t, "node");
+      td.resource = get_str_req(t, "resource");
+      td.time = get_double_req(t, "time");
+      if (t.contains("subphases") && t["subphases"].is_array()) {
+        for (auto const& sp : t["subphases"]) {
+          SubphaseDesc sd{get_int_req(sp, "id"), get_double_req(sp, "time")};
+          td.subphases.push_back(sd);
+        }
+      }
+      if (t.contains("attributes") && t["attributes"].is_object()) {
+        td.attributes = t["attributes"];
+      }
+      if (t.contains("user_defined") && t["user_defined"].is_object()) {
+        td.user_defined = t["user_defined"];
+      }
+      tasks.push_back(std::move(td));
+    }
+  }
+
+  // Parse communications
+  if (phase_obj->contains("communications") && (*phase_obj)["communications"].is_array()) {
+    comms.reserve((*phase_obj)["communications"].size());
+    for (auto const& c : (*phase_obj)["communications"]) {
+      CommDesc cd;
+      cd.type = get_str_req(c, "type");
+      if (!c.contains("from") || !c["from"].is_object() || !c.contains("to") || !c["to"].is_object()) {
+        fmt::print(fmt::runtime("Communication entries must contain 'from' and 'to' objects\n"));
+        assert(false);
+      }
+      cd.from = parse_entity(c["from"]);
+      cd.to = parse_entity(c["to"]);
+      cd.messages = get_int_req(c, "messages");
+      cd.bytes = get_double_req(c, "bytes");
+      comms.push_back(std::move(cd));
+    }
+  }
+
+  // Build PhaseData
+  auto pd = std::make_unique<model::PhaseData>();
+
+  auto get_id = [](EntityDesc const& e) -> int {
+    return e.id.has_value() ? e.id.value() : e.seq_id.value();
+  };
+
+  // Map parsed tasks into PhaseData
+  for (auto const& td : tasks) {
+    model::TaskMemory memory{};
+    // simple fallback if id is not available to seq_id
+    auto id = get_id(td.entity);
+    pd->addTask(
+      model::Task(id, td.entity.home.value(), td.node, td.entity.migratable, memory, td.time)
+    );
+  }
+
+  // Map communications into PhaseData
+  for (auto const& cd : comms) {
+    auto from_id = get_id(cd.from);
+    auto to_id = get_id(cd.to);
+    auto from_rank = pd->getTask(from_id) != nullptr ? pd->getTask(from_id)->getCurrent() : model::invalid_node;
+    auto to_rank = pd->getTask(to_id) != nullptr ? pd->getTask(to_id)->getCurrent() : model::invalid_node;
+    pd->addCommunication(model::Edge(from_id, to_id, cd.bytes, from_rank, to_rank));
+  }
+
+  return pd;
 }
 
 } /* end namespace vt_lb::input */

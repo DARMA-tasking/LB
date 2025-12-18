@@ -90,8 +90,10 @@ struct JSONReader {
   /**
    * \brief Parse the json into vt-tv's data structure Info, with a single rank
    * filled out
+   *
+   * \param[in] phase the phase to parse
    */
-  std::unique_ptr<model::PhaseData> parse();
+  std::unique_ptr<model::PhaseData> parse(int phase);
 
 private:
   int rank_ = 0;

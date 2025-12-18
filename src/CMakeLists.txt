@@ -90,6 +90,14 @@ target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC fmt-lb
 )
 
+target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC ${JSON_LIBRARY}
+)
+
+target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC ${BROTLI_LIBRARY}
+)
+
 if (vt_FOUND AND vt_backend_enabled)
   message(STATUS "Linking vt-lb with vt runtime")
   target_link_libraries(
@@ -132,16 +140,16 @@ install(
   COMPONENT                 runtime
 )
 
-# install(TARGETS ${FMT_LIBRARY} EXPORT ${VT_LB_LIBRARY})
-# install(TARGETS ${JSON_LIBRARY} EXPORT ${VT_LB_LIBRARY})
-# install(TARGETS ${BROTLI_LIBRARY} EXPORT ${VT_LB_LIBRARY})
+install(TARGETS fmt-lb EXPORT ${VT_LB_LIBRARY})
+install(TARGETS ${JSON_LIBRARY} EXPORT ${VT_LB_LIBRARY})
+install(TARGETS ${BROTLI_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 # install(TARGETS ${YAML_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 
 export(
   TARGETS                   ${VT_LB_LIBRARY}
-                            # ${FMT_LIBRARY}
-                            # ${JSON_LIBRARY}
-                            # ${BROTLI_LIBRARY}
+                            ${JSON_LIBRARY}
+                            fmt-lb
+                            ${BROTLI_LIBRARY}
                             # ${YAML_LIBRARY}
   FILE                      "vtLBTargets.cmake"
   NAMESPACE                 vt::lib::

@@ -82,10 +82,10 @@ struct CommunicationsSymmetrizer {
       RankType fr = e.getFromRank();
       RankType tr = e.getToRank();
 
-      if (tr != model::invalid_node && tr != my_rank) {
+      if (tr != model::invalid_rank && tr != my_rank) {
         rank_batches[tr].push_back(e);
       }
-      if (fr != model::invalid_node && fr != my_rank && fr != tr) {
+      if (fr != model::invalid_rank && fr != my_rank && fr != tr) {
         rank_batches[fr].push_back(e);
       }
     }

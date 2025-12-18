@@ -112,8 +112,8 @@ struct Task {
 
 private:
   TaskType id_ = invalid_task;
-  int home_ = invalid_node;
-  int current_ = invalid_node;
+  int home_ = invalid_rank;
+  int current_ = invalid_rank;
   bool migratable_ = true;
   TaskMemory memory_;
   LoadType load_ = 0.0;

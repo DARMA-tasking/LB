@@ -71,7 +71,7 @@ struct SharedBlock {
 private:
   SharedBlockType id_ = no_shared_block;
   BytesType size_ = 0.0;
-  RankType home_ = invalid_node;
+  RankType home_ = invalid_rank;
 };
 
 } /* end namespace vt_lb::model */

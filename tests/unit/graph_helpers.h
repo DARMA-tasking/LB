@@ -90,7 +90,7 @@ void generateSharedBlockCountsPerRank(
   using namespace vt_lb::model;
 
   int const rank = pd.getRank();
-  assert(rank != invalid_node);
+  assert(rank != invalid_rank);
 
   int local_blocks = std::min(per_rank_dist(gen), max_blocks_per_rank);
   for (int i = 0; i < local_blocks; ++i) {
@@ -137,7 +137,7 @@ void generateTaskCountsPerRank(
   using namespace vt_lb::model;
 
   int const rank = pd.getRank();
-  assert(rank != invalid_node);
+  assert(rank != invalid_rank);
 
   int local_tasks = std::min(per_rank_dist(gen), max_tasks_per_rank);
   for (int i = 0; i < local_tasks; ++i) {
@@ -164,7 +164,7 @@ void generateTaskCountsPerSharedBlock(
   using namespace vt_lb::model;
 
   int const rank = pd.getRank();
-  assert(rank != invalid_node);
+  assert(rank != invalid_rank);
 
   int rank_tasks = 0;
   int local_block_num = 0;
@@ -250,7 +250,7 @@ void generateIntraRankComm(
   using namespace vt_lb::model;
 
   int const rank = pd.getRank();
-  assert(rank != invalid_node);
+  assert(rank != invalid_rank);
 
   auto local_ids = pd.getTaskIds();
   std::size_t num_tasks = local_ids.size();
@@ -333,7 +333,7 @@ void generateInterRankComm(
   }
 
   int const rank = pd.getRank();
-  assert(rank != invalid_node);
+  assert(rank != invalid_rank);
 
   auto local_ids = pd.getTaskIds();
   std::vector<TaskType> local_endpoints;
@@ -392,7 +392,7 @@ void generateRankComm(
   using namespace vt_lb::model;
 
   int const rank = pd.getRank();
-  assert(rank != invalid_node);
+  assert(rank != invalid_rank);
 
   auto local_ids = pd.getTaskIds();
   const int local_tasks = local_ids.size();

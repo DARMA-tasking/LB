@@ -29,6 +29,21 @@ endif()
 set(FMT_LIBRARY fmt)
 add_subdirectory(tpl/fmt)
 
+# json library always included in the build
+set(JSON_BuildTests OFF)
+set(JSON_MultipleHeaders ON)
+set(JSON_LIBRARY nlohmann_json-lb)
+add_subdirectory(tpl/json)
+
+# brotli library always included in the build
+set(BROTLI_DISABLE_TESTS ON)
+# we need to disable bundled mode so it will install properly
+set(BROTLI_BUNDLED_MODE OFF)
+set(BROTLI_BUILD_PORTABLE ON)
+set(BROTLI_BUILD_SHARED_LIBS OFF)
+set(BROTLI_LIBRARY brotlicommon-static brotlidec-static brotlienc-static)
+add_subdirectory(tpl/brotli)
+
 file(
   GLOB
   HEADER_FILES

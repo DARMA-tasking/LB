@@ -331,8 +331,8 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
   for (auto const& cd : comms) {
     auto from_id = get_id(cd.from);
     auto to_id = get_id(cd.to);
-    auto from_rank = pd->getTask(from_id) != nullptr ? pd->getTask(from_id)->getCurrent() : model::invalid_node;
-    auto to_rank = pd->getTask(to_id) != nullptr ? pd->getTask(to_id)->getCurrent() : model::invalid_node;
+    auto from_rank = pd->getTask(from_id) != nullptr ? pd->getTask(from_id)->getCurrent() : model::invalid_rank;
+    auto to_rank = pd->getTask(to_id) != nullptr ? pd->getTask(to_id)->getCurrent() : model::invalid_rank;
     pd->addCommunication(model::Edge(from_id, to_id, cd.bytes, from_rank, to_rank));
   }
 

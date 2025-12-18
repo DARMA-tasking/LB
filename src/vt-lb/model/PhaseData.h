@@ -152,7 +152,7 @@ struct PhaseData {
   }
 
 private:
-  RankType rank_ = invalid_node;
+  RankType rank_ = invalid_rank;
   std::unordered_map<TaskType, Task> tasks_;
   std::vector<Edge> communications_;
   std::unordered_map<SharedBlockType, SharedBlock> shared_blocks_;

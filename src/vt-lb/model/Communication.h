@@ -83,8 +83,8 @@ private:
   TaskType from_ = invalid_task;
   TaskType to_ = invalid_task;
   BytesType volume_ = 0.0;
-  RankType from_rank_ = invalid_node;
-  RankType to_rank_ = invalid_node;
+  RankType from_rank_ = invalid_rank;
+  RankType to_rank_ = invalid_rank;
 };
 
 /**

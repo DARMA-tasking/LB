@@ -116,7 +116,8 @@ struct Transferer {
     int cluster_gid,
     TaskClusterSummaryInfo cluster_gid_summary,
     int request_cluster_gid,
-    bool sending_requested_cluster = false
+    bool sending_requested_cluster = false,
+    double dst_work_before = 0.0
   ) {
     // Assume all clusters have been converted to global IDs already
     vt_lb_assert(clusterer_ != nullptr, "Clusterer must be initialized to migrate clusters");
@@ -175,7 +176,7 @@ struct Transferer {
     handle_[rank].template send<&Transferer::migrationClusterHandler>(
       comm_.getRank(), cluster_gid, cluster_gid_summary,
       tasks_to_migrate, edges_to_migrate, shared_blocks_to_migrate,
-      request_cluster_gid, sending_requested_cluster
+      request_cluster_gid, sending_requested_cluster, dst_work_before
     );
   }
 
@@ -259,7 +260,8 @@ private:
     std::vector<model::Edge> const& edges,
     std::vector<model::SharedBlock> const& shared_blocks,
     int request_cluster_gid,
-    bool sending_requested_cluster
+    bool sending_requested_cluster,
+    double dst_work_before
   ) {
     VT_LB_LOG(
       LoadBalancer, normal,
@@ -268,7 +270,7 @@ private:
     );
 
     // If we are sending back a requested cluster, always accept it
-    if (sending_requested_cluster || acceptIncomingClusterSwap(from_rank, cluster_gid, request_cluster_gid)) {
+    if (sending_requested_cluster || acceptIncomingClusterSwap(from_rank, cluster_gid, request_cluster_gid, dst_work_before)) {
       std::vector<model::TaskType> task_ids;
       // Add all received tasks to local PhaseData
       for (auto const& task : tasks) {
@@ -417,13 +419,15 @@ protected:
    * \param[in] from_rank the rank sending the cluster
    * \param[in] give_cluster_gid the cluster GID being given away
    * \param[in] recv_cluster_gid the cluster GID being received
+   * \param[in] dst_work_before the destination rank's work before the swap
    *
    * \return true to accept the cluster swap, false to reject it
    */
   virtual bool acceptIncomingClusterSwap(
     [[maybe_unused]] int from_rank,
     [[maybe_unused]] int give_cluster_gid,
-    [[maybe_unused]] int recv_cluster_gid
+    [[maybe_unused]] int recv_cluster_gid,
+    [[maybe_unused]] double dst_work_before
   ) { return true; }
 
   /**

@@ -66,13 +66,15 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
   RelaxedClusterTransfer(
     CommT& comm,
     model::PhaseData& pd,
+    Configuration const& config,
     Clusterer* clusterer,
     int global_max_clusters,
     std::unordered_map<int, RankClusterInfo> const& cluster_info,
     Statistics stats
   ) : Transferer<CommT>(comm, pd, clusterer, global_max_clusters),
       cluster_info_(cluster_info),
-      stats_(stats)
+      stats_(stats),
+      config_(config)
   {}
 
   struct Candidate {
@@ -86,7 +88,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     double improvement = 0.0; // w_max_0 - w_max_new
   };
 
-  Candidate findBestSwapCandidate(Configuration const& config) {
+  Candidate findBestSwapCandidate() {
     int this_rank = this->comm_.getRank();
     RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
     auto const& local_cluster_summaries = this_rank_info.cluster_summaries;
@@ -103,7 +105,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     std::unordered_map<int, double> before_work;
     for (auto const& [rank, info] : cluster_info_) {
       before_work[rank] = WorkModelCalculator::computeWork(
-        config.work_model_, info.rank_breakdown
+        config_.work_model_, info.rank_breakdown
       );
     }
 
@@ -126,9 +128,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
 
       // Check memory fit on this rank
-      if (config.hasMemoryInfo()) {
+      if (config_.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
-          config, this_rank_info, to_add_this, to_remove_this,
+          config_, this_rank_info, to_add_this, to_remove_this,
           this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
         );
         if (!fits) {
@@ -138,9 +140,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       }
 
       // Check memory fit on destination rank
-      if (config.hasMemoryInfo()) {
+      if (config_.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
-          config, dst_info, to_add_dst, to_remove_dst,
+          config_, dst_info, to_add_dst, to_remove_dst,
           this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
         );
         if (!fits) {
@@ -154,7 +156,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         this_rank_info, to_add_this, to_remove_this
       );
       c.this_work_after = WorkModelCalculator::computeWork(
-        config.work_model_, c.this_work_breakdown_after
+        config_.work_model_, c.this_work_breakdown_after
       );
 
       // Compute post-swap work on destination rank
@@ -162,7 +164,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
         dst_info, to_add_dst, to_remove_dst
       );
       c.dst_work_after = WorkModelCalculator::computeWork(
-        config.work_model_, c.dst_work_breakdown_after
+        config_.work_model_, c.dst_work_breakdown_after
       );
 
       // Criterion: improvement in max work
@@ -234,17 +236,17 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     return best;
   }
 
-  void run(Configuration const& config) {
+  void run() {
     int this_rank = this->comm_.getRank();
     RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
 
-    if (WorkModelCalculator::computeWork(config.work_model_, this_rank_info.rank_breakdown) <= stats_.avg) {
+    if (WorkModelCalculator::computeWork(config_.work_model_, this_rank_info.rank_breakdown) <= stats_.avg) {
       // do nothing
     } else {
       bool found_good_swap = true;
 
       while (found_good_swap && transaction_status_ != TransactionStatus::Rejected) {
-        auto best = findBestSwapCandidate(config);
+        auto best = findBestSwapCandidate();
         if (best.improvement > 0.0) {
           VT_LB_LOG(
             LoadBalancer, normal,
@@ -257,7 +259,10 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
           if (best.give_cluster_gid != -1) {
             give_cluster_summary = this_rank_info.cluster_summaries.at(best.give_cluster_gid);
           }
-          this->migrateCluster(best.dst_rank, best.give_cluster_gid, give_cluster_summary, best.recv_cluster_gid);
+          this->migrateCluster(
+            best.dst_rank, best.give_cluster_gid, give_cluster_summary, best.recv_cluster_gid,
+            false, best.dst_work_before
+          );
         } else {
           found_good_swap = false;
           continue;
@@ -295,7 +300,7 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
           }
 
           auto new_work = WorkModelCalculator::computeWork(
-            config.work_model_, ci_r.rank_breakdown
+            config_.work_model_, ci_r.rank_breakdown
           );
           VT_LB_LOG(
             LoadBalancer, normal,
@@ -361,7 +366,8 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
   /*virtual*/ bool acceptIncomingClusterSwap(
     [[maybe_unused]] int from_rank,
     [[maybe_unused]] int give_cluster_gid,
-    int recv_cluster_gid
+    int recv_cluster_gid,
+    double dst_work_before
   ) override final {
     bool has_cluster =
       recv_cluster_gid == -1 ||
@@ -373,8 +379,12 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       recv_cluster_gid, has_cluster
     );
 
+    auto current_work = WorkModelCalculator::computeWork(
+      config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
+    );
+
     // For relaxed approach, we accept if we still have the recv_cluster_gid
-    if (has_cluster) {
+    if (has_cluster && current_work <= dst_work_before) {
       return true;
     }
     return false;
@@ -384,6 +394,7 @@ private:
   std::unordered_map<int, RankClusterInfo> cluster_info_;
   Statistics stats_;
   TransactionStatus transaction_status_ = TransactionStatus::Pending;
+  Configuration const& config_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

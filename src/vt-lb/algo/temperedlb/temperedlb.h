@@ -337,9 +337,9 @@ struct TemperedLB final : baselb::BaseLB {
       );
 
       RelaxedClusterTransfer<CommT> transfer(
-        comm_, *phase_data_, clusterer_.get(), global_max_clusters_, info, work_stats
+        comm_, *phase_data_, config_, clusterer_.get(), global_max_clusters_, info, work_stats
       );
-      transfer.run(config_);
+      transfer.run();
     }
   }
 

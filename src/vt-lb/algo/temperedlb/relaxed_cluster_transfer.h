@@ -79,9 +79,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     int dst_rank = -1;
     int give_cluster_gid = -1;
     int recv_cluster_gid = -1;
-    double this_work_after = 0.0;
+    double this_work_before = 0.0, this_work_after = 0.0;
     WorkBreakdown this_work_breakdown_after = {};
-    double dst_work_after = 0.0;
+    double dst_work_before = 0.0, dst_work_after = 0.0;
     WorkBreakdown dst_work_breakdown_after = {};
     double improvement = 0.0; // w_max_0 - w_max_new
   };
@@ -171,6 +171,8 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       double w_max_0 = std::max(before_w_src, before_w_dst);
       double w_max_new = std::max(c.this_work_after, c.dst_work_after);
       c.improvement = w_max_0 - w_max_new;
+      c.this_work_before = before_w_src;
+      c.dst_work_before = before_w_dst;
 
       return c;
     };
@@ -224,9 +226,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
     VT_LB_LOG(
       LoadBalancer, normal,
       "RelaxedClusterTransfer: best candidate dst_rank={} give_gid={} recv_gid={} "
-      "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
+      "this_work_before={:.2f} this_work_after={:.2f} dst_work_before={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
       best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
-      best.this_work_after, best.dst_work_after, best.improvement
+      best.this_work_before, best.this_work_after, best.dst_work_before, best.dst_work_after, best.improvement
     );
 
     return best;

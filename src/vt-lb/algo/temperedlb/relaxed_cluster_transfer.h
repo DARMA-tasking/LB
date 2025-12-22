@@ -612,7 +612,7 @@ struct RelaxedClusterTransfer {
     );
 
     // For relaxed approach, we accept if we still have the recv_cluster_gid
-    if (has_cluster_or_null && current_work < dst_work_before) {
+    if (has_cluster_or_null && current_work <= dst_work_before) {
       return true;
     }
     return false;

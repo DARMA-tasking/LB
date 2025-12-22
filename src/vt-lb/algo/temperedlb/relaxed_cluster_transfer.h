@@ -420,8 +420,12 @@ struct RelaxedClusterTransfer {
       cluster_gid, tasks.size(), edges.size(), from_rank
     );
 
+    bool accept =
+      sending_requested_cluster ||
+      acceptIncomingClusterSwap(from_rank, cluster_gid, cluster_gid_summary, request_cluster_gid, dst_work_before);
+
     // If we are sending back a requested cluster, always accept it
-    if (sending_requested_cluster || acceptIncomingClusterSwap(from_rank, cluster_gid, request_cluster_gid, dst_work_before)) {
+    if (accept) {
       std::vector<model::TaskType> task_ids;
       // Add all received tasks to local PhaseData
       for (auto const& task : tasks) {
@@ -576,7 +580,8 @@ struct RelaxedClusterTransfer {
 
   bool acceptIncomingClusterSwap(
     [[maybe_unused]] int from_rank,
-    [[maybe_unused]] int give_cluster_gid,
+    int give_cluster_gid,
+    TaskClusterSummaryInfo const& give_cluster_gid_summary,
     int recv_cluster_gid,
     double dst_work_before
   ) {
@@ -584,18 +589,27 @@ struct RelaxedClusterTransfer {
       recv_cluster_gid == -1 ||
       cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
 
-    auto current_work = WorkModelCalculator::computeWork(
-      config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
-    );
+    double new_work = 0.0;
+    if (!cluster_info_[this->comm_.getRank()].cluster_summaries.contains(give_cluster_gid)) {
+      cluster_info_[this->comm_.getRank()].cluster_summaries[give_cluster_gid] = give_cluster_gid_summary;
+      new_work = WorkModelCalculator::computeWork(
+        config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
+      );
+      cluster_info_[this->comm_.getRank()].cluster_summaries.erase(give_cluster_gid);
+    } else {
+      new_work = WorkModelCalculator::computeWork(
+        config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
+      );
+    }
 
     VT_LB_LOG(
       LoadBalancer, normal,
-      "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster={}, current_work={}, dst_work_before={}\n",
-      recv_cluster_gid, has_cluster, current_work, dst_work_before
+      "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster={}, new_work={}, max_work={}, dst_work_before={}\n",
+      recv_cluster_gid, has_cluster, new_work, stats_.max, dst_work_before
     );
 
     // For relaxed approach, we accept if we still have the recv_cluster_gid
-    if (has_cluster && current_work <= dst_work_before) {
+    if (has_cluster && new_work < stats_.max) {
       return true;
     }
     return false;

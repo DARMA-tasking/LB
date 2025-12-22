@@ -59,7 +59,16 @@ struct PhaseData {
   explicit PhaseData(RankType rank) : rank_(rank) {}
 
   void addTask(Task const& t) { tasks_.emplace(t.getId(), t); }
-  void addCommunication(Edge const& e) { communications_.push_back(e); }
+  void addCommunication(Edge const& e) {
+    for (int i = 0; i < static_cast<int>(communications_.size()); ++i) {
+      auto& comm = communications_[i];
+      if (comm.getFrom() == e.getFrom() && comm.getTo() == e.getTo()) {
+        comm = e;
+        return;
+      }
+    }
+    communications_.push_back(e);
+  }
   void addSharedBlock(SharedBlock const& b) { shared_blocks_.emplace(b.getId(), b); }
 
   RankType getRank() const { return rank_; }
@@ -88,6 +97,7 @@ struct PhaseData {
 
   std::unordered_map<TaskType, Task> const& getTasksMap() const { return tasks_; }
   std::vector<Edge> const& getCommunications() const { return communications_; }
+  std::vector<Edge>& getCommunicationsRef() { return communications_; }
   std::unordered_map<SharedBlockType, SharedBlock> const& getSharedBlocksMap() const { return shared_blocks_; }
   std::unordered_set<TaskType> getTaskIds() const {
     std::unordered_set<TaskType> ids;
@@ -149,6 +159,10 @@ struct PhaseData {
     s | shared_blocks_;
     s | rank_footprint_bytes_;
     s | rank_max_memory_available_;
+  }
+
+  void setRank(RankType in_rank) {
+    rank_ = in_rank;
   }
 
 private:

@@ -145,7 +145,7 @@ struct WorkBreakdown {
   /// @brief Shared-memory communication component
   double shared_mem_comm = 0.0;
   /// @brief Memory breakdown
-  MemoryBreakdown memory_breakdown;
+  MemoryBreakdown memory_breakdown = {};
 
   template <typename SerializerT>
   void serialize(SerializerT& s) {
@@ -216,13 +216,13 @@ struct WorkModelCalculator {
   /**
    * @brief Compute the new work after adding/removing task cluster summaries
    *
-   * @param model The work model
    * @param rank_cluster_info The rank cluster info
    * @param to_add The cluster of tasks to add
    * @param to_remove The cluster of tasks to remove
+   *
+   * @return The new work breakdown
    */
-  static double computeWorkUpdateSummary(
-    WorkModel const& model,
+  static WorkBreakdown computeWorkUpdateSummary(
     RankClusterInfo rank_cluster_info,
     TaskClusterSummaryInfo to_add,
     TaskClusterSummaryInfo to_remove

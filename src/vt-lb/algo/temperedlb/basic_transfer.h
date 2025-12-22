@@ -51,6 +51,7 @@
 #include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/algo/temperedlb/transfer_util.h>
 #include <vt-lb/algo/temperedlb/transfer.h>
+#include <vt-lb/util/assert.h>
 
 namespace vt_lb::algo::temperedlb {
 
@@ -132,7 +133,7 @@ struct BasicTransfer final : Transferer<CommT> {
 
           // Find load of selected node
           auto load_iter = load_info_.find(selected_rank);
-          assert(load_iter != load_info_.end() && "Selected node not found");
+          vt_lb_assert(load_iter != load_info_.end(), "Selected node not found");
           auto& selected_load = load_iter->second;
 
           // Check if object is migratable and evaluate criterion for proposed transfer

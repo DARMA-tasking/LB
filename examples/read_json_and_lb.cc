@@ -124,6 +124,7 @@ int main(int argc, char** argv) {
     comm.finalize();
     return 1;
   }
+  phase_data->setRank(comm.getRank());
 
   // Configure TemperedLB (deterministic single trial/iter example)
   vt_lb::algo::temperedlb::Configuration config{comm.numRanks()};

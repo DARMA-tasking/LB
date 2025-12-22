@@ -86,9 +86,8 @@ struct GraphEdgeResolver {
 
     // Proactively inform brokers of all local tasks to handle asymmetric graphs
     // Assumes PhaseData exposes tasks as a map from TaskType -> Task
-    for (auto const& kv : pd_->getTasksRef()) {
-      auto const tid = kv.first;
-      rank_to_tasks[tid % num_ranks].push_back(tid);
+    for (auto const& id : pd_->getTaskIds()) {
+      rank_to_tasks[id % num_ranks].push_back(id);
     }
 
     for (auto& e : pd_->getCommunicationsRef()) {

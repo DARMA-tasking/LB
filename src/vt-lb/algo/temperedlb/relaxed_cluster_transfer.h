@@ -366,8 +366,8 @@ struct RelaxedClusterTransfer {
                 edge.setToRank(rank);
               }
               VT_LB_LOG(
-                LoadBalancer, normal,
-                "Transferer::migrateCluster: migrating edge from task {} rank {} to task {} rank {} volume {}\n",
+                LoadBalancer, verbose,
+                "RelaxedClusterTransfer::migrateCluster: migrating edge from task {} rank {} to task {} rank {} volume {}\n",
                 edge.getFrom(), edge.getFromRank(), edge.getTo(), edge.getToRank(), edge.getVolume()
               );
               edges_to_migrate.push_back(edge);

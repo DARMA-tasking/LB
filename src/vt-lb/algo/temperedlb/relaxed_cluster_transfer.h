@@ -460,12 +460,17 @@ struct RelaxedClusterTransfer {
       }
 
       if (request_cluster_gid != -1) {
+        auto iter = cluster_info_.at(this->comm_.getRank()).cluster_summaries.find(request_cluster_gid);
+        vt_lb_assert(
+          iter != cluster_info_.at(this->comm_.getRank()).cluster_summaries.end(),
+          "request_cluster_gid not found in local summaries"
+        );
         // Send back the requested cluster
-        migrateCluster(from_rank, request_cluster_gid, getClusterSummary(request_cluster_gid), -1, true);
+        migrateCluster(from_rank, request_cluster_gid, iter->second, -1, true);
       } else {
         if (sending_requested_cluster) {
           // The cluster sent back from the swap is complete; notify that the transaction is complete
-          transactionComplete(cluster_gid, TransactionStatus::Accepted);
+          transactionComplete(TransactionStatus::Accepted);
         } else {
           // This is a null swap, so notify of completion
           handle_[from_rank].template send<&ThisType::clusterAccepted>(
@@ -493,7 +498,7 @@ struct RelaxedClusterTransfer {
       cluster_gid
     );
     // Cluster is accepted; notify that the transaction is complete
-    transactionComplete(cluster_gid, TransactionStatus::Accepted);
+    transactionComplete(TransactionStatus::Accepted);
   }
 
   void sendBackClusterHandler(
@@ -527,24 +532,11 @@ struct RelaxedClusterTransfer {
     incomingCluster(cluster_gid, cluster_gid_summary);
 
     // Cluster is sent back; notify that the transaction is complete
-    transactionComplete(cluster_gid, TransactionStatus::Rejected);
+    transactionComplete(TransactionStatus::Rejected);
   }
 
-  void transactionComplete(
-    [[maybe_unused]] int cluster_gid, TransactionStatus status
-  ) {
+  void transactionComplete(TransactionStatus status) {
     transaction_status_ = status;
-  }
-
-  TaskClusterSummaryInfo getClusterSummary(
-    int cluster_gid
-  ) {
-    auto iter = cluster_info_.at(this->comm_.getRank()).cluster_summaries.find(cluster_gid);
-    vt_lb_assert(
-      iter != cluster_info_.at(this->comm_.getRank()).cluster_summaries.end(),
-      "RelaxedClusterTransfer::getClusterSummary: cluster_gid not found in local summaries"
-    );
-    return iter->second;
   }
 
   void outgoingCluster(

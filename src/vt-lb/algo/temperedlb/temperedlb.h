@@ -179,7 +179,11 @@ struct TemperedLB final : baselb::BaseLB {
   std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
     InformationPropagation<CommT, T> ip(comm_, config_);
     auto gathered_info = ip.run(initial_data);
-    VT_LB_LOG(LoadBalancer, normal, "gathered load info size={}\n", gathered_info.size());
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "gathered load info size={}\n",
+      gathered_info.size()
+    );
     return gathered_info;
   }
 
@@ -188,9 +192,13 @@ struct TemperedLB final : baselb::BaseLB {
     makeCommunicationsSymmetric();
 
     for (int trial = 0; trial < config_.num_trials_; ++trial) {
-      VT_LB_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+      }
       runTrial(trial);
-      VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
+      }
     }
 
     // Sort trial work distribution by max work
@@ -202,10 +210,12 @@ struct TemperedLB final : baselb::BaseLB {
       }
     );
 
-    VT_LB_LOG(
-      LoadBalancer, normal,
-      "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
-    );
+    if (comm_.getRank() == 0) {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
+      );
+    }
 
     return std::get<1>(trial_work_distribution_.front());
   }
@@ -215,7 +225,13 @@ struct TemperedLB final : baselb::BaseLB {
     savePhaseData();
 
     for (int iter = 0; iter < config_.num_iters_; ++iter) {
-      VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "  Starting iteration {}/{}\n",
+          iter + 1, config_.num_iters_
+        );
+      }
 
       auto const& wm = config_.work_model_;
       if (!(wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0)) {
@@ -228,7 +244,13 @@ struct TemperedLB final : baselb::BaseLB {
 
       runIteration(trial, iter);
 
-      VT_LB_LOG(LoadBalancer, normal, "  Finished iteration {}/{}\n", iter + 1, config_.num_iters_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "  Finished iteration {}/{}\n",
+          iter + 1, config_.num_iters_
+        );
+      }
     }
 
     // Before we restore phase data for the next trial, save the work and task distribution
@@ -331,7 +353,7 @@ struct TemperedLB final : baselb::BaseLB {
       auto info = runInformationPropagation(rank_info);
 
       VT_LB_LOG(
-        LoadBalancer, normal,
+        LoadBalancer, verbose,
         "runTrial: gathered load info from {} ranks\n",
         info.size()
       );
@@ -358,7 +380,11 @@ private:
     handle_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
 
     if (comm_.getRank() == root) {
-      VT_LB_LOG(LoadBalancer, normal, "global max clusters across ranks: {}\n", global_max_clusters_);
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "global max clusters across ranks: {}\n",
+        global_max_clusters_
+      );
     }
     // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
   }

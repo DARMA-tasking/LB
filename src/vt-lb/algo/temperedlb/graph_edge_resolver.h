@@ -227,7 +227,7 @@ struct GraphEdgeResolver {
     std::vector<model::TaskType> const& task_ids
   ) {
     VT_LB_LOG(
-      LoadBalancer, normal,
+      LoadBalancer, verbose,
       "GraphEdgeResolver::resolveTasks: received {} task resolution requests from rank {}\n",
       task_ids.size(), rank
     );
@@ -246,7 +246,7 @@ struct GraphEdgeResolver {
     model::TaskType task_id
   ) {
     VT_LB_LOG(
-      LoadBalancer, normal,
+      LoadBalancer, verbose,
       "GraphEdgeResolver::validateEndpoint: received validation request for task {} from rank {}\n",
       task_id, rank
     );

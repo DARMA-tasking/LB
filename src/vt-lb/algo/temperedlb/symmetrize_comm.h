@@ -105,7 +105,7 @@ struct CommunicationsSymmetrizer {
     }
 
     VT_LB_LOG(
-      LoadBalancer, normal,
+      LoadBalancer, verbose,
       "completed symmetrization of communications\n"
     );
   }
@@ -121,7 +121,7 @@ private:
   // Add edge only if not already present locally; do not add reverse
   void addIfMissingLocal(Edge const& e) {
     VT_LB_LOG(
-      LoadBalancer, normal,
+      LoadBalancer, verbose,
       "addIfMissingLocal: checking edge from {} to {} vol={:.2f} exists={}\n",
       e.getFrom(), e.getTo(), e.getVolume(), hasEdge(e.getFrom(), e.getTo())
     );
@@ -132,7 +132,7 @@ private:
 
   void recvEdgesHandler(std::vector<Edge> edges) {
     VT_LB_LOG(
-      LoadBalancer, normal,
+      LoadBalancer, verbose,
       "recvEdgesHandler: received {} edges to symmetrize\n",
       edges.size()
     );

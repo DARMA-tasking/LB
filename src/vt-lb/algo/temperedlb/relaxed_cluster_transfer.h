@@ -349,6 +349,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       "RelaxedClusterTransfer::outgoingCluster: cluster_gid not found in local summaries"
     );
     cluster_info_[this->comm_.getRank()].cluster_summaries.erase(iter);
+    cluster_info_[this->comm_.getRank()].rank_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      cluster_info_[this->comm_.getRank()], {}, cluster_gid_summary
+    );
   }
 
   /*virtual*/ void incomingCluster(
@@ -361,6 +364,9 @@ struct RelaxedClusterTransfer final : Transferer<CommT> {
       cluster_gid
     );
     cluster_info_[this->comm_.getRank()].cluster_summaries[cluster_gid] = cluster_gid_summary;
+    cluster_info_[this->comm_.getRank()].rank_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      cluster_info_[this->comm_.getRank()], cluster_gid_summary, {}
+    );
   }
 
   /*virtual*/ bool acceptIncomingClusterSwap(

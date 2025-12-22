@@ -161,6 +161,10 @@ struct PhaseData {
     s | rank_max_memory_available_;
   }
 
+  void setRank(RankType in_rank) {
+    rank_ = in_rank;
+  }
+
 private:
   RankType rank_ = invalid_rank;
   std::unordered_map<TaskType, Task> tasks_;

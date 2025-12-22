@@ -580,36 +580,36 @@ struct RelaxedClusterTransfer {
 
   bool acceptIncomingClusterSwap(
     [[maybe_unused]] int from_rank,
-    int give_cluster_gid,
+    [[maybe_unused]] int give_cluster_gid,
     TaskClusterSummaryInfo const& give_cluster_gid_summary,
     int recv_cluster_gid,
     double dst_work_before
   ) {
-    bool has_cluster =
+    bool contains_cluster = cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
+    bool has_cluster_or_null =
       recv_cluster_gid == -1 ||
-      cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
+      contains_cluster;
 
-    double new_work = 0.0;
-    if (!cluster_info_[this->comm_.getRank()].cluster_summaries.contains(give_cluster_gid)) {
-      cluster_info_[this->comm_.getRank()].cluster_summaries[give_cluster_gid] = give_cluster_gid_summary;
-      new_work = WorkModelCalculator::computeWork(
-        config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
-      );
-      cluster_info_[this->comm_.getRank()].cluster_summaries.erase(give_cluster_gid);
-    } else {
-      new_work = WorkModelCalculator::computeWork(
-        config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
-      );
-    }
+    auto recv_cluster_summary =
+      contains_cluster ?
+      cluster_info_[this->comm_.getRank()].cluster_summaries.at(recv_cluster_gid) :
+      TaskClusterSummaryInfo{};
+    auto new_bd = WorkModelCalculator::computeWorkUpdateSummary(
+      cluster_info_[this->comm_.getRank()], give_cluster_gid_summary, recv_cluster_summary
+    );
+    auto new_work = WorkModelCalculator::computeWork(
+      config_.work_model_, new_bd
+    );
+
 
     VT_LB_LOG(
       LoadBalancer, normal,
-      "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster={}, new_work={}, max_work={}, dst_work_before={}\n",
-      recv_cluster_gid, has_cluster, new_work, stats_.max, dst_work_before
+      "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster_or_null={}, new_work={}, max_work={}, dst_work_before={}\n",
+      recv_cluster_gid, has_cluster_or_null, new_work, stats_.max, dst_work_before
     );
 
     // For relaxed approach, we accept if we still have the recv_cluster_gid
-    if (has_cluster && new_work < stats_.max) {
+    if (has_cluster_or_null && new_work < stats_.max) {
       return true;
     }
     return false;

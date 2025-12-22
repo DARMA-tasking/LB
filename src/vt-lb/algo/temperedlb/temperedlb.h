@@ -343,6 +343,12 @@ struct TemperedLB final : baselb::BaseLB {
       // Every task could be its own cluster, but clusters must exist
       vt_lb_assert(clusterer_ != nullptr, "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
+
+      double total_inter_bytes = std::max(
+        work_breakdown.inter_node_recv_comm, work_breakdown.inter_node_send_comm
+      );
+      computeStatistics(total_inter_bytes, "Work intercomm bytes");
+
       auto rank_info = RankClusterInfo{
         local_summary,
         this->getPhaseData().getRankFootprintBytes(),

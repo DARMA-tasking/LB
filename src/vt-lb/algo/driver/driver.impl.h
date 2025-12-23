@@ -44,8 +44,10 @@
 #if !defined INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_IMPL_H
 #define INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_IMPL_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/algo/temperedlb/temperedlb.h>
-#include "vt-lb/algo/driver/driver.h"
+#include <vt-lb/algo/driver/driver.h>
 
 namespace vt_lb {
 

@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
 #define INCLUDED_VT_LB_COMM_COMM_VT_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #if vt_backend_enabled
 
 #include <vt/configs/types/types_type.h>

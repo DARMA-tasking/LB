@@ -44,10 +44,12 @@
 #if !defined INCLUDED_VT_LB_MODEL_PHASE_DATA_H
 #define INCLUDED_VT_LB_MODEL_PHASE_DATA_H
 
-#include "types.h"
-#include "SharedBlock.h"
-#include "Task.h"
-#include "Communication.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/model/types.h>
+#include <vt-lb/model/SharedBlock.h>
+#include <vt-lb/model/Task.h>
+#include <vt-lb/model/Communication.h>
 
 #include <unordered_map>
 #include <vector>

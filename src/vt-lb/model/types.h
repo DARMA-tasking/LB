@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_MODEL_TYPES_H
 #define INCLUDED_VT_LB_MODEL_TYPES_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <cstdint>
 #include <functional>
 

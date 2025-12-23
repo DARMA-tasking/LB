@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_PROXY_WRAPPER_IMPL_H
 #define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_IMPL_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt/transport.h>
 
 #include <cstring>

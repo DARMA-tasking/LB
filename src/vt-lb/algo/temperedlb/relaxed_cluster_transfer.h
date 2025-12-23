@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_RELAXED_CLUSTER_TRANSFER_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_RELAXED_CLUSTER_TRANSFER_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/algo/temperedlb/transfer.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>

@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_TRAITS_H
 #define INCLUDED_VT_LB_COMM_COMM_TRAITS_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <cstddef>
 #include <type_traits>
 #include <utility>

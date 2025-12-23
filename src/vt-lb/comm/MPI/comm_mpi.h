@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_MPI_H
 #define INCLUDED_VT_LB_COMM_COMM_MPI_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <cstdint>
 #include <memory>
 #include <tuple>

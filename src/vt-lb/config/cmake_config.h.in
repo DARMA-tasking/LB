@@ -41,4 +41,4 @@
 //@HEADER
 */
 
-#define vt_backend_enabled                   @vt_backend_enabled@
+#define vt_backend_enabled                   @vt_backend_feature_enabled@

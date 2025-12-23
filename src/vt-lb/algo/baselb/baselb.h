@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_BASELB_BASELB_H
 #define INCLUDED_VT_LB_ALGO_BASELB_BASELB_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <memory>
 #include <vt-lb/model/PhaseData.h>
 

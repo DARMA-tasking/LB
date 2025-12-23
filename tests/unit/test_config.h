@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_UNIT_TEST_CONFIG_H
 #define INCLUDED_VT_LB_UNIT_TEST_CONFIG_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #define DEBUG_TEST_HARNESS_PRINT 0
 
 // Stub "value" to when not supplying a trailing macro variadic argument.

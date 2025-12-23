@@ -44,6 +44,8 @@
 #ifndef INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 #define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <atomic>
 #include <vt/transport.h>
 #include <mpi.h>

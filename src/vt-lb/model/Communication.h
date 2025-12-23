@@ -44,7 +44,9 @@
 #if !defined INCLUDED_VT_LB_MODEL_COMMUNICATION_H
 #define INCLUDED_VT_LB_MODEL_COMMUNICATION_H
 
-#include "types.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/model/types.h>
 
 namespace vt_lb::model {
 

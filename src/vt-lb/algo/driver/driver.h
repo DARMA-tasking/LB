@@ -44,7 +44,9 @@
 #if !defined INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_H
 #define INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_H
 
-#include "vt-lb/model/PhaseData.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/model/PhaseData.h>
 
 #include <memory>
 

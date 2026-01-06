@@ -49,6 +49,8 @@
 #include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
 #include <vt-lb/algo/temperedlb/work_model.h>
 
+#include <vt-lb/util/assert.h>
+
 #include <vector>
 #include <set>
 #include <random>
@@ -121,7 +123,7 @@ struct Criterion {
       return ModifiedGrapevineCriterion()(over, under, obj, avg);
       break;
     default:
-      assert(false && "Incorrect criterion value");
+      vt_lb_assert(false, "Incorrect criterion value");
       return false;
       break;
     };

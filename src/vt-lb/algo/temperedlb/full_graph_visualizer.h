@@ -55,6 +55,11 @@
 #include <utility>
 #include <unordered_set>
 #include <fstream>
+// Add headers used in DOT building
+#include <array>
+#include <sstream>
+#include <iomanip>
+#include <optional>
 
 namespace vt_lb::algo::temperedlb {
 
@@ -75,17 +80,21 @@ struct FullGraphVisualizer {
 
   // Handler for receiving aggregated data from children
   void receiveAggregated(
-    model::PhaseData incoming_pd,
-    std::unordered_map<model::TaskType,int> incoming_clusters,
+    std::unordered_map<model::RankType, model::PhaseData> incoming_rank_phases,
+    std::unordered_map<model::RankType, std::unordered_map<model::TaskType,int>> incoming_rank_clusters,
     model::RankType from_rank
   ) {
-    // Accumulate per-rank PhaseData and cluster map
-    phases_by_rank_[from_rank] = std::move(incoming_pd);
-    clusters_by_rank_[from_rank] = std::move(incoming_clusters);
+    // Merge per-rank PhaseData from child subtree
+    for (auto& [r, pd] : incoming_rank_phases) {
+      phases_by_rank_[r] = std::move(pd);
+    }
+    // Merge per-rank clusters from child subtree
+    for (auto& [r, cmap] : incoming_rank_clusters) {
+      clusters_by_rank_[r] = std::move(cmap);
+    }
     ++received_children_;
-    // Debug: child arrival
     VT_LB_LOG(Visualizer, verbose, "[viz] receiveAggregated from child rank={} (received={}/{})\n",
-    static_cast<int>(from_rank), received_children_, expected_children_);
+      static_cast<int>(from_rank), received_children_, expected_children_);
   }
 
   void run() {
@@ -95,21 +104,17 @@ struct FullGraphVisualizer {
     // Initialize local cluster mapping from the provided clusterer, if any
     local_clusters_.clear();
     if (clusterer_) {
-      // Convert local cluster IDs to global using global_max_clusters_
       for (auto const& [tid, local_cid] : clusterer_->taskToCluster()) {
         int global_cid = ClusterSummarizerUtil::localToGlobalClusterID(local_cid, my_rank, global_max_clusters_);
         local_clusters_[tid] = global_cid;
       }
-      // Debug: local cluster count and conversion info
-      VT_LB_LOG(
-        Visualizer, normal, "[viz] init local_clusters task-maps={} unique-clusters={} (globalized, gmax={})\n",
-        local_clusters_.size(), countClusters(local_clusters_), global_max_clusters_
-      );
+      VT_LB_LOG(Visualizer, normal, "[viz] init local_clusters task-maps={} unique-clusters={} (globalized, gmax={})\n",
+        local_clusters_.size(), countClusters(local_clusters_), global_max_clusters_);
     } else {
       VT_LB_LOG(Visualizer, normal, "[viz] clusterer_=nullptr\n");
     }
 
-    // Compute parent and children for a simple binary tree: parent = r/2
+    // Binary tree topology
     const int parent = (my_rank == 0) ? -1 : (my_rank / 2);
     std::vector<int> children;
     for (int r = 0; r < n_ranks; ++r) {
@@ -119,78 +124,63 @@ struct FullGraphVisualizer {
     }
     expected_children_ = static_cast<int>(children.size());
     received_children_ = 0;
-    // Debug: topology
     VT_LB_LOG(Visualizer, normal, "[viz] parent={} children=[{}] expected_children={}\n",
-              parent,
-              [&children](){
-                std::string s;
-                for (std::size_t i = 0; i < children.size(); ++i) {
-                  s += std::to_string(children[i]);
-                  if (i + 1 < children.size()) s += ",";
-                }
-                return s;
-              }(),
-              expected_children_);
+      parent,
+      [&children](){
+        std::string s;
+        for (std::size_t i = 0; i < children.size(); ++i) {
+          s += std::to_string(children[i]);
+          if (i + 1 < children.size()) s += ",";
+        }
+        return s;
+      }(),
+      expected_children_);
 
-    // Wait for all children to send their data up the tree
+    // Wait for children
     while (received_children_ < expected_children_) {
-      if (!comm_.poll()) break; // progress MPI and handlers
+      if (!comm_.poll()) break;
     }
     VT_LB_LOG(Visualizer, normal, "[viz] proceed to merge (received={}/{})\n",
-              received_children_, expected_children_);
+      received_children_, expected_children_);
 
-    // Merge children data into a local accumulator
-    model::PhaseData merged = phase_data_; // start with local rank data
-    auto merged_clusters = local_clusters_; // local per-task cluster map (empty if none)
+    // Build per-rank accumulators (DO NOT flatten)
+    std::unordered_map<model::RankType, model::PhaseData> merged_rank_phases = phases_by_rank_;
+    std::unordered_map<model::RankType, std::unordered_map<model::TaskType,int>> merged_rank_clusters = clusters_by_rank_;
 
-    // Debug: local counts pre-merge
-    VT_LB_LOG(Visualizer, verbose, "[viz] local tasks={} edges={} shared_blocks={}\n",
-              merged.getTasksMap().size(),
-              merged.getCommunications().size(),
-              merged.getSharedBlocksMap().size());
+    // Insert this rank's local data
+    merged_rank_phases[static_cast<model::RankType>(my_rank)] = phase_data_;
+    merged_rank_clusters[static_cast<model::RankType>(my_rank)] = local_clusters_;
 
-    for (auto const& [rank, pd] : phases_by_rank_) {
-      // Debug: child payload sizes
-      VT_LB_LOG(Visualizer, verbose, "[viz] merge child rank={} tasks={} edges={} shared_blocks={}\n",
-                static_cast<int>(rank),
-                pd.getTasksMap().size(),
-                pd.getCommunications().size(),
-                pd.getSharedBlocksMap().size());
-      mergePhaseData(merged, pd);
+    // Debug: counts
+    std::size_t total_tasks = 0, total_edges = 0, total_maps = 0;
+    std::unordered_set<int> uniq_cids;
+    for (auto const& [r, pd] : merged_rank_phases) {
+      total_tasks += pd.getTasksMap().size();
+      total_edges += pd.getCommunications().size();
     }
-    for (auto const& [rank, cmap] : clusters_by_rank_) {
-      // Assume children already sent globalized IDs
-      for (auto const& [task, cid] : cmap) {
-        merged_clusters[task] = cid;
-      }
+    for (auto const& [r, cmap] : merged_rank_clusters) {
+      total_maps += cmap.size();
+      for (auto const& [tid, cid] : cmap) uniq_cids.insert(cid);
+      VT_LB_LOG(Visualizer, normal, "[viz] merged child rank={} task-maps={} unique-clusters={}\n",
+        static_cast<int>(r), cmap.size(), countClusters(cmap));
     }
-
-    // Debug: post-merge counts
-    VT_LB_LOG(Visualizer, normal, "[viz] merged tasks={} edges={} shared_blocks={} task-maps={} unique-clusters={}\n",
-              merged.getTasksMap().size(),
-              merged.getCommunications().size(),
-              merged.getSharedBlocksMap().size(),
-              merged_clusters.size(),
-              countClusters(merged_clusters));
+    VT_LB_LOG(Visualizer, normal, "[viz] merged tasks={} edges={} task-maps={} unique-clusters={}\n",
+      total_tasks, total_edges, total_maps, uniq_cids.size());
 
     if (parent >= 0) {
-      // Forward merged accumulation to parent
       VT_LB_LOG(Visualizer, normal, "[viz] send to parent={}\n", parent);
       handle_[parent].template send<&ThisType::receiveAggregated>(
-        merged, merged_clusters, static_cast<model::RankType>(my_rank)
+        merged_rank_phases, merged_rank_clusters, static_cast<model::RankType>(my_rank)
       );
     } else {
-      // Root: we now have the complete graph and cluster map across all ranks
-      final_merged_phase_ = std::move(merged);
-      final_merged_clusters_ = std::move(merged_clusters);
-      VT_LB_LOG(Visualizer, normal, "[viz] (root) final merged tasks={} edges={} shared_blocks={} task-maps={} unique-clusters={}\n",
-                final_merged_phase_.getTasksMap().size(),
-                final_merged_phase_.getCommunications().size(),
-                final_merged_phase_.getSharedBlocksMap().size(),
-                final_merged_clusters_.size(),
-                countClusters(final_merged_clusters_));
-      // Build and write the full DOT visualization across ranks/clusters
-      std::string dot = buildFullGraphDOT(final_merged_phase_, final_merged_clusters_);
+      // Root: store final per-rank data
+      final_rank_phases_ = std::move(merged_rank_phases);
+      final_rank_clusters_ = std::move(merged_rank_clusters);
+      VT_LB_LOG(Visualizer, normal, "[viz] (root) final ranks={} total-cluster-maps={}\n",
+        final_rank_phases_.size(), final_rank_clusters_.size());
+
+      // Build and write DOT
+      std::string dot = buildFullGraphDOT(final_rank_phases_, final_rank_clusters_);
       std::ofstream ofs(filename_ + ".dot");
       if (ofs) {
         ofs << dot;
@@ -233,51 +223,59 @@ private:
     return static_cast<int>(uniq.size());
   }
 
-  // Build a multi-rank, multi-cluster DOT:
-  // - Top-level graph contains subgraph per rank
-  // - Each rank subgraph contains nested subgraphs per global cluster belonging to that rank
-  // - Tasks that are unclustered for that rank appear directly under the rank subgraph
-  // - All communications are drawn across tasks; inter-cluster edges are bold; inter-rank edges are colored
+  // Build a multi-rank, multi-cluster DOT from per-rank PhaseData and per-rank clusters
   std::string buildFullGraphDOT(
-    model::PhaseData const& pd,
-    std::unordered_map<model::TaskType,int> const& task_to_global_cluster
+    std::unordered_map<model::RankType, model::PhaseData> const& phases_by_rank_all,
+    std::unordered_map<model::RankType, std::unordered_map<model::TaskType,int>> const& rank_task_to_global_cluster
   ) const {
     using TaskType = model::TaskType;
     using RankType = model::RankType;
 
-    // Palette for cluster colors (cycled)
+    // Helper: find cluster id by (rank, task)
+    auto findClusterId = [&rank_task_to_global_cluster](RankType r, TaskType tid) -> std::optional<int> {
+      auto rc_it = rank_task_to_global_cluster.find(r);
+      if (rc_it == rank_task_to_global_cluster.end()) return std::nullopt;
+      auto const& cmap = rc_it->second;
+      auto it = cmap.find(tid);
+      if (it == cmap.end()) return std::nullopt;
+      return it->second;
+    };
+    // Helper: globally unique DOT node id
+    auto makeNodeId = [](TaskType tid, RankType rank) {
+      return std::string("r") + std::to_string(static_cast<int>(rank)) + "_t" + std::to_string(static_cast<int>(tid));
+    };
+
     static std::array<const char*, 12> palette = {
       "#1f77b4","#ff7f0e","#2ca02c","#d62728",
       "#9467bd","#8c564b","#e377c2","#7f7f7f",
       "#bcbd22","#17becf","#393b79","#637939"
     };
 
-    // Build per-rank membership of tasks
+    // Build per-rank membership of tasks and a task->rank index
     std::unordered_map<RankType, std::vector<TaskType>> tasks_by_rank;
-    for (auto const& [tid, t] : pd.getTasksMap()) {
-      tasks_by_rank[t.getCurrent()].push_back(tid);
+    std::unordered_map<TaskType, RankType> task_to_rank;
+    for (auto const& [rank, pd] : phases_by_rank_all) {
+      for (auto const& [tid, t] : pd.getTasksMap()) {
+        tasks_by_rank[rank].push_back(tid);
+        task_to_rank[tid] = rank;
+      }
     }
 
     // Build per-rank, per-global-cluster membership
     std::unordered_map<RankType, std::unordered_map<int, std::vector<TaskType>>> rank_cluster_members;
     std::unordered_map<RankType, std::vector<TaskType>> rank_unclustered;
-    for (auto const& [tid, t] : pd.getTasksMap()) {
-      auto r = t.getCurrent();
-      auto it = task_to_global_cluster.find(tid);
-      if (it == task_to_global_cluster.end()) {
-        rank_unclustered[r].push_back(tid);
-      } else {
-        int gcid = it->second;
-        // Ensure cluster is attributed to the cluster's owning rank; tasks might be on different ranks
-        // For visualization, nest under task's current rank to show locality, but keep GCID labeling.
-        rank_cluster_members[r][gcid].push_back(tid);
+    for (auto const& [rank, tids] : tasks_by_rank) {
+      for (auto tid : tids) {
+        auto cid_opt = findClusterId(rank, tid);
+        if (!cid_opt.has_value()) {
+          rank_unclustered[rank].push_back(tid);
+        } else {
+          rank_cluster_members[rank][cid_opt.value()].push_back(tid);
+        }
       }
     }
 
     // Compute cluster-level stats: total load, intra bytes, boundary bytes per rank+cluster
-    // Build quick membership lookup for intra/boundary computation
-    std::unordered_map<TaskType,int> task_gcid = task_to_global_cluster; // copy for lookup
-    // Sum per (rank, global cluster id)
     struct ClusterBytes {
       unsigned long long intra = 0ULL;
       unsigned long long boundary = 0ULL;
@@ -285,44 +283,48 @@ private:
     };
     std::unordered_map<RankType, std::unordered_map<int, ClusterBytes>> cluster_stats;
 
-    // Precompute task load
-    std::unordered_map<TaskType, double> task_load;
-    for (auto const& [tid, t] : pd.getTasksMap()) {
-      task_load[tid] = t.getLoad();
+    // Precompute task load per rank
+    std::unordered_map<RankType, std::unordered_map<TaskType, double>> task_load;
+    for (auto const& [rank, pd] : phases_by_rank_all) {
+      for (auto const& [tid, t] : pd.getTasksMap()) {
+        task_load[rank][tid] = t.getLoad();
+      }
     }
-    // Accumulate cluster load per rank cluster
+    // Accumulate cluster load per (rank, cluster)
     for (auto const& [rank, clmap] : rank_cluster_members) {
       for (auto const& [gcid, members] : clmap) {
         double sum_load = 0.0;
         for (auto tid : members) {
-          auto itl = task_load.find(tid);
-          if (itl != task_load.end()) sum_load += itl->second;
+          auto itl = task_load[rank].find(tid);
+          if (itl != task_load[rank].end()) sum_load += itl->second;
         }
         cluster_stats[rank][gcid].load = sum_load;
       }
     }
-    // Accumulate intra/boundary bytes
-    for (auto const& e : pd.getCommunications()) {
-      TaskType f = e.getFrom();
-      TaskType t = e.getTo();
-      if (!pd.hasTask(f) || !pd.hasTask(t)) continue;
-      unsigned long long vol = static_cast<unsigned long long>(std::llround(e.getVolume()));
+    // Accumulate intra/boundary bytes across all ranks' communications
+    for (auto const& [rank_src, pd] : phases_by_rank_all) {
+      for (auto const& e : pd.getCommunications()) {
+        TaskType f = e.getFrom();
+        TaskType t = e.getTo();
+        auto rf_it = task_to_rank.find(f);
+        auto rt_it = task_to_rank.find(t);
+        if (rf_it == task_to_rank.end() || rt_it == task_to_rank.end()) continue;
 
-      auto cf_it = task_gcid.find(f);
-      auto ct_it = task_gcid.find(t);
-      bool cf_ok = cf_it != task_gcid.end();
-      bool ct_ok = ct_it != task_gcid.end();
+        RankType rf = rf_it->second;
+        RankType rt = rt_it->second;
 
-      RankType rf = pd.getTask(f)->getCurrent();
-      RankType rt = pd.getTask(t)->getCurrent();
+        unsigned long long vol = static_cast<unsigned long long>(std::llround(e.getVolume()));
+        auto cf_opt = findClusterId(rf, f);
+        auto ct_opt = findClusterId(rt, t);
+        bool cf_ok = cf_opt.has_value();
+        bool ct_ok = ct_opt.has_value();
 
-      if (cf_ok && ct_ok && cf_it->second == ct_it->second && rf == rt) {
-        // Intra-cluster intra-rank
-        cluster_stats[rf][cf_it->second].intra += vol;
-      } else {
-        // Boundary/Inter-rank: attribute volume to clusters if known
-        if (cf_ok) cluster_stats[rf][cf_it->second].boundary += vol;
-        if (ct_ok) cluster_stats[rt][ct_it->second].boundary += vol;
+        if (cf_ok && ct_ok && cf_opt.value() == ct_opt.value() && rf == rt) {
+          cluster_stats[rf][cf_opt.value()].intra += vol;
+        } else {
+          if (cf_ok) cluster_stats[rf][cf_opt.value()].boundary += vol;
+          if (ct_ok) cluster_stats[rt][ct_opt.value()].boundary += vol;
+        }
       }
     }
 
@@ -333,13 +335,12 @@ private:
     out << "  compound=true;\n";
     out << "  node [shape=ellipse, fontname=\"Helvetica\"];\n";
 
-    // Emit rank subgraphs
-    for (auto const& [rank, rank_tasks] : tasks_by_rank) {
+    // Emit rank and cluster subgraphs and nodes
+    for (auto const& [rank, tids] : tasks_by_rank) {
       out << "  subgraph cluster_rank_" << rank << " {\n";
       out << "    label=\"rank " << rank << "\";\n";
       out << "    color=\"black\";\n";
 
-      // Emit cluster subgraphs under this rank
       auto rc_it = rank_cluster_members.find(rank);
       if (rc_it != rank_cluster_members.end()) {
         for (auto const& [gcid, members] : rc_it->second) {
@@ -352,9 +353,11 @@ private:
               << "\\nbytes_boundary=" << stats.boundary << "\";\n";
           out << "      color=\"" << color << "\";\n";
           for (auto tid : members) {
+            auto const& pd = phases_by_rank_all.at(rank);
             auto const* task = pd.getTask(tid);
             if (!task) continue;
-            out << "      \"" << tid << "\" [style=filled, fillcolor=\"" << color << "\", label=\""
+            auto node_id = makeNodeId(tid, rank);
+            out << "      \"" << node_id << "\" [style=filled, fillcolor=\"" << color << "\", label=\""
                 << tid << "\\nL=" << std::fixed << std::setprecision(1) << task->getLoad()
                 << "\"];\n";
           }
@@ -362,13 +365,14 @@ private:
         }
       }
 
-      // Emit unclustered tasks under rank
       auto ru_it = rank_unclustered.find(rank);
       if (ru_it != rank_unclustered.end()) {
         for (auto tid : ru_it->second) {
+          auto const& pd = phases_by_rank_all.at(rank);
           auto const* task = pd.getTask(tid);
           if (!task) continue;
-          out << "    \"" << tid << "\" [label=\"" << tid
+          auto node_id = makeNodeId(tid, rank);
+          out << "    \"" << node_id << "\" [label=\"" << tid
               << "\\nL=" << std::fixed << std::setprecision(1) << task->getLoad()
               << "\"];\n";
         }
@@ -378,37 +382,38 @@ private:
     }
 
     // Draw edges for communications
-    for (auto const& e : pd.getCommunications()) {
-      TaskType f = e.getFrom();
-      TaskType t = e.getTo();
-      if (!pd.hasTask(f) || !pd.hasTask(t)) continue;
+    for (auto const& [rank_src, pd] : phases_by_rank_all) {
+      for (auto const& e : pd.getCommunications()) {
+        TaskType f = e.getFrom();
+        TaskType t = e.getTo();
+        auto rf_it = task_to_rank.find(f);
+        auto rt_it = task_to_rank.find(t);
+        if (rf_it == task_to_rank.end() || rt_it == task_to_rank.end()) continue;
 
-      RankType rf = pd.getTask(f)->getCurrent();
-      RankType rt = pd.getTask(t)->getCurrent();
+        RankType rf = rf_it->second;
+        RankType rt = rt_it->second;
 
-      int cf = -1, ct = -1;
-      auto cf_it = task_to_global_cluster.find(f);
-      auto ct_it = task_to_global_cluster.find(t);
-      if (cf_it != task_to_global_cluster.end()) cf = cf_it->second;
-      if (ct_it != task_to_global_cluster.end()) ct = ct_it->second;
+        auto from_node = makeNodeId(f, rf);
+        auto to_node   = makeNodeId(t, rt);
 
-      // Base label is bytes
-      out << "  \"" << f << "\" -> \"" << t << "\" [label=\"" << std::fixed << std::setprecision(0)
-          << e.getVolume() << "\"";
+        auto cf_opt = findClusterId(rf, f);
+        auto ct_opt = findClusterId(rt, t);
+        int cf = cf_opt.value_or(-1);
+        int ct = ct_opt.value_or(-1);
 
-      // Inter-cluster edges are bold
-      if (cf != -1 && ct != -1 && cf != ct) {
-        out << ", penwidth=2";
+        out << "  \"" << from_node << "\" -> \"" << to_node << "\" [label=\"" << std::fixed << std::setprecision(0)
+            << e.getVolume() << "\"";
+
+        if (cf != -1 && ct != -1 && cf != ct) {
+          out << ", penwidth=2";
+        }
+        if (rf != rt) {
+          out << ", color=red";
+        } else if (cf != -1 && ct != -1 && cf != ct) {
+          out << ", color=orange";
+        }
+        out << "];\n";
       }
-
-      // Inter-rank edges colored
-      if (rf != rt) {
-        out << ", color=red";
-      } else if (cf != -1 && ct != -1 && cf != ct) {
-        out << ", color=orange";
-      }
-
-      out << "];\n";
     }
 
     out << "}\n";
@@ -423,15 +428,15 @@ private:
   std::string filename_;
   HandleType handle_;
 
-  // Accumulators during reduction
+  // Accumulators during reduction (per-rank)
   std::unordered_map<model::RankType, model::PhaseData> phases_by_rank_;
   std::unordered_map<model::RankType, std::unordered_map<model::TaskType,int>> clusters_by_rank_;
   int expected_children_ = 0;
   int received_children_ = 0;
 
-  // Final merged output at root
-  model::PhaseData final_merged_phase_;
-  std::unordered_map<model::TaskType,int> final_merged_clusters_;
+  // Final merged output at root (per-rank)
+  std::unordered_map<model::RankType, model::PhaseData> final_rank_phases_;
+  std::unordered_map<model::RankType, std::unordered_map<model::TaskType,int>> final_rank_clusters_;
 
   // Local cluster mapping for this rank
   std::unordered_map<model::TaskType,int> local_clusters_;

@@ -67,9 +67,11 @@
 #include <vt-lb/algo/temperedlb/basic_transfer.h>
 #include <vt-lb/algo/temperedlb/relaxed_cluster_transfer.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
+#include <vt-lb/algo/temperedlb/graph_edge_resolver.h>
 
 // Logging include
 #include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
 
 #include <limits>
 #include <random>
@@ -102,7 +104,7 @@ struct TemperedLB final : baselb::BaseLB {
 
   void clusterBasedOnCommunication() {
     auto& pd = this->getPhaseData();
-    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 80.0);
+    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 1000.0);
     clusterer_->compute();
   }
 
@@ -132,6 +134,11 @@ struct TemperedLB final : baselb::BaseLB {
   void makeCommunicationsSymmetric() {
     CommunicationsSymmetrizer<CommT> symm(comm_, this->getPhaseData());
     symm.run();
+  }
+
+  void resolveGraphEdges() {
+    GraphEdgeResolver<CommT> resolver(comm_, this->getPhaseData());
+    resolver.run();
   }
 
   void visualizeGraph(const std::string& prefix) const {
@@ -172,7 +179,11 @@ struct TemperedLB final : baselb::BaseLB {
   std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
     InformationPropagation<CommT, T> ip(comm_, config_);
     auto gathered_info = ip.run(initial_data);
-    VT_LB_LOG(LoadBalancer, normal, "gathered load info size={}\n", gathered_info.size());
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "gathered load info size={}\n",
+      gathered_info.size()
+    );
     return gathered_info;
   }
 
@@ -181,9 +192,13 @@ struct TemperedLB final : baselb::BaseLB {
     makeCommunicationsSymmetric();
 
     for (int trial = 0; trial < config_.num_trials_; ++trial) {
-      VT_LB_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+      }
       runTrial(trial);
-      VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
+      }
     }
 
     // Sort trial work distribution by max work
@@ -195,10 +210,12 @@ struct TemperedLB final : baselb::BaseLB {
       }
     );
 
-    VT_LB_LOG(
-      LoadBalancer, normal,
-      "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
-    );
+    if (comm_.getRank() == 0) {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
+      );
+    }
 
     return std::get<1>(trial_work_distribution_.front());
   }
@@ -208,9 +225,32 @@ struct TemperedLB final : baselb::BaseLB {
     savePhaseData();
 
     for (int iter = 0; iter < config_.num_iters_; ++iter) {
-      VT_LB_LOG(LoadBalancer, normal, "  Starting iteration {}/{}\n", iter + 1, config_.num_iters_);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "  Starting iteration {}/{}\n",
+          iter + 1, config_.num_iters_
+        );
+      }
+
+      auto const& wm = config_.work_model_;
+      if (!(wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0)) {
+        // Edges might have the wrong rank after transfers, so fix them
+        resolveGraphEdges();
+
+        // Make communications symmetric
+        makeCommunicationsSymmetric();
+      }
+
       runIteration(trial, iter);
-      VT_LB_LOG(LoadBalancer, normal, "  Finished iteration {}/{}\n", iter + 1, config_.num_iters_);
+
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "  Finished iteration {}/{}\n",
+          iter + 1, config_.num_iters_
+        );
+      }
     }
 
     // Before we restore phase data for the next trial, save the work and task distribution
@@ -241,6 +281,9 @@ struct TemperedLB final : baselb::BaseLB {
     double const total_work = WorkModelCalculator::computeWork(
       config_.work_model_, work_breakdown
     );
+
+    VT_LB_LOG(LoadBalancer, normal, "Total work: {}\n", total_work);
+
     auto work_stats = computeStatistics(total_work, "Work");
 
     if (config_.hasMemoryInfo()) {
@@ -267,7 +310,7 @@ struct TemperedLB final : baselb::BaseLB {
       getClusterer(),
       global_max_clusters_,
       config_,
-      "temperedlb_full_graph_trial" + std::to_string(trial)
+      "temperedlb_full_graph_trial" + std::to_string(trial) + "_iter" + std::to_string(iter)
     );
 
     auto& wm = config_.work_model_;
@@ -298,8 +341,14 @@ struct TemperedLB final : baselb::BaseLB {
 
       // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
       // Every task could be its own cluster, but clusters must exist
-      assert(clusterer_ != nullptr && "Clusterer must be valid");
+      vt_lb_assert(clusterer_ != nullptr, "Clusterer must be valid");
       auto local_summary = buildClusterSummaries();
+
+      double total_inter_bytes = std::max(
+        work_breakdown.inter_node_recv_comm, work_breakdown.inter_node_send_comm
+      );
+      computeStatistics(total_inter_bytes, "Work intercomm bytes");
+
       auto rank_info = RankClusterInfo{
         local_summary,
         this->getPhaseData().getRankFootprintBytes(),
@@ -310,15 +359,15 @@ struct TemperedLB final : baselb::BaseLB {
       auto info = runInformationPropagation(rank_info);
 
       VT_LB_LOG(
-        LoadBalancer, normal,
+        LoadBalancer, verbose,
         "runTrial: gathered load info from {} ranks\n",
         info.size()
       );
 
       RelaxedClusterTransfer<CommT> transfer(
-        comm_, *phase_data_, clusterer_.get(), global_max_clusters_, info, work_stats
+        comm_, *phase_data_, config_, clusterer_.get(), global_max_clusters_, info, work_stats
       );
-      transfer.run(config_);
+      transfer.run();
     }
   }
 
@@ -337,7 +386,11 @@ private:
     handle_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
 
     if (comm_.getRank() == root) {
-      VT_LB_LOG(LoadBalancer, normal, "global max clusters across ranks: {}\n", global_max_clusters_);
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "global max clusters across ranks: {}\n",
+        global_max_clusters_
+      );
     }
     // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
   }

@@ -45,6 +45,7 @@
 
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
 
 #include <algorithm>
 #include <tuple>
@@ -74,8 +75,70 @@ struct Clusterer {
   using BytesType = vt_lb::model::BytesType;
   virtual ~Clusterer() = default;
   virtual void compute() = 0;
-  virtual std::unordered_map<TaskType,int> const& taskToCluster() const = 0;
-  virtual std::vector<Cluster> const& clusters() const = 0;
+
+  std::unordered_map<TaskType,int> const& taskToCluster() const { return task_to_cluster_; }
+  std::vector<Cluster> const& clusters() const { return clusters_; }
+
+  /**
+   * @brief Add a cluster given its member tasks (used when a cluster migrates in)
+   *
+   * @param tasks The tasks in the cluster
+   *
+   * @return The assigned cluster ID
+   */
+  int addCluster(std::vector<TaskType> const& tasks, int cluster_global_id = -1) {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Clusterer: addCluster: cluster_global_id={}, num_tasks={}\n",
+      cluster_global_id, tasks.size()
+    );
+
+    int next_id = cluster_global_id;
+    if (cluster_global_id == -1) {
+      for (const auto& cl : clusters_) {
+        if (cl.id >= next_id) {
+          next_id = cl.id + 1;
+        }
+      }
+    }
+    Cluster cl;
+    cl.id = next_id;
+    cl.members = tasks;
+    for (const auto& t : tasks) {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Clusterer: addCluster: assigning task {} to cluster {}\n",
+        t, next_id
+      );
+      task_to_cluster_[t] = next_id;
+    }
+    clusters_.push_back(std::move(cl));
+    return cl.id;
+  }
+
+  /**
+   * @brief Remap all cluster IDs using a local->global mapping.
+   *
+   * @param local_to_global Map from local cluster ID to global cluster ID.
+   */
+  void remapClusterIDs(std::unordered_map<int, int> const& local_to_global) {
+    // Update task_to_cluster_
+    for (auto& [task, cid] : task_to_cluster_) {
+      auto it = local_to_global.find(cid);
+      vt_lb_assert(it != local_to_global.end(), "All local cluster IDs must have a global mapping");
+      cid = it->second;
+    }
+    // Update clusters_
+    for (auto& cl : clusters_) {
+      auto it = local_to_global.find(cl.id);
+      vt_lb_assert(it != local_to_global.end(), "All local cluster IDs must have a global mapping");
+      cl.id = it->second;
+    }
+  }
+
+protected:
+  std::unordered_map<TaskType,int> task_to_cluster_;
+  std::vector<Cluster> clusters_;
 };
 
 // Communication-based clustering, strawman method
@@ -118,9 +181,6 @@ struct CommunicationClusterer : Clusterer {
         task_to_cluster_[t] = next_cid++;
     materializeClusters();
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
 
 private:
   void clear() {
@@ -174,8 +234,6 @@ private:
   PhaseData const& pd_;
   std::vector<TaskType> tasks_;
   std::vector<std::tuple<TaskType,TaskType,BytesType>> agg_edges_;
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
 };
 
 // Shared-block-based clustering
@@ -224,9 +282,6 @@ struct SharedBlockClusterer : Clusterer {
     }
     materializeClusters();
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
 
 private:
   void clear() {
@@ -304,8 +359,6 @@ private:
   std::vector<TaskType> tasks_;
   // aggregated undirected shared-block edges: (u,v,weight)
   std::vector<std::tuple<TaskType,TaskType,BytesType>> sb_edges_;
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
 };
 
 // Standalone Leiden-style clustering using CPM (Constant Potts Model) objective.
@@ -372,9 +425,6 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     }
   }
 
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
-
 private:
   // ---------- Graph state for current level ----------
   // nodes are indexed [0..N-1], each super-node maps to a vector of original tasks
@@ -394,9 +444,6 @@ private:
   double gamma_ = 1.0;
   int max_passes_ = 10;
   int max_levels_ = 4;
-
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
 
   // ---------- Utils ----------
   bool rank0() const { return pd_.getRank() == 0; }

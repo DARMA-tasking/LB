@@ -91,7 +91,10 @@ struct InformationPropagation {
       // do nothing
     }
 
-    VT_LB_LOG(LoadBalancer, normal, "done with poll: local_data size={}\n", local_data_.size());
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "done with poll: local_data size={}\n", local_data_.size()
+    );
 
     return local_data_;
   }

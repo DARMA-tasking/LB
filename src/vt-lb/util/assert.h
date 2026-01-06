@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                             cluster_summarizer.cc
+//                                  assert.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * Redistributions in binary form, must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,30 +41,23 @@
 //@HEADER
 */
 
+#if !defined INCLUDED_VT_LB_UTIL_ASSERT_H
+#define INCLUDED_VT_LB_UTIL_ASSERT_H
 
-#include <vt-lb/algo/temperedlb/cluster_summarizer.h>
-#include <vt-lb/algo/temperedlb/clustering.h>
+#include <vt-lb/util/logging.h>
 
-#include <unordered_map>
-#include <vector>
+#include <cassert>
 
-namespace vt_lb::algo::temperedlb {
+#define vt_lb_assert(cond, str)                                      \
+  do {                                                               \
+    if (!(cond)) {                                                   \
+      VT_LB_LOG(                                                     \
+        LoadBalancer, terse,                                         \
+        "Assertion failed: {} \"{}\" at {}:{} in function {}\n",     \
+        #cond, str, __FILE__, __LINE__, __func__                     \
+      );                                                             \
+      assert((cond) && (str));                                       \
+    }                                                                \
+  } while (false)
 
-/*static*/ std::unordered_map<int, int> ClusterSummarizerUtil::buildLocalToGlobalClusterIDMap(
-  int rank,
-  int global_max_clusters,
-  std::vector<Cluster> const& clusters
-) {
-  std::unordered_map<int, int> local_to_global;
-  for (auto const& cluster : clusters) {
-    int global_cluster_id = ClusterSummarizerUtil::localToGlobalClusterID(
-      cluster.id,
-      rank,
-      global_max_clusters
-    );
-    local_to_global[cluster.id] = global_cluster_id;
-  }
-  return local_to_global;
-}
-
-} /* end namespace vt_lb::algo::temperedlb */
+#endif /*INCLUDED_VT_LB_UTIL_ASSERT_H*/

@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_WORK_MODEL_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_WORK_MODEL_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/model/Task.h>
 #include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>

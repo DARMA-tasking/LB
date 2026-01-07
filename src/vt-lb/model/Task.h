@@ -44,7 +44,9 @@
 #if !defined INCLUDED_VT_LB_MODEL_TASK_H
 #define INCLUDED_VT_LB_MODEL_TASK_H
 
-#include "types.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/model/types.h>
 
 #include <unordered_set>
 
@@ -75,6 +77,10 @@ private:
 
 struct Task {
   Task() = default;
+  Task(TaskType id, LoadType load)
+    : id_(id), load_(load)
+  {}
+
   Task(TaskType id, RankType home, RankType current, bool migratable,
         TaskMemory const& memory, LoadType load)
     : id_(id),

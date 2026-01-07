@@ -23,7 +23,10 @@ endif()
 
 # vt includes magistrate and we must have magistrate for the MPI backend
 if(NOT vt_FOUND)
+  set(vt_backend_feature_enabled 0)
   find_package(magistrate REQUIRED)
+else()
+  set(vt_backend_feature_enabled 1)
 endif()
 
 set(FMT_LIBRARY fmt)

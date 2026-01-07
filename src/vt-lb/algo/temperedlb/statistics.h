@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_STATISTICS_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_STATISTICS_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <limits>
 
 namespace vt_lb::algo::temperedlb {

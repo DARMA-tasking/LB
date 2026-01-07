@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_BASIC_TRANSFER_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_BASIC_TRANSFER_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <vt-lb/model/types.h>
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/util/logging.h>

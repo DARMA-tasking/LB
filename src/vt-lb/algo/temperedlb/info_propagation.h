@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_INFO_PROPAGATION_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_INFO_PROPAGATION_H
 
+#include <vt-lb/config/cmake_config.h>
+
 #include <random>
 #include <unordered_map>
 #include <unordered_set>

@@ -44,7 +44,9 @@
 #if !defined INCLUDED_VT_LB_COMM_TERMINATION_H
 #define INCLUDED_VT_LB_COMM_TERMINATION_H
 
-#include "vt-lb/comm/MPI/class_handle.h"
+#include <vt-lb/config/cmake_config.h>
+
+#include <vt-lb/comm/MPI/class_handle.h>
 
 #include <cstdint>
 #include <memory>

@@ -44,8 +44,8 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H
 #define INCLUDED_VT_LB_COMM_COMM_VT_IMPL_H
 
-#include "vt-lb/comm/vt/comm_vt.h"
-#include "vt-lb/comm/vt/proxy_wrapper.h"
+#include <vt-lb/comm/vt/comm_vt.h>
+#include <vt-lb/comm/vt/proxy_wrapper.h>
 #include <vt/transport.h>
 
 namespace vt_lb::comm {

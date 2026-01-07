@@ -88,6 +88,9 @@ struct ClassHandle {
   template <typename U, typename V>
   void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
 
+  template <typename U>
+  void broadcast(int root, MPI_Datatype datatype, U buffer, int count);
+
   friend struct ClassHandleRank<T>;
 
   int getIndex() const { return index_; }

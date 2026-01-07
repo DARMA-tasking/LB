@@ -60,7 +60,7 @@ ProxyWrapper<ProxyT>::ProxyWrapper(ProxyT proxy) : ProxyT(proxy) { }
 
 template <typename ProxyT>
 template <typename T>
-void ProxyWrapper<ProxyT>::reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, ReduceCtx* ctx) {
+void ProxyWrapper<ProxyT>::reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, CollectiveCtx* ctx) {
   auto const& val = msg->getVal();
   //printf("%d: callback invoked\n", vt::theContext()->getNode());
   if constexpr (
@@ -107,7 +107,7 @@ template <typename ProxyT>
 template <typename T, typename SendBufT, typename RecvBufT>
 void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count) {
   VTOp vk = mapOp(op);
-  auto ctx = std::make_unique<ReduceCtx>();
+  auto ctx = std::make_unique<CollectiveCtx>();
   ctx->out_ptr = static_cast<void*>(recvbuf);
   ctx->count = static_cast<std::size_t>(std::max(1, count));
   ctx->done.store(false);
@@ -116,7 +116,7 @@ void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, Re
   if (count == 1) {
     T value = *static_cast<T const*>(sendbuf);
     using MsgT = vt::collective::ReduceTMsg<T>;
-    auto cb = vt::theCB()->makeCallbackSingleAnon<MsgT, ReduceCtx>(
+    auto cb = vt::theCB()->makeCallbackSingleAnon<MsgT, CollectiveCtx>(
       vt::pipe::LifetimeEnum::Once, ctx.get(), &ProxyWrapper::reduceAnonCb<T>
     );
     auto msg = vt::makeMessage<MsgT>(value);
@@ -155,7 +155,7 @@ void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, Re
     std::vector<T> v(static_cast<std::size_t>(count));
     std::memcpy(v.data(), static_cast<void const*>(sendbuf), sizeof(T) * static_cast<std::size_t>(count));
     using MsgT = vt::collective::ReduceTMsg<std::vector<T>>;
-    auto cb = vt::theCB()->makeCallbackSingleAnon<MsgT, ReduceCtx>(
+    auto cb = vt::theCB()->makeCallbackSingleAnon<MsgT, CollectiveCtx>(
       vt::pipe::LifetimeEnum::Once, ctx.get(), &ProxyWrapper::reduceAnonCb<std::vector<T>>
     );
     auto msg = vt::makeMessage<MsgT>(std::move(v));
@@ -193,6 +193,72 @@ void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, Re
   }
 
   while (vt::theContext()->getNode() == root && !ctx->done.load(std::memory_order_acquire)) {
+    vt::theSched()->runSchedulerOnceImpl();
+  }
+}
+
+template <typename ProxyT>
+template <typename T>
+void ProxyWrapper<ProxyT>::broadcastAnonCb(T val, CollectiveCtx* ctx) {
+  if constexpr (
+    std::is_same_v<std::decay_t<T>, int> || std::is_same_v<std::decay_t<T>, double> ||
+    std::is_same_v<std::decay_t<T>, float> || std::is_same_v<std::decay_t<T>, long> ||
+    std::is_same_v<std::decay_t<T>, long long>
+  ) {
+    *static_cast<std::decay_t<T>*>(ctx->out_ptr) = val;
+  } else {
+    using ValT = typename T::value_type;
+    static_assert(std::is_trivially_copyable_v<ValT> || std::is_arithmetic_v<ValT>, "Broadcast value must be trivially copyable");
+    std::memcpy(ctx->out_ptr, val.data(), sizeof(ValT) * std::max<std::size_t>(1, ctx->count));
+  }
+  ctx->done.store(true, std::memory_order_release);
+}
+
+template <typename ProxyT>
+template <typename U>
+void ProxyWrapper<ProxyT>::broadcast(int root, MPI_Datatype datatype, U buffer, int count) {
+  if (datatype == MPI_INT) {
+    if constexpr (std::is_same_v<U, int*>) broadcast_impl<int>(root, buffer, count);
+  } else if (datatype == MPI_DOUBLE) {
+    if constexpr (std::is_same_v<U, double*>) broadcast_impl<double>(root, buffer, count);
+  } else if (datatype == MPI_FLOAT) {
+    if constexpr (std::is_same_v<U, float*>) broadcast_impl<float>(root, buffer, count);
+  } else if (datatype == MPI_LONG) {
+    if constexpr (std::is_same_v<U, long*>) broadcast_impl<long>(root, buffer, count);
+  } else if (datatype == MPI_LONG_LONG) {
+    if constexpr (std::is_same_v<U, long long*>) broadcast_impl<long long>(root, buffer, count);
+  } else {
+    vtAbort("ProxyWrapper::broadcast: unsupported MPI_Datatype");
+  }
+}
+
+template <typename ProxyT>
+template <typename T, typename BufT>
+void ProxyWrapper<ProxyT>::broadcast_impl(int root, BufT buffer, int count) {
+  auto ctx = std::make_unique<CollectiveCtx>();
+  ctx->out_ptr = static_cast<void*>(buffer);
+  ProxyT proxy = ProxyT(*this);
+  auto cb = vt::theCB()->makeCallbackSingleAnon<T, CollectiveCtx>(
+    vt::pipe::LifetimeEnum::Once, ctx.get(), &ProxyWrapper::broadcastAnonCb<T>
+  );
+
+  ctx->count = static_cast<std::size_t>(std::max(1, count));
+  ctx->done.store(false);
+
+  if (count == 1) {
+    T value = *static_cast<T const*>(buffer);
+    if (vt::theContext()->getNode() != root) {
+      proxy.template send<T>(cb, value);
+    }
+  } else {
+    std::vector<T> v(static_cast<std::size_t>(count));
+    std::memcpy(v.data(), static_cast<void const*>(buffer), sizeof(T) * static_cast<std::size_t>(count));
+    if (vt::theContext()->getNode() != root) {
+      proxy.template send<std::vector<T>>(cb, v);
+    }
+  }
+
+  while (vt::theContext()->getNode() != root && !ctx->done.load(std::memory_order_acquire)) {
     vt::theSched()->runSchedulerOnceImpl();
   }
 }

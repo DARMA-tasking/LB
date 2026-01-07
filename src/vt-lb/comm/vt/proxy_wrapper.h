@@ -52,7 +52,7 @@ namespace vt_lb::comm {
 
 template <typename ProxyT>
 struct ProxyWrapper : ProxyT {
-  struct ReduceCtx {
+  struct CollectiveCtx {
     void* out_ptr = nullptr;
     std::atomic<bool> done{false};
     std::size_t count = 0;
@@ -62,10 +62,16 @@ struct ProxyWrapper : ProxyT {
   ProxyWrapper(ProxyT proxy);
 
   template <typename T>
-  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, ReduceCtx* ctx);
+  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, CollectiveCtx* ctx);
 
   template <typename U, typename V>
   void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
+
+  template <typename T>
+  static void broadcastAnonCb(T val, CollectiveCtx* ctx);
+
+  template <typename U>
+  void broadcast(int root, MPI_Datatype datatype, U buffer, int count);
 
 private:
   enum class VTOp { Plus, Max, Min };
@@ -73,6 +79,9 @@ private:
 
   template <typename T, typename SendBufT, typename RecvBufT>
   void reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count);
+
+  template <typename T, typename BufT>
+  void broadcast_impl(int root, BufT buffer, int count);
 };
 
 } // namespace vt_lb::comm

@@ -283,8 +283,102 @@ public:
    */
   bool poll();
 
+  /**
+   * \brief Gather values from all ranks, with varying counts per rank, and remember per-rank contribution
+   *
+   * \tparam T Type of the elements to gather (must be trivially copyable and one of the supported basic types)
+   *
+   * \param sendbuf Pointer to the local data to send
+   * \param sendcount Number of elements to send from this rank
+   *
+   * \return A map from rank -> vector of values contributed by that rank
+   */
+  template <typename T>
+  std::unordered_map<int, std::vector<T>> allgather(T const* sendbuf, int sendcount) {
+    static_assert(std::is_trivially_copyable_v<T>, "CommMPI::allgather requires trivially copyable T");
+    MPI_Datatype datatype = deduceDatatype<T>();
+
+    if (comm_ == MPI_COMM_NULL) {
+      throw std::runtime_error("CommMPI not initialized (MPI_Comm is MPI_COMM_NULL)");
+    }
+
+    const int n = numRanks();
+    std::vector<int> counts(n, 0);
+    // Gather local counts from each rank (block for small metadata)
+    MPI_Allgather(&sendcount, 1, MPI_INT, counts.data(), 1, MPI_INT, comm_);
+
+    std::vector<int> displs(n, 0);
+    int total = 0;
+    for (int i = 0; i < n; ++i) {
+      displs[i] = total;
+      total += counts[i];
+    }
+
+    std::vector<T> recvbuf;
+    recvbuf.resize(static_cast<std::size_t>(total));
+
+    VT_LB_LOG(Communicator, normal, "MPI_Iallgatherv sendcount={} total={} ranks={}\n", sendcount, total, n);
+
+    MPI_Request req;
+    MPI_Iallgatherv(
+      sendbuf, sendcount, datatype,
+      recvbuf.data(), counts.data(), displs.data(), datatype,
+      comm_, &req
+    );
+
+    int flag = 0;
+    while (!flag) {
+      MPI_Status status;
+      MPI_Test(&req, &flag, &status);
+      poll();
+    }
+
+    std::unordered_map<int, std::vector<T>> by_rank;
+    by_rank.reserve(static_cast<std::size_t>(n));
+    for (int r = 0; r < n; ++r) {
+      const int cnt = counts[r];
+      const int off = displs[r];
+      if (cnt > 0) {
+        by_rank.emplace(
+          r,
+          std::vector<T>(recvbuf.begin() + off, recvbuf.begin() + off + cnt)
+        );
+      } else {
+        by_rank.emplace(r, std::vector<T>{});
+      }
+    }
+
+    return by_rank;
+  }
+
 private:
   void initTermination();
+
+  // Helper to trigger static_assert for unsupported types.
+  template <typename> struct AlwaysFalse : std::false_type {};
+
+  // Map a limited set of basic C++ types to MPI_Datatype.
+  template <typename T>
+  static MPI_Datatype deduceDatatype() {
+    if constexpr (std::is_same_v<T, char>) return MPI_CHAR;
+    else if constexpr (std::is_same_v<T, signed char>) return MPI_SIGNED_CHAR;
+    else if constexpr (std::is_same_v<T, unsigned char>) return MPI_UNSIGNED_CHAR;
+    else if constexpr (std::is_same_v<T, short>) return MPI_SHORT;
+    else if constexpr (std::is_same_v<T, unsigned short>) return MPI_UNSIGNED_SHORT;
+    else if constexpr (std::is_same_v<T, int>) return MPI_INT;
+    else if constexpr (std::is_same_v<T, unsigned int>) return MPI_UNSIGNED;
+    else if constexpr (std::is_same_v<T, long>) return MPI_LONG;
+    else if constexpr (std::is_same_v<T, unsigned long>) return MPI_UNSIGNED_LONG;
+    else if constexpr (std::is_same_v<T, long long>) return MPI_LONG_LONG;
+    else if constexpr (std::is_same_v<T, unsigned long long>) return MPI_UNSIGNED_LONG_LONG;
+    else if constexpr (std::is_same_v<T, float>) return MPI_FLOAT;
+    else if constexpr (std::is_same_v<T, double>) return MPI_DOUBLE;
+    else if constexpr (std::is_same_v<T, long double>) return MPI_LONG_DOUBLE;
+    else {
+      static_assert(AlwaysFalse<T>::value, "Unsupported T for CommMPI::allgather");
+      return MPI_DATATYPE_NULL; // unreachable
+    }
+  }
 
   /// @brief Flag indicating if MPI is being used in interop mode
   bool interop_mode_ = false;

@@ -41,7 +41,8 @@
 //@HEADER
 */
 
-#include "vt-lb/comm/vt/comm_vt.h"
+#include <vt-lb/config/cmake_config.h>
+#include <vt-lb/comm/vt/comm_vt.h>
 
 #if vt_backend_enabled
 

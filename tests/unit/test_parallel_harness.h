@@ -51,6 +51,7 @@
 #include "test_config.h"
 #include "test_harness.h"
 
+#include <vt-lb/config/cmake_config.h>
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/comm/MPI/comm_mpi.h>
 

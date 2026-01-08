@@ -45,6 +45,7 @@
 #define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_IMPL_H
 
 #include <vt/transport.h>
+#include "vt-lb/comm/vt/broadcast_handler.h"
 
 #include <cstring>
 #include <vector>
@@ -198,23 +199,6 @@ void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, Re
 }
 
 template <typename ProxyT>
-template <typename T>
-void ProxyWrapper<ProxyT>::broadcastAnonCb(T val, CollectiveCtx* ctx) {
-  if constexpr (
-    std::is_same_v<std::decay_t<T>, int> || std::is_same_v<std::decay_t<T>, double> ||
-    std::is_same_v<std::decay_t<T>, float> || std::is_same_v<std::decay_t<T>, long> ||
-    std::is_same_v<std::decay_t<T>, long long>
-  ) {
-    *static_cast<std::decay_t<T>*>(ctx->out_ptr) = val;
-  } else {
-    using ValT = typename T::value_type;
-    static_assert(std::is_trivially_copyable_v<ValT> || std::is_arithmetic_v<ValT>, "Broadcast value must be trivially copyable");
-    std::memcpy(ctx->out_ptr, val.data(), sizeof(ValT) * std::max<std::size_t>(1, ctx->count));
-  }
-  ctx->done.store(true, std::memory_order_release);
-}
-
-template <typename ProxyT>
 template <typename U>
 void ProxyWrapper<ProxyT>::broadcast(int root, MPI_Datatype datatype, U buffer, int count) {
   if (datatype == MPI_INT) {
@@ -237,24 +221,24 @@ template <typename T, typename BufT>
 void ProxyWrapper<ProxyT>::broadcast_impl(int root, BufT buffer, int count) {
   auto ctx = std::make_unique<CollectiveCtx>();
   ctx->out_ptr = static_cast<void*>(buffer);
-  ProxyT proxy = ProxyT(*this);
-  auto cb = vt::theCB()->makeCallbackSingleAnon<T, CollectiveCtx>(
-    vt::pipe::LifetimeEnum::Once, ctx.get(), &ProxyWrapper::broadcastAnonCb<T>
-  );
-
   ctx->count = static_cast<std::size_t>(std::max(1, count));
   ctx->done.store(false);
 
-  if (count == 1) {
-    T value = *static_cast<T const*>(buffer);
-    if (vt::theContext()->getNode() != root) {
-      proxy.template send<T>(cb, value);
-    }
-  } else {
-    std::vector<T> v(static_cast<std::size_t>(count));
-    std::memcpy(v.data(), static_cast<void const*>(buffer), sizeof(T) * static_cast<std::size_t>(count));
-    if (vt::theContext()->getNode() != root) {
-      proxy.template send<std::vector<T>>(cb, v);
+  using ObjGroup = BroadcastHandler<CollectiveCtx, T>;
+  auto handler_proxy = vt::theObjGroup()->template makeCollective<ObjGroup>(
+    "CommVT_BroadcastHandler", ctx.get()
+  );
+
+  if (vt::theContext()->getNode() == root) {
+    if (count == 1) {
+      T value = *static_cast<T const*>(buffer);
+      handler_proxy.template broadcast<&ObjGroup::handleScalar>(value);
+    } else {
+      std::vector<T> v(static_cast<std::size_t>(count));
+      std::memcpy(
+        v.data(), static_cast<void const*>(buffer), sizeof(T) * static_cast<std::size_t>(count)
+      );
+      handler_proxy.template broadcast<&ObjGroup::handleVector>(v);
     }
   }
 

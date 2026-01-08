@@ -19,6 +19,13 @@ option(vt_backend_enabled "Whether VT backend is enabled" ON)
 
 if (vt_backend_enabled)
   find_package(vt)
+  if (vt_FOUND)
+    set(vt_backend_enabled 1)
+  else()
+    set(vt_backend_enabled 0)
+  endif()
+else()
+  set(vt_backend_enabled 0)
 endif()
 
 # vt includes magistrate and we must have magistrate for the MPI backend

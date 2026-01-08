@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                              proxy_wrapper.h
+//                          broadcast_handler.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -41,48 +41,41 @@
 //@HEADER
 */
 
-#ifndef INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
-#define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
+#if !defined INCLUDED_VT_LB_COMM_VT_BROADCAST_HANDLER_H
+#define INCLUDED_VT_LB_COMM_VT_BROADCAST_HANDLER_H
 
 #include <atomic>
-#include <vt/transport.h>
-#include <mpi.h>
+#include <cstddef>
+#include <cstring>
+#include <vector>
 
 namespace vt_lb::comm {
 
-template <typename ProxyT>
-struct ProxyWrapper : ProxyT {
-  struct CollectiveCtx {
-    void* out_ptr = nullptr;
-    std::atomic<bool> done{false};
-    std::size_t count = 0;
-  };
+template <typename CtxT, typename T>
+struct BroadcastHandler {
+  explicit BroadcastHandler(CtxT* ctx) : ctx_(ctx) { }
 
-  ProxyWrapper() = default;
-  ProxyWrapper(ProxyT proxy);
+  void handleScalar(T value) {
+    if (ctx_ == nullptr) {
+      return;
+    }
+    *static_cast<T*>(ctx_->out_ptr) = value;
+    ctx_->done.store(true, std::memory_order_release);
+  }
 
-  template <typename T>
-  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, CollectiveCtx* ctx);
-
-  template <typename U, typename V>
-  void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
-
-  template <typename U>
-  void broadcast(int root, MPI_Datatype datatype, U buffer, int count);
+  void handleVector(std::vector<T> const& values) {
+    if (ctx_ == nullptr) {
+      return;
+    }
+    std::size_t const n = ctx_->count;
+    std::memcpy(ctx_->out_ptr, values.data(), sizeof(T) * n);
+    ctx_->done.store(true, std::memory_order_release);
+  }
 
 private:
-  enum class VTOp { Plus, Max, Min };
-  static VTOp mapOp(MPI_Op mpio);
-
-  template <typename T, typename SendBufT, typename RecvBufT>
-  void reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count);
-
-  template <typename T, typename BufT>
-  void broadcast_impl(int root, BufT buffer, int count);
+  CtxT* ctx_ = nullptr;
 };
 
 } // namespace vt_lb::comm
 
-#include "vt-lb/comm/vt/proxy_wrapper.impl.h"
-
-#endif /* INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H */
+#endif /* INCLUDED_VT_LB_COMM_VT_BROADCAST_HANDLER_H */

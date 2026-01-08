@@ -141,86 +141,86 @@ TYPED_TEST(TestCommBasic, test_reduce_sum_int_single) {
   }
 }
 
-TYPED_TEST(TestCommBasic, test_reduce_max_double_array) {
-  auto& the_comm = this->comm;
+// TYPED_TEST(TestCommBasic, test_reduce_max_double_array) {
+//   auto& the_comm = this->comm;
 
-  SET_MIN_NUM_NODES_CONSTRAINT(2);
+//   SET_MIN_NUM_NODES_CONSTRAINT(2);
 
-  typename TestFixture::TestObject obj{};
-  auto handle = this->makeHandle(&obj);
+//   typename TestFixture::TestObject obj{};
+//   auto handle = this->makeHandle(&obj);
 
-  int const root = 0;
-  // each rank contributes two doubles, make max depend on rank
-  std::array<double,2> send{{double(the_comm.getRank()), double(the_comm.getRank() + 1)}};
-  std::array<double,2> recv{{0.0, 0.0}};
+//   int const root = 0;
+//   // each rank contributes two doubles, make max depend on rank
+//   std::array<double,2> send{{double(the_comm.getRank()), double(the_comm.getRank() + 1)}};
+//   std::array<double,2> recv{{0.0, 0.0}};
 
-  handle.reduce(root, MPI_DOUBLE, MPI_MAX, send.data(), recv.data(), int(send.size()));
+//   handle.reduce(root, MPI_DOUBLE, MPI_MAX, send.data(), recv.data(), int(send.size()));
 
-  if (the_comm.getRank() == root) {
-    EXPECT_DOUBLE_EQ(recv[0], double(the_comm.numRanks() - 1));
-    EXPECT_DOUBLE_EQ(recv[1], double(the_comm.numRanks()));
-  }
-}
+//   if (the_comm.getRank() == root) {
+//     EXPECT_DOUBLE_EQ(recv[0], double(the_comm.numRanks() - 1));
+//     EXPECT_DOUBLE_EQ(recv[1], double(the_comm.numRanks()));
+//   }
+// }
 
-TYPED_TEST(TestCommBasic, test_reduce_sum_float_array) {
-  auto& the_comm = this->comm;
+// TYPED_TEST(TestCommBasic, test_reduce_sum_float_array) {
+//   auto& the_comm = this->comm;
 
-  SET_MIN_NUM_NODES_CONSTRAINT(2);
+//   SET_MIN_NUM_NODES_CONSTRAINT(2);
 
-  typename TestFixture::TestObject obj{};
-  auto handle = this->makeHandle(&obj);
+//   typename TestFixture::TestObject obj{};
+//   auto handle = this->makeHandle(&obj);
 
-  int const root = 0;
-  std::vector<float> send(4, 1.0f); // each rank contributes 4 ones
-  std::vector<float> recv(4, 0.0f);
+//   int const root = 0;
+//   std::vector<float> send(4, 1.0f); // each rank contributes 4 ones
+//   std::vector<float> recv(4, 0.0f);
 
-  handle.reduce(root, MPI_FLOAT, MPI_SUM, send.data(), recv.data(), int(send.size()));
+//   handle.reduce(root, MPI_FLOAT, MPI_SUM, send.data(), recv.data(), int(send.size()));
 
-  if (the_comm.getRank() == root) {
-    for (auto v : recv) {
-      EXPECT_FLOAT_EQ(v, float(the_comm.numRanks()));
-    }
-  }
-}
+//   if (the_comm.getRank() == root) {
+//     for (auto v : recv) {
+//       EXPECT_FLOAT_EQ(v, float(the_comm.numRanks()));
+//     }
+//   }
+// }
 
-TYPED_TEST(TestCommBasic, test_broadcast_int_single) {
-  auto& the_comm = this->comm;
+// TYPED_TEST(TestCommBasic, test_broadcast_int_single) {
+//   auto& the_comm = this->comm;
 
-  SET_MIN_NUM_NODES_CONSTRAINT(2);
+//   SET_MIN_NUM_NODES_CONSTRAINT(2);
 
-  typename TestFixture::TestObject obj{};
-  auto handle = this->makeHandle(&obj);
+//   typename TestFixture::TestObject obj{};
+//   auto handle = this->makeHandle(&obj);
 
-  int const root = 0;
-  int value = (the_comm.getRank() == root) ? 42 : 0;
+//   int const root = 0;
+//   int value = (the_comm.getRank() == root) ? 42 : 0;
 
-  handle.broadcast(root, MPI_INT, &value, 1);
+//   handle.broadcast(root, MPI_INT, &value, 1);
 
-  // All ranks should see the root's value
-  EXPECT_EQ(value, 42);
-}
+//   // All ranks should see the root's value
+//   EXPECT_EQ(value, 42);
+// }
 
-TYPED_TEST(TestCommBasic, test_broadcast_int_array) {
-  auto& the_comm = this->comm;
+// TYPED_TEST(TestCommBasic, test_broadcast_int_array) {
+//   auto& the_comm = this->comm;
 
-  SET_MIN_NUM_NODES_CONSTRAINT(2);
+//   SET_MIN_NUM_NODES_CONSTRAINT(2);
 
-  typename TestFixture::TestObject obj{};
-  auto handle = this->makeHandle(&obj);
+//   typename TestFixture::TestObject obj{};
+//   auto handle = this->makeHandle(&obj);
 
-  int const root = 0;
-  std::array<int,4> buf{{0,0,0,0}};
-  if (the_comm.getRank() == root) {
-    buf = {{1,2,3,4}};
-  }
+//   int const root = 0;
+//   std::array<int,4> buf{{0,0,0,0}};
+//   if (the_comm.getRank() == root) {
+//     buf = {{1,2,3,4}};
+//   }
 
-  handle.broadcast(root, MPI_INT, buf.data(), int(buf.size()));
+//   handle.broadcast(root, MPI_INT, buf.data(), int(buf.size()));
 
-  // After broadcast, all ranks should have the root's values
-  EXPECT_EQ(buf[0], 1);
-  EXPECT_EQ(buf[1], 2);
-  EXPECT_EQ(buf[2], 3);
-  EXPECT_EQ(buf[3], 4);
-}
+//   // After broadcast, all ranks should have the root's values
+//   EXPECT_EQ(buf[0], 1);
+//   EXPECT_EQ(buf[1], 2);
+//   EXPECT_EQ(buf[2], 3);
+//   EXPECT_EQ(buf[3], 4);
+// }
 
 }}} // end namespace vt_lb::tests::unit

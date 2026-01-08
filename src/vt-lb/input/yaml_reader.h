@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                                json_reader.h
+//                                yaml_reader.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -40,58 +40,20 @@
 // *****************************************************************************
 //@HEADER
 */
-
-#if !defined INCLUDED_VT_LB_INPUT_JSON_READER_H
-#define INCLUDED_VT_LB_INPUT_JSON_READER_H
+#if !defined INCLUDED_VT_LB_INPUT_YAML_READER_H
+#define INCLUDED_VT_LB_INPUT_YAML_READER_H
 
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/input/file_reader.h>
-
-#include <nlohmann-lb/json.hpp>
-
-#include <string>
-#include <memory>
+#include <yaml-cpp/yaml.h>
 
 namespace vt_lb::input {
-
-/**
- * \struct JSONReader
- *
- * \brief Reader for JSON in the LBDataType format.
- */
-struct JSONReader : ReadingBehavior {
-  /**
-   * \brief Construct the reader
-   */
-  JSONReader() { }
-
-  /**
-   * \brief Check if the file is compressed or not
-   *
-   * \param[in] in_filename the file name to check
-   *
-   * \return whether the file is compressed
-   */
-  bool isCompressed(std::string const& in_filename) const;
-
-  /**
-   * \brief Read a given JSON file
-   *
-   * \param[in] in_filename the file name to read
-   */
+struct YAMLReader : ReadingBehavior {
+  YAMLReader() : ReadingBehavior() { }
   void readFile(std::string const& in_filename) override;
-
-  /**
-   * \brief Read a given serialized json string
-   *
-   * \param[in] in_json_string the serialized json string to read
-   */
-  void readString(std::string const& in_json_string);
   void parse(int phase) override;
-private:
-  std::unique_ptr<nlohmann::json> json_ = nullptr;
+  private:
+    std::unique_ptr<YAML::Node> yaml_ = nullptr;
 };
-
 } /* end namespace vt_lb::input */
-
-#endif /*INCLUDED_VT_LB_INPUT_JSON_READER_H*/
+#endif /*INCLUDED_VT_LB_INPUT_YAML_READER_H*/

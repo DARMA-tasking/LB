@@ -43,46 +43,34 @@
 
 #include <vt-lb/comm/MPI/comm_mpi.h>
 #include <vt-lb/algo/driver/driver.h>
-#include <vt-lb/input/json_reader.h>
 #include <vt-lb/algo/temperedlb/temperedlb.h>
+#include <vt-lb/input/file_reader.h>
+#include <vt-lb/input/yaml_reader.h>
 
 #include <filesystem>
 #include <string>
 #include <cstdio>
 #include <optional>
+#include <fstream>
 
 namespace fs = std::filesystem;
 
 static std::optional<std::string> find_rank_file(const std::string& dir, int rank) {
-  std::string suffix_json_br = "." + std::to_string(rank) + ".json.br";
-  std::string suffix_json    = "." + std::to_string(rank) + ".json";
+  std::string suffix_yaml    = "." + std::to_string(rank) + ".yaml";
 
-  std::optional<std::string> json_candidate;
-  std::optional<std::string> json_br_candidate;
+  std::optional<std::string> yaml_candidate;
 
   for (auto const& entry : fs::directory_iterator(dir)) {
     if (!entry.is_regular_file()) continue;
     auto const fname = entry.path().filename().string();
-    if (fname.size() >= suffix_json_br.size() &&
-        fname.compare(fname.size() - suffix_json_br.size(), suffix_json_br.size(), suffix_json_br) == 0) {
-      json_br_candidate = entry.path().string();
-    } else if (fname.size() >= suffix_json.size() &&
-               fname.compare(fname.size() - suffix_json.size(), suffix_json.size(), suffix_json) == 0) {
-      json_candidate = entry.path().string();
+    std::fprintf(stderr, "Checking file: %s\n", fname.c_str());
+    if (fname.size() >= suffix_yaml.size() &&
+        fname.compare(fname.size() - suffix_yaml.size(), suffix_yaml.size(), suffix_yaml) == 0) {
+      yaml_candidate = entry.path().string();
     }
   }
 
-  if (json_br_candidate && json_candidate) {
-    fprintf(
-      stderr,
-      "Warning: both compressed (%s) and uncompressed (%s) files found for rank %d; using compressed file\n",
-      json_br_candidate->c_str(), json_candidate->c_str(), rank
-    );
-  }
-
-  if (json_br_candidate) return json_br_candidate;
-  if (json_candidate) return json_candidate;
-  return std::nullopt;
+  return yaml_candidate;
 }
 
 int main(int argc, char** argv) {
@@ -109,13 +97,13 @@ int main(int argc, char** argv) {
 
   auto maybe_file = find_rank_file(dir, rank);
   if (!maybe_file) {
-    std::fprintf(stderr, "%d: Error: no input file found in '%s' for rank %d (expected *.%d.json or *.%d.json.br)\n",
-                 rank, dir.c_str(), rank, rank, rank);
+    std::fprintf(stderr, "%d: Error: no input file found in '%s' for rank %d (expected *.%d.yaml)\n",
+                 rank, dir.c_str(), rank, rank);
     comm.finalize();
     return 1;
   }
 
-  // Read and parse phase_id for this rank
+  // Read and parse YAML file for this rank
   vt_lb::input::FileReader reader(rank, *maybe_file);
   auto phase_data = reader.parse(phase_id);
   if (!phase_data) {
@@ -123,6 +111,7 @@ int main(int argc, char** argv) {
     comm.finalize();
     return 1;
   }
+
   phase_data->setRank(comm.getRank());
 
   // Configure TemperedLB (deterministic single trial/iter example)
@@ -136,7 +125,7 @@ int main(int argc, char** argv) {
   // config.visualize_full_graph_ = true;
 
   std::printf("%d: Running TemperedLB on '%s' (phase=%d)\n", rank, maybe_file->c_str(), phase_id);
-
+  // in order to run lb, we need to make sure phase data is correctly populated
   vt_lb::runLB(
     vt_lb::DriverAlgoEnum::TemperedLB,
     comm,

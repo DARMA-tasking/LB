@@ -108,7 +108,7 @@ void JSONReader::readString(std::string const& in_json_string) {
   json_ = std::make_unique<json>(std::move(j));
 }
 
-std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
+void JSONReader::parse(int phase) {
   using json = nlohmann::json;
 
   assert(json_ != nullptr && "Must have valid json");
@@ -119,7 +119,7 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
   if (!root.contains("phases") || !root["phases"].is_array()) {
     fmt::print("JSON missing 'phases' array\n");
     assert(false);
-    return {};
+    return;
   }
 
   json const* phase_obj = nullptr;
@@ -132,7 +132,7 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
 
   if (phase_obj == nullptr) {
     fmt::print("Requested phase {} not found\n", phase);
-    return {}; // or assert if phase must exist
+    return;
   }
 
   // Helpers
@@ -217,18 +217,6 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
     }
   };
 
-  struct EntityDesc {
-    // Identification and placement
-    std::optional<int> id;
-    std::optional<int> seq_id;
-    std::optional<int> collection_id;
-    std::optional<int> home;
-    std::optional<int> objgroup_id;
-    bool migratable = false;
-    std::string type;
-    std::vector<int> index;
-  };
-
   auto parse_entity = [&](json const& entity_json) -> EntityDesc {
     validate_entity_ids(entity_json);
     EntityDesc e;
@@ -242,27 +230,6 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
     e.index = get_index_vec(entity_json);
     return e;
   };
-
-  struct SubphaseDesc { int id; double time; };
-  struct TaskDesc {
-    EntityDesc entity;
-    int node;
-    std::string resource;
-    double time;
-    std::vector<SubphaseDesc> subphases;
-    json attributes;     // optional dict
-    json user_defined;   // optional dict
-  };
-  struct CommDesc {
-    EntityDesc to;
-    EntityDesc from;
-    std::string type;
-    int messages;
-    double bytes;
-  };
-
-  std::vector<TaskDesc> tasks;
-  std::vector<CommDesc> comms;
 
   // Parse tasks
   if (phase_obj->contains("tasks") && (*phase_obj)["tasks"].is_array()) {
@@ -282,12 +249,13 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
           td.subphases.push_back(sd);
         }
       }
-      if (t.contains("attributes") && t["attributes"].is_object()) {
-        td.attributes = t["attributes"];
-      }
-      if (t.contains("user_defined") && t["user_defined"].is_object()) {
-        td.user_defined = t["user_defined"];
-      }
+      // TODO
+      // if (t.contains("attributes") && t["attributes"].is_object()) {
+      //   td.attributes = t["attributes"];
+      // }
+      // if (t.contains("user_defined") && t["user_defined"].is_object()) {
+      //   td.user_defined = t["user_defined"];
+      // }
       tasks.push_back(std::move(td));
     }
   }
@@ -309,34 +277,6 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
       comms.push_back(std::move(cd));
     }
   }
-
-  // Build PhaseData
-  auto pd = std::make_unique<model::PhaseData>();
-
-  auto get_id = [](EntityDesc const& e) -> int {
-    return e.id.has_value() ? e.id.value() : e.seq_id.value();
-  };
-
-  // Map parsed tasks into PhaseData
-  for (auto const& td : tasks) {
-    model::TaskMemory memory{};
-    // simple fallback if id is not available to seq_id
-    auto id = get_id(td.entity);
-    pd->addTask(
-      model::Task(id, td.entity.home.value(), td.node, td.entity.migratable, memory, td.time)
-    );
-  }
-
-  // Map communications into PhaseData
-  for (auto const& cd : comms) {
-    auto from_id = get_id(cd.from);
-    auto to_id = get_id(cd.to);
-    auto from_rank = pd->getTask(from_id) != nullptr ? pd->getTask(from_id)->getCurrent() : model::invalid_rank;
-    auto to_rank = pd->getTask(to_id) != nullptr ? pd->getTask(to_id)->getCurrent() : model::invalid_rank;
-    pd->addCommunication(model::Edge(from_id, to_id, cd.bytes, from_rank, to_rank));
-  }
-
-  return pd;
 }
 
 } /* end namespace vt_lb::input */

@@ -45,7 +45,6 @@
 #define INCLUDED_VT_LB_INPUT_JSON_READER_H
 
 #include <vt-lb/model/PhaseData.h>
-#include <vt-lb/input/file_reader.h>
 
 #include <nlohmann-lb/json.hpp>
 
@@ -59,11 +58,11 @@ namespace vt_lb::input {
  *
  * \brief Reader for JSON in the LBDataType format.
  */
-struct JSONReader : ReadingBehavior {
+struct JSONReader {
   /**
    * \brief Construct the reader
    */
-  JSONReader() { }
+  JSONReader(int in_rank) : rank_(in_rank) { }
 
   /**
    * \brief Check if the file is compressed or not
@@ -79,7 +78,7 @@ struct JSONReader : ReadingBehavior {
    *
    * \param[in] in_filename the file name to read
    */
-  void readFile(std::string const& in_filename) override;
+  void readFile(std::string const& in_filename);
 
   /**
    * \brief Read a given serialized json string
@@ -87,8 +86,17 @@ struct JSONReader : ReadingBehavior {
    * \param[in] in_json_string the serialized json string to read
    */
   void readString(std::string const& in_json_string);
-  void parse(int phase) override;
+
+  /**
+   * \brief Parse the json into vt-tv's data structure Info, with a single rank
+   * filled out
+   *
+   * \param[in] phase the phase to parse
+   */
+  std::unique_ptr<model::PhaseData> parse(int phase);
+
 private:
+  int rank_ = 0;
   std::unique_ptr<nlohmann::json> json_ = nullptr;
 };
 

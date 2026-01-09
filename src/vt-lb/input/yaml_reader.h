@@ -43,17 +43,27 @@
 #if !defined INCLUDED_VT_LB_INPUT_YAML_READER_H
 #define INCLUDED_VT_LB_INPUT_YAML_READER_H
 
-#include <vt-lb/model/PhaseData.h>
-#include <vt-lb/input/file_reader.h>
 #include <yaml-cpp/yaml.h>
+#include <vt-lb/algo/temperedlb/configuration.h>
+
+#include <optional>
 
 namespace vt_lb::input {
-struct YAMLReader : ReadingBehavior {
-  YAMLReader() : ReadingBehavior() { }
-  void readFile(std::string const& in_filename) override;
-  void parse(int phase) override;
+struct YAMLReader {
+  YAMLReader() { }
+  void readFile(std::string const& in_filename);
+  void loadYamlString(std::string const& yaml_string);
+  vt_lb::algo::temperedlb::Configuration parseLBConfig(int num_ranks);
+  std::string parseJSONPath();
   private:
     std::unique_ptr<YAML::Node> yaml_ = nullptr;
+    int get_int_req(YAML::Node const& j, char const* k);
+    double get_double_req(YAML::Node const& j, char const* k);
+    std::optional<int> get_int_opt(YAML::Node const& j, char const* k);
+    std::string get_str_req(YAML::Node const& j, char const* k);
+    bool get_bool_req(YAML::Node const& j, char const* k);
+    std::vector<int> get_index_vec(YAML::Node const& j);
+    std::string type_name_of(YAML::Node const& v);
 };
 } /* end namespace vt_lb::input */
 #endif /*INCLUDED_VT_LB_INPUT_YAML_READER_H*/

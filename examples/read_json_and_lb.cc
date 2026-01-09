@@ -116,7 +116,8 @@ int main(int argc, char** argv) {
   }
 
   // Read and parse phase_id for this rank
-  vt_lb::input::FileReader reader(rank, *maybe_file);
+  vt_lb::input::JSONReader reader(rank);
+  reader.readFile(*maybe_file);
   auto phase_data = reader.parse(phase_id);
   if (!phase_data) {
     std::fprintf(stderr, "%d: Error: failed to parse PhaseData from '%s'\n", rank, maybe_file->c_str());

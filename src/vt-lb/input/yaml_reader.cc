@@ -42,11 +42,8 @@
 */
 
 #include <vt-lb/input/yaml_reader.h>
-#include <vt-lb/input/input_iterator.h>
 
 #include <yaml-cpp/yaml.h>
-
-#include <optional>
 
 namespace vt_lb::input {
 
@@ -58,207 +55,269 @@ void YAMLReader::readFile(std::string const& in_filename) {
     assert(false && "Failed to load YAML file");
   }
 }
-void YAMLReader::parse(int phase) {
+void YAMLReader::loadYamlString(std::string const& yaml_string) {
+  try {
+    yaml_ = std::make_unique<YAML::Node>(YAML::Load(yaml_string));
+  } catch (const YAML::Exception& e) {
+    fmt::print("Failed to load YAML string: {}\n", e.what());
+    assert(false && "Failed to load YAML string");
+  }
+}
+std::string YAMLReader::parseJSONPath() {
+  assert(yaml_ != nullptr && "Must have valid yaml");
+
+  auto const &root = *yaml_;
+  if (root["from_data"] && root["from_data"].IsMap()) {
+    auto const& from_data = root["from_data"];
+    if (from_data["data_folder"]) {
+      return get_str_req(from_data, "data_folder");
+    }
+  }
+
+  fmt::print("Could not find JSON folder path.\n");
+  assert(false);
+}
+vt_lb::algo::temperedlb::Configuration YAMLReader::parseLBConfig(int num_ranks) {
   assert(yaml_ != nullptr && "Must have valid yaml");
 
   auto const& root = *yaml_;
-
-  // Find the requested phase entry
-  if (!root["phases"] || !root["phases"].IsSequence()) {
-    fmt::print("YAML missing 'phases' array\n");
-    assert(false);
-    return;
-  }
-
-  YAML::Node phase_obj;
-  if (root["phases"].IsSequence()) {
-    for (const YAML::Node& p : root["phases"]) {
-      fmt::print("\n\nChecking phase entry: {}\n", YAML::Dump(p));
-      if (p["id"] && p["id"].IsScalar()) {
-        int p_id = p["id"].as<int>();
-        if (p_id == phase) {
-          phase_obj = p;
-          break;
-        }
-      }
+  // Find LB config
+  vt_lb::algo::temperedlb::Configuration config{num_ranks};
+  fmt::print("root: {}\n", YAML::Dump(root));
+  fmt::print("config: {}\n", YAML::Dump(root["configuration"]));
+  if (root["configuration"] && root["configuration"].IsMap()) {
+    auto const& yaml_config = root["configuration"];
+    if (yaml_config["num_trials"]) {
+      config.num_trials_ = get_int_req(yaml_config, "num_trials");
     }
-  }
-
-  fmt::print("Found phase object: {}\n", YAML::Dump(phase_obj));
-
-  if (!phase_obj) {
-    fmt::print("Requested phase {} not found\n", phase);
-    return;
-  }
-
-  // Helpers
-  auto get_int_opt = [](YAML::Node const& j, char const* k) -> std::optional<int> {
-    if (j[k] && j[k].IsScalar()) {
-      try {
-        return std::optional<int>{j[k].as<int>()};
-      } catch (...) {
-        return std::nullopt;
-      }
+    if (yaml_config["num_iters"]) {
+      config.num_iters_ = get_int_req(yaml_config, "num_iters");
     }
-    return std::nullopt;
-  };
-  auto type_name_of = [](YAML::Node const& v) -> std::string {
-    if (v.IsNull()) return "null";
-    if (v.IsScalar()) return "scalar";
-    if (v.IsSequence()) return "sequence";
-    if (v.IsMap()) return "map";
-    return "unknown";
-  };
-  auto get_double_req = [&](YAML::Node const& j, char const* k) -> double {
-    if (!j[k]) {
-      fmt::print("Missing required key '{}' (expected number)\n", k);
-      assert(false);
+    if (yaml_config["fanout"]) {
+      config.f_ = get_int_req(yaml_config, "fanout");
     }
-    if (!j[k].IsScalar()) {
-      fmt::print("Key '{}' has wrong type: expected scalar\n", k);
-      assert(false);
+    if (yaml_config["n_rounds"]) {
+      config.k_max_ = get_int_req(yaml_config, "n_rounds");
     }
-    try {
-      return j[k].as<double>();
-    } catch (const YAML::BadConversion& e) {
-      fmt::print("Key '{}' cannot be converted to number: {}\n", k, e.what());
-      assert(false);
-      return 0.0;
+    if (yaml_config["deterministic"]) {
+      config.deterministic_ = get_bool_req(yaml_config, "deterministic");
     }
-  };
-  auto get_int_req = [&](YAML::Node const& j, char const* k) -> int {
-    if (!j[k]) {
-      fmt::print("Missing required key '{}' (expected integer)\n", k);
-      assert(false);
+    if (yaml_config["seed"]) {
+      config.seed_ = get_int_req(yaml_config, "seed");
     }
-    if (!j[k].IsScalar()) {
-      fmt::print("Key '{}' has wrong type: expected scalar\n", k);
-      assert(false);
-    }
-    try {
-      return j[k].as<int>();
-    } catch (const YAML::BadConversion& e) {
-      fmt::print("Key '{}' cannot be converted to integer: {}\n", k, e.what());
-      assert(false);
-      return 0;
-    }
-  };
-  auto get_str_req = [&](YAML::Node const& j, char const* k) -> std::string {
-    if (!j[k]) {
-      fmt::print("Missing required key '{}' (expected string)\n", k);
-      assert(false);
-    }
-    if (!j[k].IsScalar()) {
-      fmt::print("Key '{}' has wrong type: expected scalar\n", k);
-      assert(false);
-    }
-    return j[k].as<std::string>();
-};
-    auto get_bool_req = [&](YAML::Node const& j, char const* k) -> bool {
-        if (!j[k]) {
-        fmt::print("Missing required key '{}' (expected boolean)\n", k);
-        assert(false);
-        }
-        if (!j[k].IsScalar()) {
-        fmt::print("Key '{}' has wrong type: expected scalar\n", k);
-        assert(false);
-        }
-        try {
-        return j[k].as<bool>();
-        } catch (const YAML::BadConversion& e) {
-        fmt::print("Key '{}' cannot be converted to boolean: {}\n", k, e.what());
-        assert(false);
-        return false;
-        }
-    };
-  auto get_index_vec = [&](YAML::Node const& j) -> std::vector<int> {
-    std::vector<int> idx;
-    if (j["index"]) {
-      if (!j["index"].IsSequence()) {
-        fmt::print("Key 'index' has wrong type: got '{}', expected sequence\n", type_name_of(j["index"]));
-        assert(false);
-      }
-      idx.reserve(j["index"].size());
-      for (auto const& v : j["index"]) {
-        if (!v.IsScalar()) {
-        fmt::print("Key '{}' has wrong type: expected scalar\n", YAML::Dump(v));
+    // Maybe a map should be used instead, or only allow ints
+    if (yaml_config["transfer_decisions"] && yaml_config["transfer_decisions"].IsMap()) {
+      auto const& td = yaml_config["transfer_decisions"];
+      if (td["criterion"]) {
+        std::string crit_str = get_str_req(td, "criterion");
+        if (crit_str == "Grapevine") {
+          config.criterion_ = algo::temperedlb::CriterionEnum::Grapevine;
+        } else if (crit_str == "ModifiedGrapevine") {
+          config.criterion_ = algo::temperedlb::CriterionEnum::ModifiedGrapevine;
+        } else {
+          fmt::print("Unknown criterion type: '{}'\n", crit_str);
           assert(false);
         }
-        idx.push_back(v.as<int>());
       }
-    }
-    return idx;
-  };
-  auto validate_entity_ids = [](YAML::Node const& entity) {
-    bool has_id = entity["id"] && entity["id"].IsDefined();
-    bool has_seq_id = entity["seq_id"] && entity["seq_id"].IsDefined();
-    if (!has_id && !has_seq_id) {
-      // Print a compact view of the offending entity
-      fmt::print("Either 'id' (bit-encoded) or 'seq_id' must be provided for 'entity'. Offending entity: {}\n",
-                 YAML::Dump(entity));
-      assert(false);
-    }
-  };
-
-  auto parse_entity = [&](YAML::Node const& entity_yaml) -> EntityDesc {
-    validate_entity_ids(entity_yaml);
-    EntityDesc e;
-    e.type = get_str_req(entity_yaml, "type");
-    e.migratable = get_bool_req(entity_yaml, "migratable");
-    e.id = get_int_opt(entity_yaml, "id");
-    e.seq_id = get_int_opt(entity_yaml, "seq_id");
-    e.collection_id = get_int_opt(entity_yaml, "collection_id");
-    e.home = get_int_opt(entity_yaml, "home");
-    e.objgroup_id = get_int_opt(entity_yaml, "objgroup_id");
-    e.index = get_index_vec(entity_yaml);
-    return e;
-  };
-
-  // Parse tasks
-  if (phase_obj["tasks"] && phase_obj["tasks"].IsSequence()) {
-    tasks.reserve(phase_obj["tasks"].size());
-    for (auto const& t : phase_obj["tasks"]) {
-      if (!t["entity"] || !t["entity"].IsMap()) {
-        fmt::print("Task missing 'entity' map\n");
-        assert(false);
-      }
-      TaskDesc td;
-      td.entity = parse_entity(t["entity"]);
-      td.node = get_int_req(t, "node");
-      td.resource = get_str_req(t, "resource");
-      td.time = get_double_req(t, "time");
-      if (t["subphases"] && t["subphases"].IsSequence()) {
-        for (auto const& sp : t["subphases"]) {
-          SubphaseDesc sd{get_int_req(sp, "id"), get_double_req(sp, "time")};
-          td.subphases.push_back(sd);
+      if (td["obj_ordering"]) {
+        std::string order_str = get_str_req(td, "obj_ordering");
+        if (order_str == "Arbitrary") {
+          config.obj_ordering_ = algo::temperedlb::TransferUtil::ObjectOrder::Arbitrary;
+        } else if (order_str == "ElmID") {
+          config.obj_ordering_ = algo::temperedlb::TransferUtil::ObjectOrder::ElmID;
+        } else if (order_str == "FewestMigrations") {
+          config.obj_ordering_ = algo::temperedlb::TransferUtil::ObjectOrder::FewestMigrations;
+        } else if (order_str == "SmallObjects") {
+          config.obj_ordering_ = algo::temperedlb::TransferUtil::ObjectOrder::SmallObjects;
+        } else if (order_str == "LargestObjects") {
+          config.obj_ordering_ = algo::temperedlb::TransferUtil::ObjectOrder::LargestObjects;
+        } else {
+          fmt::print("Unknown object ordering type: '{}'\n", order_str);
+          assert(false);
         }
       }
-      // if (t["attributes"] && t["attributes"].IsMap()) {
-      //   td.attributes = t["attributes"];
-      // }
-      // if (t["user_defined"] && t["user_defined"].IsMap()) {
-      //   td.user_defined = t["user_defined"];
-      // }
-      tasks.push_back(std::move(td));
+      if (td["cmf_type"]) {
+        std::string cmf_str = get_str_req(td, "cmf_type");
+        if (cmf_str == "Original") {
+          config.cmf_type_ = algo::temperedlb::TransferUtil::CMFType::Original;
+        } else if (cmf_str == "NormByMax") {
+          config.cmf_type_ = algo::temperedlb::TransferUtil::CMFType::NormByMax;
+        } else if (cmf_str == "NormByMaxExcludeIneligible") {
+          config.cmf_type_ = algo::temperedlb::TransferUtil::CMFType::NormByMaxExcludeIneligible;
+        } else {
+          fmt::print("Unknown CMF type: '{}'\n", cmf_str);
+          assert(false);
+        }
+      }
+    }
+
+    // Work model
+    if (yaml_config["work_model"] && yaml_config["work_model"].IsMap()) {
+      auto const& wm = yaml_config["work_model"];
+      if (wm["parameters"] && wm["parameters"].IsMap()) {
+        auto const& params = wm["parameters"];
+        // assert(params["rank_alpha"]"])
+        if (params["rank_alpha"]) {
+          config.work_model_.rank_alpha = get_double_req(params, "rank_alpha");
+        }
+        if (params["beta"]) {
+          config.work_model_.beta = get_double_req(params, "beta");
+        }
+        if (params["gamma"]) {
+          config.work_model_.gamma = get_double_req(params, "gamma");
+        }
+        if (params["delta"]) {
+          config.work_model_.delta = get_double_req(params, "delta");
+        }
+      }
+      if (wm["memory_info"] && wm["memory_info"].IsMap()) {
+        auto const& mem_info = wm["memory_info"];
+        if (mem_info["has_mem_info"]) {
+          config.work_model_.has_memory_info = get_bool_req(mem_info, "has_mem_info");
+        }
+        if (mem_info["has_task_serialized_mem_info"]) {
+          config.work_model_.has_task_serialized_memory_info = get_bool_req(mem_info, "has_task_serialized_mem_info");
+        }
+        if (mem_info["has_task_working_mem_info"]) {
+          config.work_model_.has_task_working_memory_info = get_bool_req(mem_info, "has_task_working_mem_info");
+        }
+        if (mem_info["has_task_footprint_mem_info"]) {
+          config.work_model_.has_task_footprint_memory_info = get_bool_req(mem_info, "has_task_footprint_mem_info");
+        }
+        if (mem_info["has_shared_block_mem_info"]) {
+          config.work_model_.has_shared_block_memory_info = get_bool_req(mem_info, "has_shared_block_mem_info");
+        }
+      }
+    }
+
+    // Clustering
+    if (yaml_config["clustering"] && yaml_config["clustering"].IsMap()) {
+      auto const& clustering = yaml_config["clustering"];
+      if (clustering["based_on_shared_blocks"]) {
+        config.cluster_based_on_shared_blocks_ = get_bool_req(clustering, "based_on_shared_blocks");
+      }
+      if (clustering["based_on_communication"]) {
+        config.cluster_based_on_communication_ = get_bool_req(clustering, "based_on_communication");
+      }
+      if (clustering["visualize_task_graph"]) {
+        config.visualize_task_graph_ = get_bool_req(clustering, "visualize_task_graph");
+      }
+      if (clustering["visualize_clusters"]) {
+        config.visualize_clusters_ = get_bool_req(clustering, "visualize_clusters");
+      }
+      if (clustering["visualize_full_graph"]) {
+        config.visualize_full_graph_ = get_bool_req(clustering, "visualize_full_graph");
+      }
+    }
+
+    if (yaml_config["converge_tolerance"]) {
+      config.converge_tolerance_ = get_double_req(yaml_config, "converge_tolerance");
     }
   }
+  return config;
+}
 
-  // Parse communications
-  if (phase_obj["communications"] && phase_obj["communications"].IsSequence()) {
-    comms.reserve(phase_obj["communications"].size());
-    for (auto const& c : phase_obj["communications"]) {
-      CommDesc cd;
-      cd.type = get_str_req(c, "type");
-      if (!c["from"] || !c["from"].IsMap() || !c["to"] || !c["to"].IsMap()) {
-        fmt::print("Communication entries must contain 'from' and 'to' maps\n");
+// Helper methods
+std::optional<int> YAMLReader::get_int_opt(YAML::Node const &j, char const *k) {
+  if (j[k] && j[k].IsScalar()) {
+    try {
+      return std::optional<int>{j[k].as<int>()};
+    } catch (...) {
+      return std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+int YAMLReader::get_int_req(YAML::Node const& j, char const* k) {
+  if (!j[k]) {
+    fmt::print("Missing required key '{}' (expected integer)\n", k);
+    assert(false);
+  }
+  if (!j[k].IsScalar()) {
+    fmt::print("Key '{}' has wrong type: expected scalar\n", k);
+    assert(false);
+  }
+  try {
+    return j[k].as<int>();
+  } catch (const YAML::BadConversion &e) {
+    fmt::print("Key '{}' cannot be converted to integer: {}\n", k, e.what());
+    assert(false);
+    return 0;
+  }
+}
+double YAMLReader::get_double_req(YAML::Node const &j, char const *k) {
+  if (!j[k]) {
+    fmt::print("Missing required key '{}' (expected number)\n", k);
+    assert(false);
+  }
+  if (!j[k].IsScalar()) {
+    fmt::print("Key '{}' has wrong type: expected scalar\n", k);
+    assert(false);
+  }
+  try {
+    return j[k].as<double>();
+  } catch (const YAML::BadConversion &e) {
+    fmt::print("Key '{}' cannot be converted to number: {}\n", k, e.what());
+    assert(false);
+    return 0.0;
+  }
+}
+std::string YAMLReader::get_str_req(YAML::Node const &j, char const *k) {
+  if (!j[k]) {
+    fmt::print("Missing required key '{}' (expected string)\n", k);
+    assert(false);
+  }
+  if (!j[k].IsScalar()) {
+    fmt::print("Key '{}' has wrong type: expected scalar\n", k);
+    assert(false);
+  }
+  return j[k].as<std::string>();
+}
+bool YAMLReader::get_bool_req(YAML::Node const &j, char const *k) {
+  if (!j[k]) {
+    fmt::print("Missing required key '{}' (expected boolean)\n", k);
+    assert(false);
+  }
+  if (!j[k].IsScalar()) {
+    fmt::print("Key '{}' has wrong type: expected scalar\n", k);
+    assert(false);
+  }
+  try {
+    return j[k].as<bool>();
+  } catch (const YAML::BadConversion &e) {
+    fmt::print("Key '{}' cannot be converted to boolean: {}\n", k, e.what());
+    assert(false);
+    return false;
+  }
+}
+std::vector<int> YAMLReader::get_index_vec(YAML::Node const &j) {
+  std::vector<int> idx;
+  if (j["index"]) {
+    if (!j["index"].IsSequence()) {
+      fmt::print("Key 'index' has wrong type: got '{}', expected sequence\n",
+                 type_name_of(j["index"]));
+      assert(false);
+    }
+    idx.reserve(j["index"].size());
+    for (auto const &v : j["index"]) {
+      if (!v.IsScalar()) {
+        fmt::print("Key '{}' has wrong type: expected scalar\n", YAML::Dump(v));
         assert(false);
       }
-      cd.from = parse_entity(c["from"]);
-      cd.to = parse_entity(c["to"]);
-      cd.messages = get_int_req(c, "messages");
-      cd.bytes = get_double_req(c, "bytes");
-      comms.push_back(std::move(cd));
+      idx.push_back(v.as<int>());
     }
   }
+  return idx;
+}
+std::string YAMLReader::type_name_of(YAML::Node const &v) {
+  if (v.IsNull())
+    return "null";
+  if (v.IsScalar())
+    return "scalar";
+  if (v.IsSequence())
+    return "sequence";
+  if (v.IsMap())
+    return "map";
+  return "unknown";
 }
 } /* end namespace vt_lb::input */

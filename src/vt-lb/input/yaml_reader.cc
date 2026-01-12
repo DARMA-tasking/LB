@@ -83,8 +83,6 @@ vt_lb::algo::temperedlb::Configuration YAMLReader::parseLBConfig(int num_ranks) 
   auto const& root = *yaml_;
   // Find LB config
   vt_lb::algo::temperedlb::Configuration config{num_ranks};
-  fmt::print("root: {}\n", YAML::Dump(root));
-  fmt::print("config: {}\n", YAML::Dump(root["configuration"]));
   if (root["configuration"] && root["configuration"].IsMap()) {
     auto const& yaml_config = root["configuration"];
     if (yaml_config["num_trials"]) {

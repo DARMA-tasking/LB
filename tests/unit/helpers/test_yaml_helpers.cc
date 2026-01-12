@@ -56,16 +56,13 @@ struct TestYamlHelpers: vt_lb::tests::unit::TestHarness {
 
 TEST_F(TestYamlHelpers, test_read_yaml_config_complete) {
   using namespace vt_lb::input;
-  // Arrange
   YAMLReader reader;
-  reader.loadYamlString("# Specify the load balancer input files\n"
-                        "from_data:\n"
+  reader.loadYamlString("from_data:\n"
                         "  data_folder: ../some_data_folder/\n"
                         "  phase_ids:\n"
                         "    - 0\n"
                         "    - 1\n"
                         "\n"
-                        "# Load balancer configuration parameters\n"
                         "configuration:\n"
                         "  num_trials: 10\n"
                         "  num_iters: 20\n"
@@ -101,10 +98,9 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_complete) {
                         "\n"
                         "  converge_tolerance: 0.01\n");
 
-  // Act
+
   auto lb_config = reader.parseLBConfig(4);
 
-  // Assert
   EXPECT_EQ(lb_config.num_trials_, 10);
   EXPECT_EQ(lb_config.num_iters_, 20);
   EXPECT_EQ(lb_config.f_, 8);
@@ -133,7 +129,6 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_complete) {
 
 TEST_F(TestYamlHelpers, test_read_yaml_config_incomplete) {
   using namespace vt_lb::input;
-  // Arrange
   YAMLReader reader;
   reader.loadYamlString("# Load balancer configuration parameters\n"
                         "\n"
@@ -145,9 +140,8 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_incomplete) {
                         "      gamma: 0.1\n"
                         "      delta: 6.2\n");
 
-  // Act
   auto lb_config = reader.parseLBConfig(4);
-  // Assert
+
   EXPECT_EQ(lb_config.num_trials_, 1);
   EXPECT_EQ(lb_config.num_iters_, 10);
   EXPECT_EQ(lb_config.f_, 2);

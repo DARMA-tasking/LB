@@ -237,7 +237,7 @@ void ProxyWrapper<ProxyT>::broadcast_impl(int root, T* buffer, int count) {
     }
   }
 
-  while (vt::theContext()->getNode() != root && !collective_ctx_->done.load(std::memory_order_acquire)) {
+  while (!collective_ctx_->done.load(std::memory_order_acquire)) {
     vt::theSched()->runSchedulerOnceImpl();
   }
 }

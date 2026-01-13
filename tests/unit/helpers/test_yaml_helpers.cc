@@ -168,4 +168,26 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_incomplete) {
   EXPECT_DOUBLE_EQ(lb_config.converge_tolerance_, 0.01);
 }
 
+TEST_F(TestYamlHelpers, test_read_yaml_config_typo) {
+  using namespace vt_lb::input;
+  YAMLReader reader;
+  reader.loadYamlString("configuration:\n"
+                        "  num_trials: Grapevine\n"
+                        "  num_iters: 20\n"
+                        "  fanout: 8\n"
+                        "  n_rounds: 5\n"
+                        "  deterministic: false\n"
+                        "  seed: 42\n");
+
+  try {
+    reader.parseLBConfig(6);
+    // Should not reach here
+    FAIL() << "Expected std::runtime_error due to invalid num_trials type";
+  } catch (const std::runtime_error& err) {
+    SUCCEED();
+  } catch (...) {
+    FAIL() << "Expected std::runtime_error due to invalid num_trials type";
+  }
+}
+
 }}} // end namespace vt_lb::tests::unit

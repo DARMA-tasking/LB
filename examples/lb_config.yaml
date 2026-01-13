@@ -1,10 +1,10 @@
 # This is an example YAML configuration file to run load balancer on given JSON rank dir
 # Specify the load balancer input files
 from_data:
-  data_folder: ../some_data_folder/
-  phase_ids:
-    - 0
-    - 1
+  data_folder: ../../examples/
+  phase_id: 0
+
+algorithm: TemperedLB
 
 # Load balancer configuration parameters
 configuration:

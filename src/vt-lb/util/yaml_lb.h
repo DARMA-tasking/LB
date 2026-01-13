@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                              read_yaml_and_lb.h
+//                                yaml_lb.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -15,7 +15,7 @@
 // * Redistributions of source code must retain the above copyright notice,
 //   this list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * Redistributions in binary form, must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
@@ -41,20 +41,26 @@
 //@HEADER
 */
 
-#include <vt-lb/util/yaml_lb.h>
+#if !defined INCLUDED_VT_LB_YAML_LB_H
+#define INCLUDED_VT_LB_YAML_LB_H
 
-int main(int argc, char** argv) {
-  auto comm = vt_lb::comm::CommMPI();
-  comm.init(argc, argv);
-  if (argc < 2) {
-    if (comm.getRank() == 0) {
-      std::fprintf(stderr, "Usage: %s <directory-containing-lb-config-yaml>\n", argv[0]);
-    }
-    comm.finalize();
-    return 1;
-  }
-  std::string yaml_file = argv[1];
-  vt_lb::util::YAML_LB yaml_lb;
-  yaml_lb.loadAndRun(yaml_file, comm);
-  return 0;
-}
+#include <string>
+#include <optional>
+#include <vt-lb/comm/MPI/comm_mpi.h>
+
+namespace vt_lb::util {
+
+/**
+ * \struct YAML_LB
+ *
+ * \brief Utility for loading YAML configuration and running load balancing
+ */
+struct YAML_LB
+{
+    void loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& comm);
+    static std::optional<std::string> findRankFile(const std::string& dir, int rank);
+};
+
+} /* end namespace vt_lb::util */
+
+#endif /*INCLUDED_VT_LB_YAML_LB_H*/

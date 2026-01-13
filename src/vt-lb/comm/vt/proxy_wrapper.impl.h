@@ -45,7 +45,6 @@
 #define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_IMPL_H
 
 #include <vt/transport.h>
-#include "vt-lb/comm/vt/broadcast_handler.h"
 
 #include <cstring>
 #include <vector>
@@ -57,7 +56,12 @@
 namespace vt_lb::comm {
 
 template <typename ProxyT>
-ProxyWrapper<ProxyT>::ProxyWrapper(ProxyT proxy) : ProxyT(proxy) { }
+ProxyWrapper<ProxyT>::ProxyWrapper(ProxyT proxy) : ProxyT(proxy) {
+  collective_ctx_ = std::make_shared<CollectiveCtx>();
+  collective_proxy_ = vt::theObjGroup()->template makeCollective<CollectiveHandlerType>(
+    "CommVT_CollectiveHandler", collective_ctx_.get()
+  );
+}
 
 template <typename ProxyT>
 template <typename T>
@@ -199,50 +203,41 @@ void ProxyWrapper<ProxyT>::reduce_impl(int root, MPI_Op op, SendBufT sendbuf, Re
 }
 
 template <typename ProxyT>
-template <typename U>
-void ProxyWrapper<ProxyT>::broadcast(int root, MPI_Datatype datatype, U buffer, int count) {
+template <typename T>
+void ProxyWrapper<ProxyT>::broadcast(int root, MPI_Datatype datatype, T* buffer, int count) {
   if (datatype == MPI_INT) {
-    if constexpr (std::is_same_v<U, int*>) broadcast_impl<int>(root, buffer, count);
+    if constexpr (std::is_same_v<T, int>) broadcast_impl<int>(root, buffer, count);
   } else if (datatype == MPI_DOUBLE) {
-    if constexpr (std::is_same_v<U, double*>) broadcast_impl<double>(root, buffer, count);
+    if constexpr (std::is_same_v<T, double>) broadcast_impl<double>(root, buffer, count);
   } else if (datatype == MPI_FLOAT) {
-    if constexpr (std::is_same_v<U, float*>) broadcast_impl<float>(root, buffer, count);
+    if constexpr (std::is_same_v<T, float>) broadcast_impl<float>(root, buffer, count);
   } else if (datatype == MPI_LONG) {
-    if constexpr (std::is_same_v<U, long*>) broadcast_impl<long>(root, buffer, count);
+    if constexpr (std::is_same_v<T, long>) broadcast_impl<long>(root, buffer, count);
   } else if (datatype == MPI_LONG_LONG) {
-    if constexpr (std::is_same_v<U, long long*>) broadcast_impl<long long>(root, buffer, count);
+    if constexpr (std::is_same_v<T, long long>) broadcast_impl<long long>(root, buffer, count);
   } else {
     vtAbort("ProxyWrapper::broadcast: unsupported MPI_Datatype");
   }
 }
 
 template <typename ProxyT>
-template <typename T, typename BufT>
-void ProxyWrapper<ProxyT>::broadcast_impl(int root, BufT buffer, int count) {
-  auto ctx = std::make_unique<CollectiveCtx>();
-  ctx->out_ptr = static_cast<void*>(buffer);
-  ctx->count = static_cast<std::size_t>(std::max(1, count));
-  ctx->done.store(false);
-
-  using ObjGroup = BroadcastHandler<CollectiveCtx, T>;
-  auto handler_proxy = vt::theObjGroup()->template makeCollective<ObjGroup>(
-    "CommVT_BroadcastHandler", ctx.get()
-  );
+template <typename T>
+void ProxyWrapper<ProxyT>::broadcast_impl(int root, T* buffer, int count) {
+  collective_ctx_->out_ptr = static_cast<void*>(buffer);
+  collective_ctx_->count = static_cast<std::size_t>(std::max(1, count));
+  collective_ctx_->done.store(false);
 
   if (vt::theContext()->getNode() == root) {
     if (count == 1) {
       T value = *static_cast<T const*>(buffer);
-      handler_proxy.template broadcast<&ObjGroup::handleScalar>(value);
+      collective_proxy_.template broadcast<&CollectiveHandlerType::template broadcastScalar<T>>(value);
     } else {
-      std::vector<T> v(static_cast<std::size_t>(count));
-      std::memcpy(
-        v.data(), static_cast<void const*>(buffer), sizeof(T) * static_cast<std::size_t>(count)
-      );
-      handler_proxy.template broadcast<&ObjGroup::handleVector>(v);
+      std::vector<T> values(buffer, buffer + count);
+      collective_proxy_.template broadcast<&CollectiveHandlerType::template broadcastVector<T>>(values);
     }
   }
 
-  while (vt::theContext()->getNode() != root && !ctx->done.load(std::memory_order_acquire)) {
+  while (vt::theContext()->getNode() != root && !collective_ctx_->done.load(std::memory_order_acquire)) {
     vt::theSched()->runSchedulerOnceImpl();
   }
 }

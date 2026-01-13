@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                          broadcast_handler.h
+//                          collective_handler.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC
@@ -44,18 +44,17 @@
 #if !defined INCLUDED_VT_LB_COMM_VT_BROADCAST_HANDLER_H
 #define INCLUDED_VT_LB_COMM_VT_BROADCAST_HANDLER_H
 
-#include <atomic>
-#include <cstddef>
-#include <cstring>
 #include <vector>
+#include <cstddef>
 
 namespace vt_lb::comm {
 
-template <typename CtxT, typename T>
-struct BroadcastHandler {
-  explicit BroadcastHandler(CtxT* ctx) : ctx_(ctx) { }
+template <typename CtxT>
+struct CollectiveHandler {
+  explicit CollectiveHandler(CtxT* ctx) : ctx_(ctx) { }
 
-  void handleScalar(T value) {
+  template <typename T>
+  void broadcastScalar(T value) {
     if (ctx_ == nullptr) {
       return;
     }
@@ -63,7 +62,8 @@ struct BroadcastHandler {
     ctx_->done.store(true, std::memory_order_release);
   }
 
-  void handleVector(std::vector<T> const& values) {
+  template <typename T>
+  void broadcastVector(std::vector<T> const& values) {
     if (ctx_ == nullptr) {
       return;
     }

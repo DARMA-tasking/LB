@@ -44,6 +44,8 @@
 #ifndef INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 #define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 
+#include <vt-lb/comm/vt/collective_handler.h>
+
 #include <atomic>
 #include <vt/transport.h>
 #include <mpi.h>
@@ -67,8 +69,8 @@ struct ProxyWrapper : ProxyT {
   template <typename U, typename V>
   void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
 
-  template <typename U>
-  void broadcast(int root, MPI_Datatype datatype, U buffer, int count);
+  template <typename T>
+  void broadcast(int root, MPI_Datatype datatype, T* buffer, int count);
 
 private:
   enum class VTOp { Plus, Max, Min };
@@ -77,8 +79,12 @@ private:
   template <typename T, typename SendBufT, typename RecvBufT>
   void reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count);
 
-  template <typename T, typename BufT>
-  void broadcast_impl(int root, BufT buffer, int count);
+  template <typename T>
+  void broadcast_impl(int root, T* buffer, int count);
+
+  using CollectiveHandlerType = CollectiveHandler<CollectiveCtx>;
+  std::shared_ptr<CollectiveCtx> collective_ctx_{};
+  vt::objgroup::proxy::Proxy<CollectiveHandlerType> collective_proxy_{};
 };
 
 } // namespace vt_lb::comm

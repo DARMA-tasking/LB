@@ -58,7 +58,7 @@ namespace vt_lb::util {
 struct YAML_LB
 {
     void loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& comm);
-    static std::optional<std::string> findRankFile(const std::string& dir, int rank);
+    static std::optional<std::string> findRankFile(std::string const& dir, int rank);
 };
 
 } /* end namespace vt_lb::util */

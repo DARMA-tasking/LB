@@ -56,5 +56,6 @@ int main(int argc, char** argv) {
   std::string yaml_file = argv[1];
   vt_lb::util::YAML_LB yaml_lb;
   yaml_lb.loadAndRun(yaml_file, comm);
+  comm.finalize();
   return 0;
 }

@@ -53,11 +53,11 @@ namespace fs = std::filesystem;
 
 namespace vt_lb::util {
 void YAML_LB::loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& comm) {
-  auto yamlReader = vt_lb::input::YAMLReader();
-  yamlReader.readFile(in_filename);
-  std::string jsonDir = yamlReader.parseJSONRankPath();
-  int phase_id = yamlReader.parsePhaseID();
-  vt_lb::DriverAlgoEnum algo = yamlReader.parseAlgorithm();
+  auto yaml_reader = vt_lb::input::YAMLReader();
+  yaml_reader.readFile(in_filename);
+  std::string jsonDir = yaml_reader.parseJSONRankPath();
+  int phase_id = yaml_reader.parsePhaseID();
+  vt_lb::DriverAlgoEnum algo = yaml_reader.parseAlgorithm();
   int rank = comm.getRank();
 
   if (!fs::exists(jsonDir) || !fs::is_directory(jsonDir)) {
@@ -73,12 +73,12 @@ void YAML_LB::loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& c
     throw std::runtime_error("No input file found for rank");
   }
 
-  vt_lb::input::JSONReader jsonReader(rank);
-  jsonReader.readFile(*maybe_file);
-  auto phase_data = jsonReader.parse(phase_id);
+  vt_lb::input::JSONReader json_reader(rank);
+  json_reader.readFile(*maybe_file);
+  auto phase_data = json_reader.parse(phase_id);
   phase_data->setRank(comm.getRank());
 
-  auto lb_config = yamlReader.parseLBConfig(comm.numRanks());
+  auto lb_config = yaml_reader.parseLBConfig(comm.numRanks());
 
   std::printf("%d: Running algorithm %d on '%s' (phase=%d)\n", rank, static_cast<int>(algo),
               maybe_file->c_str(), phase_id);
@@ -87,7 +87,7 @@ void YAML_LB::loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& c
   return;
 }
 
-std::optional<std::string> YAML_LB::findRankFile(const std::string& dir, int rank) {
+std::optional<std::string> YAML_LB::findRankFile(std::string const& dir, int rank) {
   std::string suffix_json_br = "." + std::to_string(rank) + ".json.br";
   std::string suffix_json    = "." + std::to_string(rank) + ".json";
 
@@ -109,9 +109,10 @@ std::optional<std::string> YAML_LB::findRankFile(const std::string& dir, int ran
   if (json_br_candidate && json_candidate) {
     fprintf(
       stderr,
-      "Warning: both compressed (%s) and uncompressed (%s) files found for rank %d; using compressed file\n",
+      "Warning: both compressed (%s) and uncompressed (%s) files found for rank %d",
       json_br_candidate->c_str(), json_candidate->c_str(), rank
     );
+    throw std::runtime_error("Multiple input file types found for rank");
   }
 
   if (json_br_candidate) return json_br_candidate;

@@ -43,6 +43,7 @@
 
 #include <gtest/gtest.h>
 #include <vt-lb/input/yaml_reader.h>
+#include <vt-lb/algo/temperedlb/configuration.h>
 
 #include "../test_harness.h"
 #include "../test_helpers.h"
@@ -57,47 +58,46 @@ struct TestYamlHelpers: vt_lb::tests::unit::TestHarness {
 TEST_F(TestYamlHelpers, test_read_yaml_config_complete) {
   using namespace vt_lb::input;
   YAMLReader reader;
-  reader.loadYamlString("from_data:\n"
-                        "  data_folder: ../some_data_folder/\n"
-                        "  phase_ids:\n"
-                        "    - 0\n"
-                        "    - 1\n"
-                        "\n"
-                        "configuration:\n"
-                        "  num_trials: 10\n"
-                        "  num_iters: 20\n"
-                        "  fanout: 8\n"
-                        "  n_rounds: 5\n"
-                        "  deterministic: false\n"
-                        "  seed: 42\n"
-                        "\n"
-                        "  transfer_decisions:\n"
-                        "    criterion: Grapevine\n"
-                        "    obj_ordering: Arbitrary\n"
-                        "    cmf_type: Original\n"
-                        "\n"
-                        "  work_model:\n"
-                        "    parameters:\n"
-                        "      rank_alpha: 2.3\n"
-                        "      beta: 0.7\n"
-                        "      gamma: 0.1\n"
-                        "      delta: 6.2\n"
-                        "    memory_info:\n"
-                        "      has_mem_info: true\n"
-                        "      has_task_serialized_mem_info: false\n"
-                        "      has_task_working_mem_info: true\n"
-                        "      has_task_footprint_mem_info: true\n"
-                        "      has_shared_block_mem_info: true\n"
-                        "\n"
-                        "  clustering:\n"
-                        "    based_on_shared_blocks: false\n"
-                        "    based_on_communication: true\n"
-                        "    visualize_task_graph: false\n"
-                        "    visualize_clusters: false\n"
-                        "    visualize_full_graph: false\n"
-                        "\n"
-                        "  converge_tolerance: 0.01\n");
+  reader.loadYamlString(R"(from_data:
+  data_folder: ../some_data_folder/
+  phase_ids:
+    - 0
+    - 1
 
+configuration:
+  num_trials: 10
+  num_iters: 20
+  fanout: 8
+  n_rounds: 5
+  deterministic: false
+  seed: 42
+
+  transfer_decisions:
+    criterion: Grapevine
+    obj_ordering: Arbitrary
+    cmf_type: Original
+
+  work_model:
+    parameters:
+      rank_alpha: 2.3
+      beta: 0.7
+      gamma: 0.1
+      delta: 6.2
+    memory_info:
+      has_mem_info: true
+      has_task_serialized_mem_info: false
+      has_task_working_mem_info: true
+      has_task_footprint_mem_info: true
+      has_shared_block_mem_info: true
+
+  clustering:
+    based_on_shared_blocks: false
+    based_on_communication: true
+    visualize_task_graph: false
+    visualize_clusters: false
+    visualize_full_graph: false
+
+  converge_tolerance: 0.01)");
 
   auto lb_config = reader.parseLBConfig(4);
 
@@ -130,54 +130,53 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_complete) {
 TEST_F(TestYamlHelpers, test_read_yaml_config_incomplete) {
   using namespace vt_lb::input;
   YAMLReader reader;
-  reader.loadYamlString("# Load balancer configuration parameters\n"
-                        "\n"
-                        "configuration:\n"
-                        "  work_model:\n"
-                        "    parameters:\n"
-                        "      rank_alpha: 2.3\n"
-                        "      beta: 0.7\n"
-                        "      gamma: 0.1\n"
-                        "      delta: 6.2\n");
+  reader.loadYamlString(R"(configuration:
+  work_model:
+    parameters:
+      rank_alpha: 2.3
+      beta: 0.7
+      gamma: 0.1
+      delta: 6.2)");
 
+  vt_lb::algo::temperedlb::Configuration base_config{4};
   auto lb_config = reader.parseLBConfig(4);
 
-  EXPECT_EQ(lb_config.num_trials_, 1);
-  EXPECT_EQ(lb_config.num_iters_, 10);
-  EXPECT_EQ(lb_config.f_, 2);
-  EXPECT_EQ(lb_config.k_max_, 2);
-  EXPECT_EQ(lb_config.deterministic_, true);
-  EXPECT_EQ(lb_config.seed_, 29);
-  EXPECT_EQ(lb_config.criterion_, vt_lb::algo::temperedlb::CriterionEnum::ModifiedGrapevine);
-  EXPECT_EQ(lb_config.obj_ordering_, vt_lb::algo::temperedlb::TransferUtil::ObjectOrder::ElmID);
-  EXPECT_EQ(lb_config.cmf_type_, vt_lb::algo::temperedlb::TransferUtil::CMFType::Original);
+  EXPECT_EQ(lb_config.num_trials_, base_config.num_trials_);
+  EXPECT_EQ(lb_config.num_iters_, base_config.num_iters_);
+  EXPECT_EQ(lb_config.f_, base_config.f_);
+  EXPECT_EQ(lb_config.k_max_, base_config.k_max_);
+  EXPECT_EQ(lb_config.deterministic_, base_config.deterministic_);
+  EXPECT_EQ(lb_config.seed_, base_config.seed_);
+  EXPECT_EQ(lb_config.criterion_, base_config.criterion_);
+  EXPECT_EQ(lb_config.obj_ordering_, base_config.obj_ordering_);
+  EXPECT_EQ(lb_config.cmf_type_, base_config.cmf_type_);
   EXPECT_DOUBLE_EQ(lb_config.work_model_.rank_alpha, 2.3);
   EXPECT_DOUBLE_EQ(lb_config.work_model_.beta, 0.7);
   EXPECT_DOUBLE_EQ(lb_config.work_model_.gamma, 0.1);
   EXPECT_DOUBLE_EQ(lb_config.work_model_.delta, 6.2);
-  EXPECT_EQ(lb_config.work_model_.has_memory_info, true);
-  EXPECT_EQ(lb_config.work_model_.has_task_serialized_memory_info, true);
-  EXPECT_EQ(lb_config.work_model_.has_task_working_memory_info, true);
-  EXPECT_EQ(lb_config.work_model_.has_task_footprint_memory_info, true);
-  EXPECT_EQ(lb_config.work_model_.has_shared_block_memory_info, true);
-  EXPECT_EQ(lb_config.cluster_based_on_shared_blocks_, false);
-  EXPECT_EQ(lb_config.cluster_based_on_communication_, false);
-  EXPECT_EQ(lb_config.visualize_task_graph_, false);
-  EXPECT_EQ(lb_config.visualize_clusters_, false);
-  EXPECT_EQ(lb_config.visualize_full_graph_, false);
-  EXPECT_DOUBLE_EQ(lb_config.converge_tolerance_, 0.01);
+  EXPECT_EQ(lb_config.work_model_.has_memory_info, base_config.work_model_.has_memory_info);
+  EXPECT_EQ(lb_config.work_model_.has_task_serialized_memory_info, base_config.work_model_.has_task_serialized_memory_info);
+  EXPECT_EQ(lb_config.work_model_.has_task_working_memory_info, base_config.work_model_.has_task_working_memory_info);
+  EXPECT_EQ(lb_config.work_model_.has_task_footprint_memory_info, base_config.work_model_.has_task_footprint_memory_info);
+  EXPECT_EQ(lb_config.work_model_.has_shared_block_memory_info, base_config.work_model_.has_shared_block_memory_info);
+  EXPECT_EQ(lb_config.cluster_based_on_shared_blocks_, base_config.cluster_based_on_shared_blocks_);
+  EXPECT_EQ(lb_config.cluster_based_on_communication_, base_config.cluster_based_on_communication_);
+  EXPECT_EQ(lb_config.visualize_task_graph_, base_config.visualize_task_graph_);
+  EXPECT_EQ(lb_config.visualize_clusters_, base_config.visualize_clusters_);
+  EXPECT_EQ(lb_config.visualize_full_graph_, base_config.visualize_full_graph_);
+  EXPECT_DOUBLE_EQ(lb_config.converge_tolerance_, base_config.converge_tolerance_);
 }
 
 TEST_F(TestYamlHelpers, test_read_yaml_config_typo) {
   using namespace vt_lb::input;
   YAMLReader reader;
-  reader.loadYamlString("configuration:\n"
-                        "  num_trials: Grapevine\n"
-                        "  num_iters: 20\n"
-                        "  fanout: 8\n"
-                        "  n_rounds: 5\n"
-                        "  deterministic: false\n"
-                        "  seed: 42\n");
+  reader.loadYamlString(R"(configuration:
+  num_trials: Grapevine
+  num_iters: 20
+  fanout: 8
+  n_rounds: 5
+  deterministic: false
+  seed: 42)");
 
   try {
     reader.parseLBConfig(6);

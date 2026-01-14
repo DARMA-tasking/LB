@@ -50,22 +50,30 @@
 #include <optional>
 
 namespace vt_lb::input {
+
+/**
+ * \struct YAMLReader
+ *
+ * \brief Read in user configuration for load balancer from YAML file
+ */
 struct YAMLReader {
-  YAMLReader() { }
+  YAMLReader() = default;
   void readFile(std::string const& in_filename);
   void loadYamlString(std::string const& yaml_string);
   vt_lb::algo::temperedlb::Configuration parseLBConfig(int num_ranks);
   std::string parseJSONRankPath();
   int parsePhaseID();
   vt_lb::DriverAlgoEnum parseAlgorithm();
-  private:
-    std::unique_ptr<YAML::Node> yaml_ = nullptr;
-    int get_int(YAML::Node const& j, char const* k);
-    double get_double(YAML::Node const& j, char const* k);
-    std::string get_str(YAML::Node const& j, char const* k);
-    bool get_bool(YAML::Node const& j, char const* k);
-    std::vector<int> get_index_vec(YAML::Node const& j);
-    std::string type_name_of(YAML::Node const& v);
+
+private:
+  template<typename T>
+  T get_value(YAML::Node const& j, char const* k);
+  std::vector<int> get_index_vec(YAML::Node const& j);
+  std::string type_name_of(YAML::Node const& v);
+  template<typename T>
+  std::string type_name();
+
+  std::unique_ptr<YAML::Node> yaml_ = nullptr;
 };
 } /* end namespace vt_lb::input */
 #endif /*INCLUDED_VT_LB_INPUT_YAML_READER_H*/

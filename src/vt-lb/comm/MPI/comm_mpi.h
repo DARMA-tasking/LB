@@ -181,6 +181,18 @@ public:
     }
   }
 
+  template <typename U>
+  void broadcast(int root, MPI_Datatype datatype, U buffer, int count) {
+    MPI_Request request;
+    MPI_Ibcast(buffer, count, datatype, root, comm_, &request);
+    int flag = 0;
+    while (not flag) {
+      MPI_Status status;
+      MPI_Test(&request, &flag, &status);
+      poll();
+    }
+  }
+
   /**
    * \brief Send data to a destination rank
    * \param dest Destination rank

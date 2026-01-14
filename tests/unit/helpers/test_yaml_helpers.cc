@@ -182,7 +182,7 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_typo) {
     reader.parseLBConfig(6);
     // Should not reach here
     FAIL() << "Expected std::runtime_error due to invalid num_trials type";
-  } catch (const std::runtime_error& err) {
+  } catch (std::runtime_error const& err) {
     SUCCEED();
   } catch (...) {
     FAIL() << "Expected std::runtime_error due to invalid num_trials type";

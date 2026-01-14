@@ -242,6 +242,59 @@ void ProxyWrapper<ProxyT>::broadcast_impl(int root, T* buffer, int count) {
   }
 }
 
+template <typename T>
+struct AllReduceContainer {
+  AllReduceContainer() = default;
+  explicit AllReduceContainer(std::vector<T> const& in) {
+    by_rank[vt::theContext()->getNode()] = in;
+  }
+
+  friend AllReduceContainer<T> operator+(
+    AllReduceContainer<T> lhs,
+    AllReduceContainer<T> const& rhs
+  ) {
+    for (auto const& kv : rhs.by_rank) {
+      auto& vec = lhs.by_rank[kv.first];
+      vec.insert(vec.end(), kv.second.begin(), kv.second.end());
+    }
+    return lhs;
+  }
+
+  template <typename SerializerT>
+  void serialize(SerializerT& s) {
+    s | by_rank;
+  }
+
+  std::unordered_map<int, std::vector<T>> by_rank;
+};
+
+template <typename ProxyT>
+template <typename T>
+std::unordered_map<int, std::vector<T>>
+ProxyWrapper<ProxyT>::allgather(T const* sendbuf, int sendcount) {
+  std::unordered_map<int, std::vector<T>> out;
+  collective_ctx_->out_ptr = static_cast<void*>(&out);
+  collective_ctx_->done.store(false);
+
+  std::vector<T> local_vec;
+  if (sendcount > 0) {
+    local_vec.resize(static_cast<std::size_t>(sendcount));
+    std::memcpy(local_vec.data(), sendbuf, sizeof(T) * static_cast<std::size_t>(sendcount));
+  }
+  AllReduceContainer<T> container{local_vec};
+  collective_proxy_.template allreduce<
+    &CollectiveHandlerType::template allgatherValues<AllReduceContainer<T>>,
+    vt::collective::PlusOp
+  >(
+    container
+  );
+
+  while (!collective_ctx_->done.load(std::memory_order_acquire)) {
+    vt::theSched()->runSchedulerOnceImpl();
+  }
+  return out;
+}
+
 } // namespace vt_lb::comm
 
 #endif /* INCLUDED_VT_LB_COMM_PROXY_WRAPPER_IMPL_H */

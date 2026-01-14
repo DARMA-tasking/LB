@@ -72,6 +72,12 @@ struct CollectiveHandler {
     ctx_->done.store(true, std::memory_order_release);
   }
 
+  template <typename DataT>
+  void allgatherValues(DataT const& values) {
+    *static_cast<DataT*>(ctx_->out_ptr) = values;
+    ctx_->done.store(true, std::memory_order_release);
+  }
+
 private:
   CtxT* ctx_ = nullptr;
 };

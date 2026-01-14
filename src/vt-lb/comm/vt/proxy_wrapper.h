@@ -72,6 +72,9 @@ struct ProxyWrapper : ProxyT {
   template <typename T>
   void broadcast(int root, MPI_Datatype datatype, T* buffer, int count);
 
+  template <typename T>
+  std::unordered_map<int, std::vector<T>> allgather(T const* sendbuf, int sendcount);
+
 private:
   enum class VTOp { Plus, Max, Min };
   static VTOp mapOp(MPI_Op mpio);

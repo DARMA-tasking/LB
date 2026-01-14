@@ -221,4 +221,33 @@ TYPED_TEST(TestCommBasic, test_broadcast_int_array) {
   EXPECT_EQ(buf[3], 4);
 }
 
+TYPED_TEST(TestCommBasic, test_allgather_int_array) {
+  auto& the_comm = this->comm;
+  auto rank = the_comm.getRank();
+
+  SET_MIN_NUM_NODES_CONSTRAINT(2);
+
+  typename TestFixture::TestObject obj{};
+  auto handle = this->makeHandle(&obj);
+
+  int const root = 0;
+  int offset = (rank + 1) * 4;
+  std::array<int,4> buf{{offset,offset+1,offset+2,offset+3}};
+
+  auto res = handle.allgather(buf.data(), int(buf.size()));
+
+  // Check that we received from all ranks
+  EXPECT_EQ(res.size(), static_cast<size_t>(the_comm.numRanks()));
+  for (int r = 0; r < the_comm.numRanks(); ++r) {
+    auto it = res.find(r);
+    ASSERT_NE(it, res.end());
+    const auto& vec = it->second;
+    EXPECT_EQ(vec.size(), buf.size());
+    int expected_offset = (r + 1) * 4;
+    for (size_t i = 0; i < buf.size(); ++i) {
+      EXPECT_EQ(vec[i], expected_offset + static_cast<int>(i));
+    }
+  }
+}
+
 }}} // end namespace vt_lb::tests::unit

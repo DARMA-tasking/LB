@@ -46,6 +46,8 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <type_traits>
+
 namespace vt_lb::input {
 
 void YAMLReader::readFile(std::string const& in_filename) {

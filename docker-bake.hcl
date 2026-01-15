@@ -62,9 +62,6 @@ target "lb-build-all" {
         image = "amd64-ubuntu-20.04-gcc-10-openmpi-cpp"
       },
       {
-        image = "amd64-ubuntu-22.04-clang-11-cpp"
-      },
-      {
         image = "amd64-ubuntu-22.04-clang-12-cpp"
       },
       {

@@ -46,6 +46,9 @@
 
 #include <mpi.h>
 
+#include <unordered_map>
+#include <vector>
+
 namespace vt_lb::comm {
 
 struct CommMPI;
@@ -90,6 +93,9 @@ struct ClassHandle {
 
   template <typename U>
   void broadcast(int root, MPI_Datatype datatype, U buffer, int count);
+
+  template <typename U>
+  std::unordered_map<int, std::vector<U>> allgather(U const* sendbuf, int sendcount);
 
   friend struct ClassHandleRank<T>;
 

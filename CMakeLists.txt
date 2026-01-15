@@ -45,6 +45,10 @@ set(JSON_MultipleHeaders ON)
 set(JSON_LIBRARY nlohmann_json-lb)
 add_subdirectory(tpl/json)
 
+# yaml-cpp library always included in the build
+set(YAML_LIBRARY yaml-cpp)
+add_subdirectory(tpl/yaml-cpp)
+
 # brotli library always included in the build
 set(BROTLI_DISABLE_TESTS ON)
 # we need to disable bundled mode so it will install properly

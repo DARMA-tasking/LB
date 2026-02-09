@@ -371,6 +371,24 @@ struct TemperedLB final : baselb::BaseLB {
     }
   }
 
+  /**
+   * @brief Get the global distribution of tasks after load balancing
+   *
+   * @param local_tasks The set of tasks on the this rank
+   */
+  std::unordered_map<model::RankType, std::vector<model::TaskType>>
+  getGlobalDistribution(std::unordered_set<model::TaskType> const& local_tasks) {
+    std::vector<model::TaskType> local_task_vec(
+      local_tasks.begin(), local_tasks.end()
+    );
+    auto all_task_vecs = handle_.template allgather<model::TaskType>(
+      local_task_vec.data(), static_cast<int>(local_task_vec.size())
+    );
+
+    return all_task_vecs;
+  }
+
+
   Clusterer const* getClusterer() const { return clusterer_.get(); }
 
 private:

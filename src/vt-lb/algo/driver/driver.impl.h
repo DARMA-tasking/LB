@@ -57,14 +57,37 @@ void runLB(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<mod
     break;
   case DriverAlgoEnum::TemperedLB:
     {
-    // Run TemperedLB algorithm
-    auto lb = std::make_unique<algo::temperedlb::TemperedLB<CommT>>(comm, config);
-    lb->inputData(std::move(phase_data));
-    lb->run();
+      // Run TemperedLB algorithm
+      auto lb = std::make_unique<algo::temperedlb::TemperedLB<CommT>>(comm, config);
+      lb->inputData(std::move(phase_data));
+      lb->run();
     }
     break;
   default:
     throw std::runtime_error("Invalid load balancer algorithm");
+  }
+}
+
+template <typename CommT, typename ConfigT>
+std::unordered_map<model::RankType, std::vector<model::TaskType>>
+runLBAllGather(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<model::PhaseData> phase_data) {
+  switch (algo) {
+  case DriverAlgoEnum::None:
+    // No load balancing
+    return {};
+    break;
+  case DriverAlgoEnum::TemperedLB:
+    {
+      // Run TemperedLB algorithm
+      auto lb = std::make_unique<algo::temperedlb::TemperedLB<CommT>>(comm, config);
+      lb->inputData(std::move(phase_data));
+      auto local_tasks = lb->run();
+      return lb->getGlobalDistribution(local_tasks);
+    }
+    break;
+  default:
+    throw std::runtime_error("Invalid load balancer algorithm");
+    return {};
   }
 }
 

@@ -304,7 +304,7 @@ void generateIntraRankComm(
       }
     }
     double bytes = weight_per_edge_dist(gen);
-    pd.addCommunication(Edge{from, to, bytes, rank, rank});
+    pd.aggregateCommunication(Edge{from, to, bytes, rank, rank});
   }
 }
 
@@ -359,7 +359,7 @@ void generateInterRankComm(
     while ((remote_rank = remote_rank_dist(gen)) == rank) {}
     TaskType to = remote_task_dist(gen);
     double bytes = weight_per_edge_dist(gen);
-    pd.addCommunication(Edge{from, to, bytes, rank, remote_rank});
+    pd.aggregateCommunication(Edge{from, to, bytes, rank, remote_rank});
   }
   for (std::size_t e = from_edge_count; e < local_endpoints.size(); ++e) {
     TaskType to = local_endpoints[e];
@@ -367,7 +367,7 @@ void generateInterRankComm(
     while ((remote_rank = remote_rank_dist(gen)) == rank) {}
     TaskType from = remote_task_dist(gen);
     double bytes = weight_per_edge_dist(gen);
-    pd.addCommunication(Edge{from, to, bytes, remote_rank, rank});
+    pd.aggregateCommunication(Edge{from, to, bytes, remote_rank, rank});
   }
 }
 
@@ -428,7 +428,7 @@ void generateRankComm(
       while ((to = remote_task_dist(gen)) == from) {}
     }
     double bytes = weight_per_edge_dist(gen);
-    pd.addCommunication(Edge{from, to, bytes, rank, remote_rank});
+    pd.aggregateCommunication(Edge{from, to, bytes, rank, remote_rank});
   }
   for (std::size_t e = from_edge_count; e < local_endpoints.size(); ++e) {
     TaskType to = local_endpoints[e];
@@ -441,7 +441,7 @@ void generateRankComm(
       while ((from = remote_task_dist(gen)) == to) {}
     }
     double bytes = weight_per_edge_dist(gen);
-    pd.addCommunication(Edge{from, to, bytes, remote_rank, rank});
+    pd.aggregateCommunication(Edge{from, to, bytes, remote_rank, rank});
   }
 }
 

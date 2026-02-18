@@ -42,3 +42,4 @@
 */
 
 #define vt_backend_enabled                   @vt_backend_feature_enabled@
+#define reconverse_backend_enabled           @reconverse_backend_enabled@

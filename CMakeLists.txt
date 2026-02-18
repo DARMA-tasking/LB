@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 # Set the project name and version
 project(vt-lb VERSION 1.0 LANGUAGES CXX)
 
+# Ensure custom find modules are in the search path BEFORE any find_package calls
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 # Try to find ccache to speed up compilation
 find_program(ccache_binary ccache)
 if (ccache_binary)
@@ -16,6 +19,18 @@ message(STATUS "Running tests and examples with additional MPI flags = ${MPI_EXT
 include(cmake/load_mpi_package.cmake)
 
 option(vt_backend_enabled "Whether VT backend is enabled" ON)
+option(reconverse_backend_enabled "Whether Reconverse backend is enabled" ON)
+
+if (reconverse_backend_enabled)
+  find_package(reconverse MODULE)
+  if (reconverse_FOUND)
+    set(reconverse_backend_enabled 1)
+    message(STATUS "Reconverse backend enabled")
+  else()
+    set(reconverse_backend_enabled 0)
+    message(STATUS "Reconverse not found; Reconverse backend disabled")
+  endif()
+endif()
 
 if (vt_backend_enabled)
   find_package(vt)

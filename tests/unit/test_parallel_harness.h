@@ -59,6 +59,10 @@
 #include <vt-lb/comm/vt/comm_vt.h>
 #endif
 
+#if reconverse_backend_enabled
+#include <vt-lb/comm/reconverse/comm_rc.h>
+#endif
+
 namespace vt_lb { namespace tests { namespace unit {
 
 extern int test_argc;
@@ -182,6 +186,9 @@ struct CommNameGenerator {
   #if vt_backend_enabled
     if constexpr (std::is_same_v<CommType, comm::CommVT>) return "CommVT";
   #endif
+  #if reconverse_backend_enabled
+    if constexpr (std::is_same_v<CommType, comm::CommReconverse>) return "CommReconverse";
+  #endif
     return "Unrecognized";
   }
 };
@@ -190,6 +197,9 @@ using CommTypesForTesting = ::testing::Types<
   comm::CommMPI
 #if vt_backend_enabled
   ,comm::CommVT
+#endif
+#if reconverse_backend_enabled
+  ,comm::CommReconverse
 #endif
 >;
 

@@ -3,7 +3,7 @@ set(
   algo
     algo/baselb algo/temperedlb algo/driver
   comm
-    comm/MPI comm/vt
+    comm/MPI comm/vt comm/reconverse
   input
   model
   util
@@ -110,6 +110,13 @@ if (vt_FOUND AND vt_backend_enabled)
 else()
   target_link_libraries(
     ${VT_LB_LIBRARY} PUBLIC vt::lib::magistrate
+  )
+endif()
+
+if (reconverse_FOUND AND reconverse_backend_enabled)
+  message(STATUS "Linking vt-lb with reconverse")
+  target_link_libraries(
+    ${VT_LB_LIBRARY} PUBLIC reconverse::reconverse
   )
 endif()
 

@@ -59,12 +59,25 @@ struct PhaseData {
   explicit PhaseData(RankType rank) : rank_(rank) {}
 
   void addTask(Task const& t) { tasks_.emplace(t.getId(), t); }
-  void addCommunication(Edge const& e) { communications_.push_back(e); }
+  void addCommunication(Edge const& e) {
+    for (int i = 0; i < static_cast<int>(communications_.size()); ++i) {
+      auto& comm = communications_[i];
+      if (comm.getFrom() == e.getFrom() && comm.getTo() == e.getTo()) {
+        comm = e;
+        return;
+      }
+    }
+    communications_.push_back(e);
+  }
   void addSharedBlock(SharedBlock const& b) { shared_blocks_.emplace(b.getId(), b); }
 
   RankType getRank() const { return rank_; }
 
   Task const* getTask(TaskType id) const {
+    auto it = tasks_.find(id);
+    return it != tasks_.end() ? &it->second : nullptr;
+  }
+  Task * getTask(TaskType id) {
     auto it = tasks_.find(id);
     return it != tasks_.end() ? &it->second : nullptr;
   }
@@ -75,17 +88,67 @@ struct PhaseData {
     auto it = shared_blocks_.find(id);
     return it != shared_blocks_.end() ? &it->second : nullptr;
   }
+  SharedBlock * getSharedBlock(SharedBlockType id) {
+    auto it = shared_blocks_.find(id);
+    return it != shared_blocks_.end() ? &it->second : nullptr;
+  }
   bool hasSharedBlock(SharedBlockType id) const { return shared_blocks_.find(id) != shared_blocks_.end(); }
   void eraseSharedBlock(SharedBlockType id) { shared_blocks_.erase(id); }
 
   std::unordered_map<TaskType, Task> const& getTasksMap() const { return tasks_; }
   std::vector<Edge> const& getCommunications() const { return communications_; }
+  std::vector<Edge>& getCommunicationsRef() { return communications_; }
   std::unordered_map<SharedBlockType, SharedBlock> const& getSharedBlocksMap() const { return shared_blocks_; }
+  std::unordered_set<TaskType> getTaskIds() const {
+    std::unordered_set<TaskType> ids;
+    for (auto const& [id, task] : tasks_) {
+      ids.insert(id);
+    }
+    return ids;
+  }
+  std::unordered_set<SharedBlockType> getSharedBlockIds() const {
+    std::unordered_set<SharedBlockType> ids;
+    for (auto const& [id, block] : shared_blocks_) {
+      ids.insert(id);
+    }
+    return ids;
+  }
+  std::unordered_set<SharedBlockType> getSharedBlockIdsHomed() const {
+    std::unordered_set<SharedBlockType> ids;
+    for (auto const& [id, sb] : shared_blocks_) {
+      if (sb.getHome() == rank_) {
+        ids.insert(id);
+      }
+    }
+    return ids;
+  }
+
+  BytesType getRankFootprintBytes() const { return rank_footprint_bytes_; }
+  void setRankFootprintBytes(BytesType bytes) { rank_footprint_bytes_ = bytes; }
+
+  BytesType getRankMaxMemoryAvailable() const { return rank_max_memory_available_; }
+  void setRankMaxMemoryAvailable(BytesType bytes) { rank_max_memory_available_ = bytes; }
 
   void clear() {
     tasks_.clear();
     communications_.clear();
     shared_blocks_.clear();
+    rank_footprint_bytes_ = 0.0;
+    rank_max_memory_available_ = 0.0;
+  }
+
+  void purgeDanglingCommunications() {
+    std::vector<Edge> filtered;
+    filtered.reserve(communications_.size());
+    for (auto const& e : communications_) {
+      bool from_present = hasTask(e.getFrom());
+      bool to_present   = hasTask(e.getTo());
+      // Keep edge unless both sides are missing
+      if (from_present || to_present) {
+        filtered.push_back(e);
+      }
+    }
+    communications_.swap(filtered);
   }
 
   template <typename Serializer>
@@ -94,13 +157,21 @@ struct PhaseData {
     s | tasks_;
     s | communications_;
     s | shared_blocks_;
+    s | rank_footprint_bytes_;
+    s | rank_max_memory_available_;
+  }
+
+  void setRank(RankType in_rank) {
+    rank_ = in_rank;
   }
 
 private:
-  RankType rank_ = invalid_node;
+  RankType rank_ = invalid_rank;
   std::unordered_map<TaskType, Task> tasks_;
   std::vector<Edge> communications_;
   std::unordered_map<SharedBlockType, SharedBlock> shared_blocks_;
+  BytesType rank_footprint_bytes_ = 0.0;
+  BytesType rank_max_memory_available_ = 0.0;
 };
 
 } /* end namespace vt_lb::model */

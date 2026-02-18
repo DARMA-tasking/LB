@@ -46,191 +46,45 @@
 
 #include <vt-lb/comm/comm_traits.h>
 #include <vt-lb/algo/baselb/baselb.h>
+
+// Include all model types
+#include <vt-lb/model/types.h>
 #include <vt-lb/model/PhaseData.h>
+#include <vt-lb/model/Task.h>
+#include <vt-lb/model/Communication.h>
+#include <vt-lb/model/SharedBlock.h>
+
+// Include various temperedlb components
+#include <vt-lb/algo/temperedlb/work_model.h>
+#include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
 #include <vt-lb/algo/temperedlb/symmetrize_comm.h>
 #include <vt-lb/algo/temperedlb/visualize.h>
+#include <vt-lb/algo/temperedlb/cluster_summarizer.h>
+#include <vt-lb/algo/temperedlb/full_graph_visualizer.h>
+#include <vt-lb/algo/temperedlb/info_propagation.h>
+#include <vt-lb/algo/temperedlb/transfer.h>
+#include <vt-lb/algo/temperedlb/basic_transfer.h>
+#include <vt-lb/algo/temperedlb/relaxed_cluster_transfer.h>
+#include <vt-lb/algo/temperedlb/statistics.h>
+#include <vt-lb/algo/temperedlb/graph_edge_resolver.h>
+
+// Logging include
+#include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
 
 #include <limits>
 #include <random>
 #include <ostream>
 #include <fstream>
+#include <cassert>
 
 #include <mpi.h>
 
 namespace vt_lb::algo::temperedlb {
 
-struct WorkModel {
-  /// @brief  Coefficient for load component (per rank)
-  double rank_alpha = 1.0;
-  /// @brief  Coefficient for inter-node communication component
-  double beta = 0.0;
-  /// @brief  Coefficient for intra-node communication component
-  double gamma = 0.0;
-  /// @brief  Coefficient for shared-memory communication component
-  double delta = 0.0;
-};
-
-struct Configuration {
-  Configuration() = default;
-
-  explicit Configuration(int num_ranks) {
-    f_ = 2;
-    k_max_ = std::ceil(std::sqrt(std::log(num_ranks)/std::log(2.0)));
-  }
-
-  /// @brief  Number of trials to perform
-  int num_trials_ = 1;
-  /// @brief  Number of iterations per trial
-  int num_iters_ = 10;
-  /// @brief  Fanout for information propagation
-  int f_ = 2;
-  /// @brief  Number of rounds of information propagation
-  int k_max_ = 1;
-  /// @brief Whether to use deterministic selection
-  bool deterministic_ = true;
-  /// @brief Seed for random number generation when deterministic_ is true
-  int seed_ = 29;
-
-  /// @brief  Work model parameters (rank-alpha, beta, gamma, delta)
-  WorkModel work_model_;
-
-  /// @brief Whether to cluster based on shared blocks
-  bool cluster_based_on_shared_blocks_ = false;
-  /// @brief Whether to cluster based on communication
-  bool cluster_based_on_communication_ = false;
-  /// @brief Whether to visualize the task graph
-  bool visualize_task_graph_ = false;
-  /// @brief Whether to visualize the clusters
-  bool visualize_clusters_ = false;
-
-  /// @brief Tolerance for convergence
-  double converge_tolerance_ = 0.01;
-};
-
-template <typename CommT, typename DataT, typename JoinT>
-struct InformationPropagation {
-  using ThisType = InformationPropagation<CommT, DataT, JoinT>;
-  using JoinedDataType = std::unordered_map<int, DataT>;
-  using HandleType = typename CommT::template HandleType<ThisType>;
-
-  /**
-   * @brief Construct information propagation instance
-   *
-   * @param comm Communication interface -- n.b., we clone comm to create a new termination scope
-   * @param f Fanout parameter
-   * @param k_max Maximum number of rounds
-   * @param deterministic Whether to use deterministic selection
-   *
-   */
-  InformationPropagation(CommT& comm, int f, int k_max, bool deterministic, int seed)
-    : comm_(comm.clone()), // collective operation
-      f_(f),
-      k_max_(k_max),
-      deterministic_(deterministic)
-  {
-    handle_ = comm_.template registerInstanceCollective<ThisType>(this);
-
-    if (deterministic_) {
-      gen_select_.seed(seed + comm_.getRank());
-    }
-  }
-
-  JoinedDataType run(DataT initial_data) {
-    // Insert this rank to avoid self-selection
-    already_selected_.insert(comm_.getRank());
-
-    local_data_[comm_.getRank()] = initial_data;
-
-    sendToFanout(1, local_data_);
-
-    // Wait for termination to happen
-    while (comm_.poll()) {
-      // do nothing
-    }
-
-    printf("%d: done with poll: local_data size=%zu\n", comm_.getRank(), local_data_.size());
-
-    return local_data_;
-  }
-
-  void sendToFanout(int round, JoinedDataType const& data) {
-    int const rank = comm_.getRank();
-    int const num_ranks = comm_.numRanks();
-
-    sent_count_ = 0;
-    recv_count_ = 0;
-
-    for (int i = 1; i <= f_; ++i) {
-      if (already_selected_.size() >= static_cast<size_t>(num_ranks)) {
-        return;
-      }
-
-      std::uniform_int_distribution<int> dist(0, num_ranks - 1);
-      int target = -1;
-      do {
-        target = dist(gen_select_);
-      } while (already_selected_.find(target) != already_selected_.end());
-
-      already_selected_.insert(target);
-
-      //printf("rank %d sending to rank %d\n", comm_.getRank(), target);
-      sent_count_++;
-      handle_[target].template send<&ThisType::infoPropagateHandler>(rank, round, data);
-    }
-
-    if (deterministic_) {
-      // In deterministic mode, we expect an ack from each sent message
-      while (sent_count_ != recv_count_) {
-        comm_.poll();
-      }
-
-      if (round < k_max_) {
-        sendToFanout(round + 1, local_data_);
-      }
-    }
-  }
-
-  void infoAckHandler() {
-    recv_count_++;
-    //printf("rank %d received ack %d/%d\n", comm_.getRank(), recv_count_, sent_count_);
-  }
-
-  void infoPropagateHandler(int from_rank, int round, JoinedDataType incoming_data) {
-    // Process incoming data and add to local data
-    local_data_.insert(incoming_data.begin(), incoming_data.end());
-
-    if (deterministic_) {
-      // Acknowledge receipt of message to sender before we go to the next round
-      handle_[from_rank].template send<&ThisType::infoAckHandler>();
-    } else {
-      if (round < k_max_) {
-        sendToFanout(round + 1, local_data_);
-      }
-    }
-  }
-
-private:
-  CommT comm_;
-  int f_ = 2;
-  int k_max_ = 2;
-  bool deterministic_ = false;
-  int sent_count_ = 0;
-  int recv_count_ = 0;
-  std::unordered_set<int> already_selected_;
-  std::unordered_map<int, DataT> local_data_;
-  std::mt19937 gen_select_{std::random_device{}()};
-  HandleType handle_;
-};
-
-struct TaskClusterInfo {
-  int cluster_id = -1;
-  double cluster_load = 0.0;
-  double cluster_inter_bytes = 0.0;
-};
-
 template <typename CommT>
-struct TemperedLB : baselb::BaseLB {
+struct TemperedLB final : baselb::BaseLB {
   using HandleType = typename CommT::template HandleType<TemperedLB<CommT>>;
 
   // Assert that CommT conforms to the communication interface we expect
@@ -250,7 +104,7 @@ struct TemperedLB : baselb::BaseLB {
 
   void clusterBasedOnCommunication() {
     auto& pd = this->getPhaseData();
-    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd);
+    clusterer_ = std::make_unique<LeidenCPMStandaloneClusterer>(pd, 1000.0);
     clusterer_->compute();
   }
 
@@ -260,9 +114,31 @@ struct TemperedLB : baselb::BaseLB {
     clusterer_->compute();
   }
 
+  void doClustering() {
+    if (config_.cluster_based_on_communication_ || config_.cluster_based_on_shared_blocks_) {
+      if (config_.cluster_based_on_communication_) {
+        clusterBasedOnCommunication();
+      } else if (config_.cluster_based_on_shared_blocks_) {
+        clusterBasedOnSharedBlocks();
+      }
+    }
+  }
+
+  std::unordered_map<int, TaskClusterSummaryInfo> buildClusterSummaries() {
+    ClusterSummarizer<CommT> cs(comm_, getClusterer(), global_max_clusters_);
+    return cs.buildClusterSummaries(
+      this->getPhaseData(), config_
+    );
+  }
+
   void makeCommunicationsSymmetric() {
     CommunicationsSymmetrizer<CommT> symm(comm_, this->getPhaseData());
     symm.run();
+  }
+
+  void resolveGraphEdges() {
+    GraphEdgeResolver<CommT> resolver(comm_, this->getPhaseData());
+    resolver.run();
   }
 
   void visualizeGraph(const std::string& prefix) const {
@@ -284,46 +160,214 @@ struct TemperedLB : baselb::BaseLB {
     }
   }
 
-  double computeWork() const {
-
+  void visualizeFullGraphIfNeeded(
+    CommT& comm,
+    model::PhaseData const& pd,
+    Clusterer const* clusterer,
+    int global_max_clusters,
+    Configuration const& config,
+    const std::string& prefix
+  ) const {
+    if (!config.visualize_full_graph_) {
+      return;
+    }
+    FullGraphVisualizer<CommT> visualizer(comm, pd, clusterer, global_max_clusters, prefix);
+    visualizer.run();
   }
 
-  void run() {
-    auto total_load = computeLoad();
-    printf("%d: initial total load: %f, num tasks: %zu\n", comm_.getRank(), total_load, numTasks());
+  template <typename T>
+  std::unordered_map<int, T> runInformationPropagation(T& initial_data) {
+    InformationPropagation<CommT, T> ip(comm_, config_);
+    auto gathered_info = ip.run(initial_data);
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "gathered load info size={}\n",
+      gathered_info.size()
+    );
+    return gathered_info;
+  }
 
-    // Make communications symmetric before distributed decisions
+  std::unordered_set<model::TaskType> run() {
+    // Make communications symmetric before running trials so we only have to do it once
     makeCommunicationsSymmetric();
 
-    if (config_.cluster_based_on_communication_ || config_.cluster_based_on_shared_blocks_) {
-      if (config_.cluster_based_on_communication_) {
-        clusterBasedOnCommunication();
-      } else if (config_.cluster_based_on_shared_blocks_) {
-        clusterBasedOnSharedBlocks();
+    for (int trial = 0; trial < config_.num_trials_; ++trial) {
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+      }
+      runTrial(trial);
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
       }
     }
 
-    // Generate visualization after symmetrization/clustering
-    visualizeGraph("temperedlb2");
+    // Sort trial work distribution by max work
+    std::sort(
+      trial_work_distribution_.begin(),
+      trial_work_distribution_.end(),
+      [](auto const& a, auto const& b) {
+        return std::get<0>(a) < std::get<0>(b);
+      }
+    );
+
+    if (comm_.getRank() == 0) {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
+      );
+    }
+
+    return std::get<1>(trial_work_distribution_.front());
+  }
+
+  void runTrial(int trial) {
+    // Save a clone of the phase data before load balancing
+    savePhaseData();
+
+    for (int iter = 0; iter < config_.num_iters_; ++iter) {
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "  Starting iteration {}/{}\n",
+          iter + 1, config_.num_iters_
+        );
+      }
+
+      auto const& wm = config_.work_model_;
+      if (!(wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0)) {
+        // Edges might have the wrong rank after transfers, so fix them
+        resolveGraphEdges();
+
+        // Make communications symmetric
+        makeCommunicationsSymmetric();
+      }
+
+      runIteration(trial, iter);
+
+      if (comm_.getRank() == 0) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "  Finished iteration {}/{}\n",
+          iter + 1, config_.num_iters_
+        );
+      }
+    }
+
+    // Before we restore phase data for the next trial, save the work and task distribution
+    // @todo: for now, we recompute work from scratch but we probably can use the breakdown
+    auto after_iters_work = WorkModelCalculator::computeWork(
+      config_.work_model_,
+      WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+    );
+    auto final_stats = computeStatistics(after_iters_work, "Final Work After Iters");
+
+    // Save the max work and task distribution for this trial
+    trial_work_distribution_.emplace_back(
+      final_stats.max,
+      this->getPhaseData().getTaskIds()
+    );
+
+    // Restore phase data
+    restorePhaseData();
+  }
+
+  void runIteration(int trial, int iter) {
+    double total_load = computeLoad();
+    auto load_stats = computeStatistics(total_load, "Compute Load");
+
+    auto work_breakdown = WorkModelCalculator::computeWorkBreakdown(
+      this->getPhaseData(), config_
+    );
+    double const total_work = WorkModelCalculator::computeWork(
+      config_.work_model_, work_breakdown
+    );
+
+    VT_LB_LOG(LoadBalancer, normal, "Total work: {}\n", total_work);
+
+    auto work_stats = computeStatistics(total_work, "Work");
+
+    if (config_.hasMemoryInfo()) {
+      double const total_memory_usage = WorkModelCalculator::computeMemoryUsage(
+        config_,
+        this->getPhaseData()
+      ).current_memory_usage;
+      computeStatistics(total_memory_usage, "Memory Usage");
+    }
+
+    // Run the clustering algorithm if appropriate for the configuration
+    doClustering();
+
+    // Generate visualization after clustering
+    visualizeGraph(
+      "temperedlb_rank" + std::to_string(comm_.getRank()) +
+      "_trial" + std::to_string(trial) +
+      "_iter" + std::to_string(iter)
+    );
+
+    visualizeFullGraphIfNeeded(
+      comm_,
+      this->getPhaseData(),
+      getClusterer(),
+      global_max_clusters_,
+      config_,
+      "temperedlb_full_graph_trial" + std::to_string(trial) + "_iter" + std::to_string(iter)
+    );
 
     auto& wm = config_.work_model_;
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
-      using LoadType = double;
-      auto ip = InformationPropagation<CommT, LoadType, TemperedLB<CommT>>(
-        comm_,
-        config_.f_,
-        config_.k_max_,
+      auto rank_info = RankInfo{total_work, config_.work_model_.rank_alpha};
+      auto info = runInformationPropagation(rank_info);
+      VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      BasicTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
+      std::mt19937 gen_select_;
+      std::random_device seed_;
+      transfer.run(
+        config_.cmf_type_,
+        config_.obj_ordering_,
+        config_.criterion_,
         config_.deterministic_,
-        config_.seed_
+        load_stats.avg,
+        gen_select_,
+        seed_
       );
-      auto info = ip.run(total_load);
-      //printf("%d: gathered load info from %zu ranks\n", comm_.getRank(), info.size());
+      double const after_work = WorkModelCalculator::computeWork(
+        config_.work_model_,
+        WorkModelCalculator::computeWorkBreakdown(this->getPhaseData(), config_)
+      );
+      computeStatistics(after_work, "After Work");
     } else {
-#if 0
-      computeGlobalMaxClusters();
-#else
+      // computeGlobalMaxClusters();
       // Just assume max of 1000 clusters per rank for now, until we have bcast
-#endif
+
+      // For now, we will assume that if beta/gamma/delta are non-zero, clustering must occur.
+      // Every task could be its own cluster, but clusters must exist
+      vt_lb_assert(clusterer_ != nullptr, "Clusterer must be valid");
+      auto local_summary = buildClusterSummaries();
+
+      double total_inter_bytes = std::max(
+        work_breakdown.inter_node_recv_comm, work_breakdown.inter_node_send_comm
+      );
+      computeStatistics(total_inter_bytes, "Work intercomm bytes");
+
+      auto rank_info = RankClusterInfo{
+        local_summary,
+        this->getPhaseData().getRankFootprintBytes(),
+        config_.work_model_.rank_alpha,
+        work_breakdown,
+        this->getPhaseData().getSharedBlockIdsHomed()
+      };
+      auto info = runInformationPropagation(rank_info);
+
+      VT_LB_LOG(
+        LoadBalancer, verbose,
+        "runTrial: gathered load info from {} ranks\n",
+        info.size()
+      );
+
+      RelaxedClusterTransfer<CommT> transfer(
+        comm_, *phase_data_, config_, clusterer_.get(), global_max_clusters_, info, work_stats
+      );
+      transfer.run();
     }
   }
 
@@ -339,26 +383,43 @@ private:
     }
 
     int const root = 0;
-    comm_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
+    handle_.reduce(root, MPI_INT, MPI_MAX, &local_clusters, &global_max_clusters_, 1);
 
     if (comm_.getRank() == root) {
-      printf("%d: global max clusters across ranks: %d\n", root, global_max_clusters_);
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "global max clusters across ranks: {}\n",
+        global_max_clusters_
+      );
     }
     // @todo: once we have a bcast, broadcast global_max_clusters_ to all ranks
   }
 
-  int localToGlobalClusterID(int cluster_id) const {
-    // Map local cluster IDs to global cluster IDs based on global_max_clusters_
-    // Implementation depends on how clusters are represented and communicated
-    return cluster_id + comm_.getRank() * global_max_clusters_;
-  }
-
-  int globalToLocalClusterID(int global_cluster_id) const {
-    return global_cluster_id % global_max_clusters_;
-  }
-
-  int globalClusterToRank(int global_cluster_id) const {
-    return global_cluster_id / global_max_clusters_;
+  template <typename T>
+  Statistics computeStatistics(T quantity, std::string const& name) {
+    // Compute min, max, avg of quantity across all ranks
+    double local_value = static_cast<double>(quantity);
+    double global_min = 0.0;
+    double global_max = 0.0;
+    double global_sum = 0.0;
+    // For now, do P reductions since we don't have broadcast yet
+    for (int p = 0; p < comm_.numRanks(); ++p) {
+      handle_.reduce(p, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
+      handle_.reduce(p, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
+      handle_.reduce(p, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+    }
+    double global_avg = global_sum / static_cast<double>(comm_.numRanks());
+    double I = 0;
+    if (global_avg > 0.0) {
+      I = (global_max / global_avg) - 1.0;
+    }
+    if (comm_.getRank() == 0) {
+      VT_LB_LOG(
+        LoadBalancer, normal, "{} statistics -- min: {}, max: {}, avg: {}, I: {}\n",
+        name, global_min, global_max, global_avg, I
+      );
+    }
+    return Statistics{global_min, global_max, global_avg, I};
   }
 
 private:
@@ -372,6 +433,8 @@ private:
   std::unique_ptr<Clusterer> clusterer_;
   /// @brief Global maximum number of clusters across all ranks
   int global_max_clusters_ = 1000;
+  /// @brief Task distribution and work for each trial
+  std::vector<std::tuple<double, std::unordered_set<model::TaskType>>> trial_work_distribution_;
 };
 
 } /* end namespace vt_lb::algo::temperedlb */

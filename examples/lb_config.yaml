@@ -1,0 +1,43 @@
+# This is an example YAML configuration file to run load balancer on given JSON rank dir
+# Specify the load balancer input files
+from_data:
+  data_folder: ../../examples/
+  phase_id: 0
+
+algorithm: TemperedLB
+
+# Load balancer configuration parameters
+configuration:
+  num_trials: 1
+  num_iters: 10
+  fanout: 2
+  n_rounds: 1
+  deterministic: true
+  seed: 42
+
+  transfer_decisions:
+    criterion: Grapevine
+    obj_ordering: Arbitrary
+    cmf_type: Original
+
+  work_model:
+    parameters:
+      rank_alpha: 1.0
+      beta: 0.0
+      gamma: 0.0
+      delta: 0.0
+    memory_info:
+      has_mem_info: true
+      has_task_serialized_mem_info: true
+      has_task_working_mem_info: true
+      has_task_footprint_mem_info: true
+      has_shared_block_mem_info: true
+
+  clustering:
+    based_on_shared_blocks: false
+    based_on_communication: false
+    visualize_task_graph: false
+    visualize_clusters: false
+    visualize_full_graph: false
+
+  converge_tolerance: 0.01

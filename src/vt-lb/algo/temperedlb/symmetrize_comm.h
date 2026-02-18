@@ -40,6 +40,7 @@
 // *****************************************************************************
 //@HEADER
 */
+
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_SYMMETRIZE_COMM_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_SYMMETRIZE_COMM_H
 
@@ -72,8 +73,6 @@ struct CommunicationsSymmetrizer {
     auto const my_rank = pd_->getRank();
     auto comms = pd_->getCommunications();
 
-    // Remove local bidirectional enforcement; only synchronize with remote ranks
-
     // Batch edges per remote rank
     std::unordered_map<RankType, std::vector<Edge>> rank_batches;
 
@@ -81,29 +80,34 @@ struct CommunicationsSymmetrizer {
       RankType fr = e.getFromRank();
       RankType tr = e.getToRank();
 
-      if (tr != model::invalid_node && tr != my_rank) {
+      VT_LB_LOG(
+        LoadBalancer, verbose,
+        "symmetrize_comm: rank={} processing edge from {}(rank={}) to {}(rank={}) vol={:.2f}\n",
+        my_rank, e.getFrom(), fr, e.getTo(), tr, e.getVolume()
+      );
+
+      if (tr != model::invalid_rank && tr != my_rank) {
         rank_batches[tr].push_back(e);
       }
-      if (fr != model::invalid_node && fr != my_rank && fr != tr) {
+      if (fr != model::invalid_rank && fr != my_rank && fr != tr) {
         rank_batches[fr].push_back(e);
       }
     }
 
-    bool has_sends_ = false;
-
     // Send one message per remote rank
     for (auto& kv : rank_batches) {
-      auto dest = kv.first;
-      has_sends_ = true;
-      handle_[dest].template send<&ThisType::recvEdgesHandler>(kv.second);
+      handle_[kv.first].template send<&ThisType::recvEdgesHandler>(kv.second);
     }
 
     // Drain progress
-    while (has_sends_ && comm_.poll()) {
+    while (comm_.poll()) {
       // do nothing
     }
 
-    printf("%d: completed symmetrization of communications\n", my_rank);
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "completed symmetrization of communications\n"
+    );
   }
 
 private:
@@ -116,12 +120,22 @@ private:
 
   // Add edge only if not already present locally; do not add reverse
   void addIfMissingLocal(Edge const& e) {
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "addIfMissingLocal: checking edge from {} to {} vol={:.2f} exists={}\n",
+      e.getFrom(), e.getTo(), e.getVolume(), hasEdge(e.getFrom(), e.getTo())
+    );
     if (!hasEdge(e.getFrom(), e.getTo())) {
       pd_->addCommunication(e);
     }
   }
 
   void recvEdgesHandler(std::vector<Edge> edges) {
+    VT_LB_LOG(
+      LoadBalancer, verbose,
+      "recvEdgesHandler: received {} edges to symmetrize\n",
+      edges.size()
+    );
     for (auto const& e : edges) {
       addIfMissingLocal(e);
     }

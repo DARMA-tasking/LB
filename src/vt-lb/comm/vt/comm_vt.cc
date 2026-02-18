@@ -41,14 +41,22 @@
 //@HEADER
 */
 
-#include "vt-lb/comm/VT/comm_vt.h"
+#include <vt-lb/config/cmake_config.h>
+#include <vt-lb/comm/vt/comm_vt.h>
+
+#if vt_backend_enabled
 
 #include <vt/transport.h>
 
 namespace vt_lb::comm {
 
-void CommVT::init(int& argc, char**& argv) {
-  vt::initialize(argc, argv);
+void CommVT::init(int& argc, char**& argv, MPI_Comm comm) {
+  if (comm == MPI_COMM_NULL) {
+    vt::initialize(argc, argv);
+  } else {
+    // interop mode
+    vt::initialize(argc, argv, &comm);
+  }
   vt::theTerm()->addDefaultAction([this]{ terminated_ = true; });
 }
 
@@ -87,3 +95,5 @@ bool CommVT::poll() const {
 }
 
 } // namespace vt_lb::comm
+
+#endif /*vt_backend_enabled*/

@@ -106,6 +106,18 @@ void ClassHandle<T>::reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbu
   comm_->reduce(root, datatype, op, sendbuf, recvbuf, count);
 }
 
+template <typename T>
+template <typename U>
+void ClassHandle<T>::broadcast(int root, MPI_Datatype datatype, U buffer, int count) {
+  comm_->broadcast(root, datatype, buffer, count);
+}
+
+template <typename T>
+template <typename U>
+std::unordered_map<int, std::vector<U>> ClassHandle<T>::allgather(U const* sendbuf, int sendcount) {
+  return comm_->allgather(sendbuf, sendcount);
+}
+
 } // namespace vt_lb::comm
 
 #endif /*INCLUDED_VT_LB_COMM_CLASS_HANDLE_IMPL_H*/

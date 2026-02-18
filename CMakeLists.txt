@@ -9,13 +9,54 @@ if (ccache_binary)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${ccache_binary}")
 endif()
 
-find_package(MPI REQUIRED)
-find_package(vt)
+set(MPI_EXTRA_FLAGS "" CACHE STRING "Flags to pass to mpirun/mpiexec")
+string(REPLACE " " ";" MPI_EXTRA_FLAGS_LIST "${MPI_EXTRA_FLAGS}")
+message(STATUS "Running tests and examples with additional MPI flags = ${MPI_EXTRA_FLAGS_LIST}")
 
-# vt includes magistrate
-#if(NOT vt_FOUND)
+include(cmake/load_mpi_package.cmake)
+
+option(vt_backend_enabled "Whether VT backend is enabled" ON)
+
+if (vt_backend_enabled)
+  find_package(vt)
+  if (vt_FOUND)
+    set(vt_backend_enabled 1)
+  else()
+    set(vt_backend_enabled 0)
+  endif()
+else()
+  set(vt_backend_enabled 0)
+endif()
+
+# vt includes magistrate and we must have magistrate for the MPI backend
+if(NOT vt_FOUND)
+  set(vt_backend_feature_enabled 0)
   find_package(magistrate REQUIRED)
-#endif()
+else()
+  set(vt_backend_feature_enabled 1)
+endif()
+
+set(FMT_LIBRARY fmt)
+add_subdirectory(tpl/fmt)
+
+# json library always included in the build
+set(JSON_BuildTests OFF)
+set(JSON_MultipleHeaders ON)
+set(JSON_LIBRARY nlohmann_json-lb)
+add_subdirectory(tpl/json)
+
+# yaml-cpp library always included in the build
+set(YAML_LIBRARY yaml-cpp)
+add_subdirectory(tpl/yaml-cpp)
+
+# brotli library always included in the build
+set(BROTLI_DISABLE_TESTS ON)
+# we need to disable bundled mode so it will install properly
+set(BROTLI_BUNDLED_MODE OFF)
+set(BROTLI_BUILD_PORTABLE ON)
+set(BROTLI_BUILD_SHARED_LIBS OFF)
+set(BROTLI_LIBRARY brotlicommon-static brotlidec-static brotlienc-static)
+add_subdirectory(tpl/brotli)
 
 file(
   GLOB
@@ -48,14 +89,21 @@ set(PROJECT_BASE_DIR     ${CMAKE_CURRENT_SOURCE_DIR})
 set(PROJECT_LIB_DIR      ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(PROJECT_EXAMPLE_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/examples)
 
+configure_file(
+  ${PROJECT_BASE_DIR}/src/vt-lb/config/cmake_config.h.in
+  ${PROJECT_BIN_DIR}/src/vt-lb/config/cmake_config.h @ONLY
+)
+
 add_subdirectory(src)
 add_subdirectory(examples)
 
 include(CTest) #adds option BUILD_TESTING (default ON)
+enable_testing()
 
 message(STATUS "VT_LB_TESTS_ENABLED: ${VT_LB_TESTS_ENABLED}")
-if (BUILD_TESTING AND VT_TV_TESTS_ENABLED)
+if (BUILD_TESTING AND VT_LB_TESTS_ENABLED)
   set(CTEST_SOURCE_DIRECTORY ${SOURCE_DIR}/src)
+  add_custom_target(unit_tests)
   add_subdirectory(tests)
 endif()
 

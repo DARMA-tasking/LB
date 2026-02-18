@@ -44,6 +44,10 @@
 #if !defined INCLUDED_VT_LB_COMM_COMM_VT_H
 #define INCLUDED_VT_LB_COMM_COMM_VT_H
 
+#include <vt-lb/config/cmake_config.h>
+
+#if vt_backend_enabled
+
 #include <vt/configs/types/types_type.h>
 #include <vt/objgroup/proxy/proxy_objgroup.h>
 
@@ -65,7 +69,7 @@ private:
   CommVT(vt::EpochType epoch);
 
 public:
-  void init(int& argc, char**& argv);
+  void init(int& argc, char**& argv, MPI_Comm comm = MPI_COMM_NULL);
   void finalize();
   int numRanks() const;
   int getRank() const;
@@ -85,6 +89,8 @@ private:
 
 } /* end namespace vt_lb::comm */
 
-#include "vt-lb/comm/VT/comm_vt.impl.h"
+#include "vt-lb/comm/vt/comm_vt.impl.h"
+
+#endif /*vt_backend_enabled*/
 
 #endif /*INCLUDED_VT_LB_COMM_COMM_VT_H*/

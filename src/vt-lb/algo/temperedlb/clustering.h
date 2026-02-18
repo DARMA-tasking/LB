@@ -44,6 +44,9 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTERING_H
 
 #include <vt-lb/model/PhaseData.h>
+#include <vt-lb/util/logging.h>
+#include <vt-lb/util/assert.h>
+
 #include <algorithm>
 #include <tuple>
 #include <unordered_map>
@@ -52,19 +55,12 @@
 #include <vector>
 #include <memory>
 #include <cmath>
-#include <cstdio> // added for debug prints
+#include <cstdio>
 #include <limits>
 #include <random>
 #include <deque>
 
-#if VT_LB_HAS_LIBLEIDENALG
-#  include <igraph/igraph.h>
-#  include <Optimiser.h>
-#  include <ModularityVertexPartition.h>
-#  include <CPMVertexPartition.h>
-#  include <SurpriseVertexPartition.h>
-#  include <SignificanceVertexPartition.h>
-#endif /*VT_LB_HAS_LIBLEIDENALG*/
+namespace vt_lb::algo::temperedlb {
 
 // Common clustering artifacts
 struct Cluster {
@@ -73,17 +69,79 @@ struct Cluster {
   vt_lb::model::LoadType load = 0.0;
 };
 
+// Assumption: all tasks must exist to at least one cluster
 struct Clusterer {
   using TaskType = vt_lb::model::TaskType;
   using BytesType = vt_lb::model::BytesType;
   virtual ~Clusterer() = default;
   virtual void compute() = 0;
-  virtual std::unordered_map<TaskType,int> const& taskToCluster() const = 0;
-  virtual std::vector<Cluster> const& clusters() const = 0;
-  virtual std::vector<std::tuple<int,int,BytesType>> const& coarsenedEdges() const = 0;
+
+  std::unordered_map<TaskType,int> const& taskToCluster() const { return task_to_cluster_; }
+  std::vector<Cluster> const& clusters() const { return clusters_; }
+
+  /**
+   * @brief Add a cluster given its member tasks (used when a cluster migrates in)
+   *
+   * @param tasks The tasks in the cluster
+   *
+   * @return The assigned cluster ID
+   */
+  int addCluster(std::vector<TaskType> const& tasks, int cluster_global_id = -1) {
+    VT_LB_LOG(
+      LoadBalancer, normal,
+      "Clusterer: addCluster: cluster_global_id={}, num_tasks={}\n",
+      cluster_global_id, tasks.size()
+    );
+
+    int next_id = cluster_global_id;
+    if (cluster_global_id == -1) {
+      for (const auto& cl : clusters_) {
+        if (cl.id >= next_id) {
+          next_id = cl.id + 1;
+        }
+      }
+    }
+    Cluster cl;
+    cl.id = next_id;
+    cl.members = tasks;
+    for (const auto& t : tasks) {
+      VT_LB_LOG(
+        LoadBalancer, normal,
+        "Clusterer: addCluster: assigning task {} to cluster {}\n",
+        t, next_id
+      );
+      task_to_cluster_[t] = next_id;
+    }
+    clusters_.push_back(std::move(cl));
+    return cl.id;
+  }
+
+  /**
+   * @brief Remap all cluster IDs using a local->global mapping.
+   *
+   * @param local_to_global Map from local cluster ID to global cluster ID.
+   */
+  void remapClusterIDs(std::unordered_map<int, int> const& local_to_global) {
+    // Update task_to_cluster_
+    for (auto& [task, cid] : task_to_cluster_) {
+      auto it = local_to_global.find(cid);
+      vt_lb_assert(it != local_to_global.end(), "All local cluster IDs must have a global mapping");
+      cid = it->second;
+    }
+    // Update clusters_
+    for (auto& cl : clusters_) {
+      auto it = local_to_global.find(cl.id);
+      vt_lb_assert(it != local_to_global.end(), "All local cluster IDs must have a global mapping");
+      cl.id = it->second;
+    }
+  }
+
+protected:
+  std::unordered_map<TaskType,int> task_to_cluster_;
+  std::vector<Cluster> clusters_;
 };
 
-// Communication-based clustering
+// Communication-based clustering, strawman method
 struct CommunicationClusterer : Clusterer {
   using TaskType = vt_lb::model::TaskType;
   using BytesType = vt_lb::model::BytesType;
@@ -100,11 +158,12 @@ struct CommunicationClusterer : Clusterer {
       int cid = 0;
       for (auto const& t : tasks_) task_to_cluster_[t] = cid++;
       materializeClusters();
-      buildCoarsenedEdges();
       return;
     }
-    std::sort(agg_edges_.begin(), agg_edges_.end(),
-              [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); });
+    std::sort(
+      agg_edges_.begin(), agg_edges_.end(),
+      [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); }
+    );
     std::unordered_set<TaskType> matched;
     int next_cid = 0;
     for (auto const& e : agg_edges_) {
@@ -121,21 +180,22 @@ struct CommunicationClusterer : Clusterer {
       if (!task_to_cluster_.count(t))
         task_to_cluster_[t] = next_cid++;
     materializeClusters();
-    buildCoarsenedEdges();
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
-  std::vector<std::tuple<int,int,BytesType>> const& coarsenedEdges() const override { return coarse_edges_; }
 
 private:
   void clear() {
-    tasks_.clear(); agg_edges_.clear();
-    task_to_cluster_.clear(); clusters_.clear(); coarse_edges_.clear();
+    tasks_.clear();
+    agg_edges_.clear();
+    task_to_cluster_.clear();
+    clusters_.clear();
   }
+
   void collectTasks() {
-    for (auto const& kv : pd_.getTasksMap()) tasks_.push_back(kv.first);
+    for (auto const& kv : pd_.getTasksMap()) {
+      tasks_.push_back(kv.first);
+    }
   }
+
   void buildAggregatedEdges() {
     struct PairHash {
       size_t operator()(std::pair<TaskType,TaskType> const& p) const noexcept {
@@ -155,6 +215,7 @@ private:
     for (auto const& kv : agg)
       agg_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
   }
+
   void materializeClusters() {
     std::unordered_map<int, Cluster> tmp;
     for (auto const& [t,cid] : task_to_cluster_) {
@@ -168,32 +229,11 @@ private:
     }
     std::sort(clusters_.begin(), clusters_.end(), [](auto const& a, auto const& b){ return a.id < b.id; });
   }
-  void buildCoarsenedEdges() {
-    struct PairHashCI {
-      size_t operator()(std::pair<int,int> const& p) const noexcept {
-        int a = std::min(p.first,p.second), b = std::max(p.first,p.second);
-        return (static_cast<size_t>(a) << 32) ^ static_cast<size_t>(b);
-      }
-    };
-    std::unordered_map<std::pair<int,int>, BytesType, PairHashCI> ce;
-    for (auto const& e : agg_edges_) {
-      int cu = task_to_cluster_.at(std::get<0>(e));
-      int cv = task_to_cluster_.at(std::get<1>(e));
-      if (cu == cv) continue;
-      auto key = cu < cv ? std::make_pair(cu,cv) : std::make_pair(cv,cu);
-      ce[key] += std::get<2>(e);
-    }
-    for (auto const& kv : ce)
-      coarse_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
-  }
 
 private:
   PhaseData const& pd_;
   std::vector<TaskType> tasks_;
   std::vector<std::tuple<TaskType,TaskType,BytesType>> agg_edges_;
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
-  std::vector<std::tuple<int,int,BytesType>> coarse_edges_;
 };
 
 // Shared-block-based clustering
@@ -210,14 +250,18 @@ struct SharedBlockClusterer : Clusterer {
     buildAggregatedEdgesFromSharedBlocks(); // only shared-block-derived edges
     collectTasks();
     if (sb_edges_.empty()) {
+      // Each task its own cluster
       int cid = 0;
-      for (auto const& t : tasks_) task_to_cluster_[t] = cid++;
+      for (auto const& t : tasks_) {
+        task_to_cluster_[t] = cid++;
+      }
       materializeClusters();
-      buildCoarsenedEdges();
       return;
     }
-    std::sort(sb_edges_.begin(), sb_edges_.end(),
-              [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); });
+    std::sort(
+      sb_edges_.begin(), sb_edges_.end(),
+      [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); }
+    );
     std::unordered_set<TaskType> matched;
     int next_cid = 0;
     for (auto const& e : sb_edges_) {
@@ -226,33 +270,33 @@ struct SharedBlockClusterer : Clusterer {
       if (!matched.count(u) && !matched.count(v)) {
         task_to_cluster_[u] = next_cid;
         task_to_cluster_[v] = next_cid;
-        matched.insert(u); matched.insert(v);
+        matched.insert(u);
+        matched.insert(v);
         ++next_cid;
       }
     }
-    for (auto const& t : tasks_)
-      if (!task_to_cluster_.count(t))
+    for (auto const& t : tasks_) {
+      if (!task_to_cluster_.count(t)) {
         task_to_cluster_[t] = next_cid++;
+      }
+    }
     materializeClusters();
-    buildCoarsenedEdges();
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
-  std::vector<std::tuple<int,int,BytesType>> const& coarsenedEdges() const override { return coarse_edges_; }
 
 private:
   void clear() {
     tasks_.clear();
-    sb_edges_.clear(); // was agg_edges_
+    sb_edges_.clear();
     task_to_cluster_.clear();
     clusters_.clear();
-    coarse_edges_.clear();
   }
 
   void collectTasks() {
-    for (auto const& kv : pd_.getTasksMap()) tasks_.push_back(kv.first);
+    for (auto const& kv : pd_.getTasksMap()) {
+      tasks_.push_back(kv.first);
+    }
   }
+
   void buildAggregatedEdgesFromSharedBlocks() {
     // Build edges exclusively from shared block co-access (communication edges are ignored)
     // Map shared block -> tasks
@@ -282,56 +326,39 @@ private:
       for (size_t i=0;i<vec.size();++i) {
         for (size_t j=i+1;j<vec.size();++j) {
           auto u = vec[i]; auto v = vec[j];
-            auto key = (u < v) ? std::make_pair(u,v) : std::make_pair(v,u);
-            agg[key] += size;
+          auto key = (u < v) ? std::make_pair(u,v) : std::make_pair(v,u);
+          agg[key] += size;
         }
       }
     }
     sb_edges_.reserve(agg.size());
-    for (auto const& kv : agg)
+    for (auto const& kv : agg) {
       sb_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
+    }
   }
+
   void materializeClusters() {
     std::unordered_map<int, Cluster> tmp;
     for (auto const& [t,cid] : task_to_cluster_) {
-      auto& cl = tmp[cid]; cl.id = cid; cl.members.push_back(t);
+      auto& cl = tmp[cid];
+      cl.id = cid;
+      cl.members.push_back(t);
     }
     for (auto& kv : tmp) {
       auto& cl = kv.second;
-      for (auto const& t : cl.members)
+      for (auto const& t : cl.members) {
         cl.load += pd_.getTasksMap().at(t).getLoad();
+      }
       clusters_.push_back(std::move(cl));
     }
     std::sort(clusters_.begin(), clusters_.end(), [](auto const& a, auto const& b){ return a.id < b.id; });
-  }
-  void buildCoarsenedEdges() {
-    // Use only shared-block edges (sb_edges_) to derive inter-cluster weights
-    struct PairHashCI {
-      size_t operator()(std::pair<int,int> const& p) const noexcept {
-        int a = std::min(p.first,p.second), b = std::max(p.first,p.second);
-        return (static_cast<size_t>(a) << 32) ^ static_cast<size_t>(b);
-      }
-    };
-    std::unordered_map<std::pair<int,int>, BytesType, PairHashCI> ce;
-    for (auto const& e : sb_edges_) {
-      int cu = task_to_cluster_.at(std::get<0>(e));
-      int cv = task_to_cluster_.at(std::get<1>(e));
-      if (cu == cv) continue;
-      auto key = cu < cv ? std::make_pair(cu,cv) : std::make_pair(cv,cu);
-      ce[key] += std::get<2>(e);
-    }
-    for (auto const& kv : ce)
-      coarse_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
   }
 
 private:
   PhaseData const& pd_;
   std::vector<TaskType> tasks_;
   // aggregated undirected shared-block edges: (u,v,weight)
-  std::vector<std::tuple<TaskType,TaskType,BytesType>> sb_edges_; // renamed from agg_edges_
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
-  std::vector<std::tuple<int,int,BytesType>> coarse_edges_;
+  std::vector<std::tuple<TaskType,TaskType,BytesType>> sb_edges_;
 };
 
 // Standalone Leiden-style clustering using CPM (Constant Potts Model) objective.
@@ -343,11 +370,16 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
   using BytesType = vt_lb::model::BytesType;
   using PhaseData = vt_lb::model::PhaseData;
 
-  LeidenCPMStandaloneClusterer(PhaseData const& pd,
-                               double resolution = 50.0,
-                               int max_passes = 10,
-                               int max_levels = 4)
-    : pd_(pd), gamma_(resolution), max_passes_(max_passes), max_levels_(max_levels) {}
+  LeidenCPMStandaloneClusterer(
+    PhaseData const& pd,
+    double resolution = 50.0,
+    int max_passes = 10,
+    int max_levels = 4
+  ) : pd_(pd),
+      gamma_(resolution),
+      max_passes_(max_passes),
+      max_levels_(max_levels)
+  {}
 
   void compute() override {
     clear();
@@ -355,43 +387,43 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     if (node_to_tasks_.empty()) return;
 
     if (rank0()) {
-      printf("LeidenCPMStandalone: start nodes=%zu edges=%zu gamma=%.4f\n",
-             node_to_tasks_.size(), edges_.size(), gamma_);
+      VT_LB_LOG(
+        Clusterer, normal, "LeidenCPMStandalone: start nodes={} edges={} gamma={:.4f}\n",
+        node_to_tasks_.size(), edges_.size(), gamma_
+      );
     }
 
     int level = 0;
     while (level < max_levels_) {
-      if (rank0()) printf("LeidenCPMStandalone: level %d\n", level);
-
+      if (rank0()) {
+        VT_LB_LOG(Clusterer, normal, "LeidenCPMStandalone: level {}\n", level);
+      }
       bool moved_any = localMovingPhase();
       refinementPhase();
 
       bool coarsened = coarsenGraph();
       if (rank0()) {
-        printf("  after level %d: moved=%s coarsened=%s nodes=%zu edges=%zu\n",
-               level,
-               moved_any ? "yes" : "no",
-               coarsened ? "yes" : "no",
-               node_to_tasks_.size(), edges_.size());
+        VT_LB_LOG(
+          Clusterer, normal, "  after level {}: moved={} coarsened={} nodes={} edges={}\n",
+          level,
+          moved_any ? "yes" : "no",
+          coarsened ? "yes" : "no",
+          node_to_tasks_.size(), edges_.size()
+        );
       }
       ++level;
       if (!coarsened) break;
     }
 
     materializeClusters();
-    buildCoarsenedEdges();
 
     if (rank0()) {
-      printf("LeidenCPMStandalone: final communities=%zu\n", clusters_.size());
+      VT_LB_LOG(Clusterer, normal, "LeidenCPMStandalone: final communities={}\n", clusters_.size());
       for (auto const& c : clusters_) {
-        printf("  community %d size=%zu load=%.2f\n", c.id, c.members.size(), c.load);
+        VT_LB_LOG(Clusterer, normal, "  community {} size={} load={:.2f}\n", c.id, c.members.size(), c.load);
       }
     }
   }
-
-  std::unordered_map<TaskType,int> const& taskToCluster() const override { return task_to_cluster_; }
-  std::vector<Cluster> const& clusters() const override { return clusters_; }
-  std::vector<std::tuple<int,int,BytesType>> const& coarsenedEdges() const override { return coarse_edges_; }
 
 private:
   // ---------- Graph state for current level ----------
@@ -413,10 +445,6 @@ private:
   int max_passes_ = 10;
   int max_levels_ = 4;
 
-  std::unordered_map<TaskType,int> task_to_cluster_;
-  std::vector<Cluster> clusters_;
-  std::vector<std::tuple<int,int,BytesType>> coarse_edges_;
-
   // ---------- Utils ----------
   bool rank0() const { return pd_.getRank() == 0; }
 
@@ -428,7 +456,6 @@ private:
     comm_size_.clear();
     task_to_cluster_.clear();
     clusters_.clear();
-    coarse_edges_.clear();
   }
 
   static unsigned long long key(TaskType a, TaskType b) {
@@ -552,7 +579,7 @@ private:
       }
 
       if (rank0()) {
-        printf("  local pass %d moved=%s\n", pass, moved ? "yes" : "no");
+        VT_LB_LOG(Clusterer, normal, "  local pass {} moved={}\n", pass, moved ? "yes" : "no");
       }
       if (!moved) break;
     }
@@ -618,7 +645,7 @@ private:
       ++splits;
     }
     if (rank0()) {
-      printf("  refinement: splits=%d\n", splits);
+      VT_LB_LOG(Clusterer, normal, "  refinement: splits={}\n", splits);
     }
   }
 
@@ -747,30 +774,20 @@ private:
               [](auto const& a, auto const& b){ return a.id < b.id; });
   }
 
-  void buildCoarsenedEdges() {
-    // Coarsen by community mapping using original undirected edges
-    // Rebuild pair weights between final cluster ids
-    struct PH {
-      size_t operator()(std::pair<int,int> const& p) const noexcept {
-        int a = std::min(p.first,p.second), b = std::max(p.first,p.second);
-        return (static_cast<size_t>(a)<<32) ^ static_cast<size_t>(b);
-      }
-    };
-    std::unordered_map<std::pair<int,int>, BytesType, PH> agg;
-    // Traverse current-level edges using final membership to derive inter-cluster weights
-    // but we should derive from original tasks' communication. For simplicity, approximate with last level edges_.
-    for (auto const& e : edges_) {
-      int u = std::get<0>(e), v = std::get<1>(e);
-      double w = std::get<2>(e);
-      int cu = membership_[u], cv = membership_[v];
-      if (cu == cv) continue;
-      auto key = cu < cv ? std::make_pair(cu,cv) : std::make_pair(cv,cu);
-      agg[key] += w;
-    }
-    for (auto const& kv : agg) {
-      coarse_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
+};
+
+// Utility: verify that all tasks in pd are present in the cluster mapping
+inline bool allTasksClustered(Clusterer const& clusterer, vt_lb::model::PhaseData const& pd) {
+  auto const& t2c = clusterer.taskToCluster();
+  for (auto const& kv : pd.getTasksMap()) {
+    auto const task_id = kv.first;
+    if (t2c.find(task_id) == t2c.end()) {
+      return false;
     }
   }
-};
+  return true;
+}
+
+} // namespace vt_lb::algo::temperedlb
 
 #endif // INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTERING_H

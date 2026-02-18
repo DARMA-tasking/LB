@@ -44,6 +44,8 @@
 #ifndef INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 #define INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H
 
+#include <vt-lb/comm/vt/collective_handler.h>
+
 #include <atomic>
 #include <vt/transport.h>
 #include <mpi.h>
@@ -52,7 +54,7 @@ namespace vt_lb::comm {
 
 template <typename ProxyT>
 struct ProxyWrapper : ProxyT {
-  struct ReduceCtx {
+  struct CollectiveCtx {
     void* out_ptr = nullptr;
     std::atomic<bool> done{false};
     std::size_t count = 0;
@@ -62,10 +64,16 @@ struct ProxyWrapper : ProxyT {
   ProxyWrapper(ProxyT proxy);
 
   template <typename T>
-  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, ReduceCtx* ctx);
+  static void reduceAnonCb(vt::collective::ReduceTMsg<T>* msg, CollectiveCtx* ctx);
 
   template <typename U, typename V>
   void reduce(int root, MPI_Datatype datatype, MPI_Op op, U sendbuf, V recvbuf, int count);
+
+  template <typename T>
+  void broadcast(int root, MPI_Datatype datatype, T* buffer, int count);
+
+  template <typename T>
+  std::unordered_map<int, std::vector<T>> allgather(T const* sendbuf, int sendcount);
 
 private:
   enum class VTOp { Plus, Max, Min };
@@ -73,10 +81,17 @@ private:
 
   template <typename T, typename SendBufT, typename RecvBufT>
   void reduce_impl(int root, MPI_Op op, SendBufT sendbuf, RecvBufT recvbuf, int count);
+
+  template <typename T>
+  void broadcast_impl(int root, T* buffer, int count);
+
+  using CollectiveHandlerType = CollectiveHandler<CollectiveCtx>;
+  std::shared_ptr<CollectiveCtx> collective_ctx_{};
+  vt::objgroup::proxy::Proxy<CollectiveHandlerType> collective_proxy_{};
 };
 
 } // namespace vt_lb::comm
 
-#include "vt-lb/comm/VT/proxy_wrapper.impl.h"
+#include "vt-lb/comm/vt/proxy_wrapper.impl.h"
 
 #endif /* INCLUDED_VT_LB_COMM_PROXY_WRAPPER_H */

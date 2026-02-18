@@ -56,7 +56,7 @@ using LoadType = double;
 using TaskType = uint64_t;
 
 constexpr SharedBlockType no_shared_block = -1;
-constexpr RankType invalid_node = -1;
+constexpr RankType invalid_rank = -1;
 constexpr TaskType invalid_task = static_cast<TaskType>(-1);
 
 } /* end namespace vt_lb::model */

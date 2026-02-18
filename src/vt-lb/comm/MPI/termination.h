@@ -65,12 +65,14 @@ struct TerminationDetector {
   void startFirstWave();
   void onControl();
   void onResponse(uint64_t in_sent, uint64_t in_recv);
+  void checkAllChildrenComplete();
   void notifyMessageSend();
   void notifyMessageReceive();
   bool isTerminated() const { return terminated_; }
   void sendControlToChildren();
   void sendResponseToParent(uint64_t in_sent, uint64_t in_recv);
   void terminated();
+  bool singleRank() const { return size_ == 1; }
 
   int rank_ = 0;
   int size_ = 0;

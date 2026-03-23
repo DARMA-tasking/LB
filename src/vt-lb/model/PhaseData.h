@@ -69,6 +69,21 @@ struct PhaseData {
     }
     communications_.push_back(e);
   }
+  void aggregateCommunication(Edge const& e) {
+    for (int i = 0; i < static_cast<int>(communications_.size()); ++i) {
+      auto& comm = communications_[i];
+      if (comm.getFrom() == e.getFrom() && comm.getTo() == e.getTo()) {
+        comm.setVolume(comm.getVolume() + e.getVolume());
+        comm.setNumMessages(comm.getNumMessages() + e.getNumMessages());
+        task_messages_out_[e.getFrom()] += e.getNumMessages();
+        task_messages_in_[e.getTo()] += e.getNumMessages();
+        return;
+      }
+    }
+    communications_.push_back(e);
+    task_messages_out_[e.getFrom()] += e.getNumMessages();
+    task_messages_in_[e.getTo()] += e.getNumMessages();
+  }
   void addSharedBlock(SharedBlock const& b) { shared_blocks_.emplace(b.getId(), b); }
 
   RankType getRank() const { return rank_; }
@@ -98,6 +113,25 @@ struct PhaseData {
   std::unordered_map<TaskType, Task> const& getTasksMap() const { return tasks_; }
   std::vector<Edge> const& getCommunications() const { return communications_; }
   std::vector<Edge>& getCommunicationsRef() { return communications_; }
+
+  std::size_t getCommunicationMessagesCount() const {
+    std::size_t count = 0;
+    for (const auto& comm : communications_) {
+      count += comm.getNumMessages();
+    }
+    return count;
+  }
+
+  std::size_t getTaskMessagesOut(TaskType id) const {
+    auto it = task_messages_out_.find(id);
+    return it != task_messages_out_.end() ? it->second : 0;
+  }
+
+  std::size_t getTaskMessagesIn(TaskType id) const {
+    auto it = task_messages_in_.find(id);
+    return it != task_messages_in_.end() ? it->second : 0;
+  }
+
   std::unordered_map<SharedBlockType, SharedBlock> const& getSharedBlocksMap() const { return shared_blocks_; }
   std::unordered_set<TaskType> getTaskIds() const {
     std::unordered_set<TaskType> ids;
@@ -133,6 +167,8 @@ struct PhaseData {
     tasks_.clear();
     communications_.clear();
     shared_blocks_.clear();
+    task_messages_out_.clear();
+    task_messages_in_.clear();
     rank_footprint_bytes_ = 0.0;
     rank_max_memory_available_ = 0.0;
   }
@@ -157,6 +193,8 @@ struct PhaseData {
     s | tasks_;
     s | communications_;
     s | shared_blocks_;
+    s | task_messages_out_;
+    s | task_messages_in_;
     s | rank_footprint_bytes_;
     s | rank_max_memory_available_;
   }
@@ -170,6 +208,8 @@ private:
   std::unordered_map<TaskType, Task> tasks_;
   std::vector<Edge> communications_;
   std::unordered_map<SharedBlockType, SharedBlock> shared_blocks_;
+  std::unordered_map<TaskType, std::size_t> task_messages_out_;
+  std::unordered_map<TaskType, std::size_t> task_messages_in_;
   BytesType rank_footprint_bytes_ = 0.0;
   BytesType rank_max_memory_available_ = 0.0;
 };

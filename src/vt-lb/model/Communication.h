@@ -56,21 +56,23 @@ namespace vt_lb::model {
 struct Edge {
   Edge() = default;
   Edge(TaskType from, TaskType to, BytesType volume)
-    : from_(from), to_(to), volume_(volume)
+    : from_(from), to_(to), volume_(volume), num_messages_(1)
   {}
   // New ctor with explicit endpoint ranks
   Edge(TaskType from, TaskType to, BytesType volume, RankType from_rank, RankType to_rank)
-    : from_(from), to_(to), volume_(volume), from_rank_(from_rank), to_rank_(to_rank)
+    : from_(from), to_(to), volume_(volume), from_rank_(from_rank), to_rank_(to_rank), num_messages_(1)
   {}
 
   TaskType getFrom() const { return from_; }
   TaskType getTo() const { return to_; }
   BytesType getVolume() const { return volume_; }
-  // New rank accessors
+  void setVolume(BytesType volume) { volume_ = volume; }
   RankType getFromRank() const { return from_rank_; }
   RankType getToRank() const { return to_rank_; }
   void setFromRank(RankType rank) { from_rank_ = rank; }
   void setToRank(RankType rank) { to_rank_ = rank; }
+  int getNumMessages() const { return num_messages_; }
+  void setNumMessages(int num) { num_messages_ = num; }
 
   template <typename Serializer>
   void serialize(Serializer& s) {
@@ -79,6 +81,7 @@ struct Edge {
     s | volume_;
     s | from_rank_;
     s | to_rank_;
+    s | num_messages_;
   }
 
 private:
@@ -87,6 +90,7 @@ private:
   BytesType volume_ = 0.0;
   RankType from_rank_ = invalid_rank;
   RankType to_rank_ = invalid_rank;
+  int num_messages_ = 0;
 };
 
 /**

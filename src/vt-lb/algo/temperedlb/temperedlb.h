@@ -371,6 +371,24 @@ struct TemperedLB final : baselb::BaseLB {
     }
   }
 
+  /**
+   * @brief Get the global distribution of tasks after load balancing
+   *
+   * @param local_tasks The set of tasks on the this rank
+   */
+  std::unordered_map<model::RankType, std::vector<model::TaskType>>
+  getGlobalDistribution(std::unordered_set<model::TaskType> const& local_tasks) {
+    std::vector<model::TaskType> local_task_vec(
+      local_tasks.begin(), local_tasks.end()
+    );
+    auto all_task_vecs = handle_.template allgather<model::TaskType>(
+      local_task_vec.data(), static_cast<int>(local_task_vec.size())
+    );
+
+    return all_task_vecs;
+  }
+
+
   Clusterer const* getClusterer() const { return clusterer_.get(); }
 
 private:
@@ -402,12 +420,15 @@ private:
     double global_min = 0.0;
     double global_max = 0.0;
     double global_sum = 0.0;
-    // For now, do P reductions since we don't have broadcast yet
-    for (int p = 0; p < comm_.numRanks(); ++p) {
-      handle_.reduce(p, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
-      handle_.reduce(p, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
-      handle_.reduce(p, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
-    }
+
+    handle_.reduce(0, MPI_DOUBLE, MPI_MIN, &local_value, &global_min, 1);
+    handle_.reduce(0, MPI_DOUBLE, MPI_MAX, &local_value, &global_max, 1);
+    handle_.reduce(0, MPI_DOUBLE, MPI_SUM, &local_value, &global_sum, 1);
+
+    handle_.broadcast(0, MPI_DOUBLE, &global_min, 1);
+    handle_.broadcast(0, MPI_DOUBLE, &global_max, 1);
+    handle_.broadcast(0, MPI_DOUBLE, &global_sum, 1);
+
     double global_avg = global_sum / static_cast<double>(comm_.numRanks());
     double I = 0;
     if (global_avg > 0.0) {

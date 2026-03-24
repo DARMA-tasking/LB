@@ -58,6 +58,10 @@ enum class DriverAlgoEnum {
 template <typename CommT, typename ConfigT>
 void runLB(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<model::PhaseData> phase_data);
 
+template <typename CommT, typename ConfigT>
+std::unordered_map<model::RankType, std::vector<model::TaskType>>
+runLBAllGather(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<model::PhaseData> phase_data);
+
 } /* end namespace vt_lb */
 
 #include "vt-lb/algo/driver/driver.impl.h"

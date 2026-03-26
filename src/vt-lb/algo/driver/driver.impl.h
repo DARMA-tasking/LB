@@ -45,7 +45,8 @@
 #define INCLUDED_VT_LB_ALGO_DRIVER_DRIVER_IMPL_H
 
 #include <vt-lb/algo/temperedlb/temperedlb.h>
-#include "vt-lb/algo/driver/driver.h"
+#include <vt-lb/algo/temperedlb/configuration.h>
+#include <vt-lb/algo/driver/driver.h>
 
 namespace vt_lb {
 
@@ -89,6 +90,28 @@ runLBAllGather(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr
     throw std::runtime_error("Invalid load balancer algorithm");
     return {};
   }
+}
+
+template <typename ConfigT>
+ConfigT makeLoadOnlyConfig() {
+  vt_lb::algo::temperedlb::Configuration config;
+  config.num_iters_ = 10;
+  config.num_trials_ = 1;
+  config.deterministic_ = false;
+  config.work_model_.rank_alpha = 1.0;
+  return config;
+}
+
+template <typename ConfigT>
+ConfigT makeCommConfig(double beta) {
+  vt_lb::algo::temperedlb::Configuration config;
+  config.num_iters_ = 10;
+  config.num_trials_ = 1;
+  config.deterministic_ = false;
+  config.work_model_.rank_alpha = 1.0;
+  config.work_model_.beta = beta;
+  return config;
+
 }
 
 } /* end namespace vt_lb */

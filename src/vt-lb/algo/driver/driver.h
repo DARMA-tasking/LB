@@ -55,6 +55,12 @@ enum class DriverAlgoEnum {
   TemperedLB,
 };
 
+template <typename ConfigT>
+ConfigT makeLoadOnlyConfig();
+
+template <typename ConfigT>
+ConfigT makeCommConfig(double beta);
+
 template <typename CommT, typename ConfigT>
 void runLB(DriverAlgoEnum algo, CommT& comm, ConfigT config, std::unique_ptr<model::PhaseData> phase_data);
 

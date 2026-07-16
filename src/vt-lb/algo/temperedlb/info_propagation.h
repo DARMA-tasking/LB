@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_INFO_PROPAGATION_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_INFO_PROPAGATION_H
 
+#include <comm/util/logging.h>
+
 #include <random>
 #include <unordered_map>
 #include <unordered_set>
@@ -91,7 +93,7 @@ struct InformationPropagation {
       // do nothing
     }
 
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, verbose,
       "done with poll: local_data size={}\n", local_data_.size()
     );

@@ -48,6 +48,7 @@
 #include <vt-lb/model/Communication.h>
 #include <vt-lb/model/Task.h>
 #include <vt-lb/util/assert.h>
+#include <comm/util/logging.h>
 
 #include <unordered_map>
 #include <vector>
@@ -210,7 +211,7 @@ struct GraphEdgeResolver {
     int rank,
     std::vector<model::TaskType> const& task_ids
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, verbose,
       "GraphEdgeResolver::informTaskLocation: received {} task locations from rank {}\n",
       task_ids.size(), rank
@@ -232,7 +233,7 @@ struct GraphEdgeResolver {
     int rank,
     std::vector<model::TaskType> const& task_ids
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, verbose,
       "GraphEdgeResolver::resolveTasks: received {} task resolution requests from rank {}\n",
       task_ids.size(), rank
@@ -251,7 +252,7 @@ struct GraphEdgeResolver {
     int rank,
     model::TaskType task_id
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, verbose,
       "GraphEdgeResolver::validateEndpoint: received validation request for task {} from rank {}\n",
       task_id, rank

@@ -45,8 +45,8 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TRANSFER_H
 
 #include <vt-lb/model/types.h>
-#include <vt-lb/comm/comm_traits.h>
-#include <vt-lb/util/logging.h>
+#include <comm/comm/comm_traits.h>
+#include <comm/util/logging.h>
 #include <vt-lb/util/assert.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
@@ -145,7 +145,7 @@ private:
   void migrationHandler(int from_rank, std::vector<TransferTask> const& tasks) {
     for (auto& [task, edges, shared_blocks] : tasks) {
       if (!acceptIncomingTask(task)) {
-        VT_LB_LOG(
+        COMM_LOG(
           LoadBalancer, normal,
           "Transferer::migrationHandler: rejecting incoming task {}, load {} due to load constraints\n",
           task.getId(),

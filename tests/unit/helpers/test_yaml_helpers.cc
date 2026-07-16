@@ -45,14 +45,16 @@
 #include <vt-lb/input/yaml_reader.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 
-#include "../test_harness.h"
-#include "../test_helpers.h"
+#include "test_harness.h"
+#include "test_helpers.h"
 
 #include <string>
 
 namespace vt_lb { namespace tests { namespace unit {
 
-struct TestYamlHelpers: vt_lb::tests::unit::TestHarness {
+using namespace ::comm::tests::unit;
+
+struct TestYamlHelpers: TestHarness {
 };
 
 TEST_F(TestYamlHelpers, test_read_yaml_config_complete) {

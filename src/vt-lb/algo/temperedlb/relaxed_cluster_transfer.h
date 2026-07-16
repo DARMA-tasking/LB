@@ -47,12 +47,12 @@
 #include <vt-lb/algo/temperedlb/transfer.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
-#include <vt-lb/comm/comm_traits.h>
+#include <comm/comm/comm_traits.h>
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/util/assert.h>
-#include <vt-lb/util/logging.h>
+#include <comm/util/logging.h>
 
 #include <unordered_map>
 #include <limits>
@@ -212,7 +212,7 @@ struct RelaxedClusterTransfer {
     }
 
     if (candidates.empty()) {
-      VT_LB_LOG(LoadBalancer, normal, "RelaxedClusterTransfer: no swap candidates\n");
+      COMM_LOG(LoadBalancer, normal, "RelaxedClusterTransfer: no swap candidates\n");
       return Candidate{};
     }
 
@@ -231,7 +231,7 @@ struct RelaxedClusterTransfer {
     int n_print = std::min(5, static_cast<int>(candidates.size()));
     for (int i = 0; i < n_print; ++i) {
       const auto& c = candidates[i];
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, normal,
         "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
         "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
@@ -242,7 +242,7 @@ struct RelaxedClusterTransfer {
 #endif
 
     auto const& best = candidates.front();
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "RelaxedClusterTransfer: best candidate dst_rank={} give_gid={} recv_gid={} "
       "this_work_before={:.2f} this_work_after={:.2f} dst_work_before={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
@@ -265,7 +265,7 @@ struct RelaxedClusterTransfer {
       while (found_good_swap && transaction_status_ != TransactionStatus::Rejected) {
         auto best = findBestSwapCandidate();
         if (best.improvement > 0.0) {
-          VT_LB_LOG(
+          COMM_LOG(
             LoadBalancer, normal,
             "RelaxedClusterTransfer: executing swap dst_rank={} give_gid={} recv_gid={} "
             "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
@@ -291,7 +291,7 @@ struct RelaxedClusterTransfer {
         }
 
         if (transaction_status_ == TransactionStatus::Accepted) {
-          VT_LB_LOG(
+          COMM_LOG(
             LoadBalancer, normal,
             "RelaxedClusterTransfer: swap accepted dst_rank={} give_gid={} recv_gid={}\n",
             best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid
@@ -319,7 +319,7 @@ struct RelaxedClusterTransfer {
           auto new_work = WorkModelCalculator::computeWork(
             config_.work_model_, ci_r.rank_breakdown
           );
-          VT_LB_LOG(
+          COMM_LOG(
             LoadBalancer, normal,
             "RelaxedClusterTransfer: post-swap this_rank={} new_work={:.2f}\n",
             this_rank, new_work
@@ -365,7 +365,7 @@ struct RelaxedClusterTransfer {
               if (edge.getTo() == task->getId()) {
                 edge.setToRank(rank);
               }
-              VT_LB_LOG(
+              COMM_LOG(
                 LoadBalancer, verbose,
                 "RelaxedClusterTransfer::migrateCluster: migrating edge from task {} rank {} to task {} rank {} volume {}\n",
                 edge.getFrom(), edge.getFromRank(), edge.getTo(), edge.getToRank(), edge.getVolume()
@@ -390,7 +390,7 @@ struct RelaxedClusterTransfer {
       outgoingCluster(cluster_gid, cluster_gid_summary);
     }
 
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "Transferer::migrateCluster: migrating cluster_gid={} with {} tasks {} edges to rank {}\n",
       cluster_gid, tasks_to_migrate.size(), edges_to_migrate.size(), rank
@@ -414,7 +414,7 @@ struct RelaxedClusterTransfer {
     bool sending_requested_cluster,
     double dst_work_before
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "Transferer::migrationClusterHandler: received cluster_gid={} with {} tasks {} edges from rank {}\n",
       cluster_gid, tasks.size(), edges.size(), from_rank
@@ -429,7 +429,7 @@ struct RelaxedClusterTransfer {
       std::vector<model::TaskType> task_ids;
       // Add all received tasks to local PhaseData
       for (auto const& task : tasks) {
-        VT_LB_LOG(
+        COMM_LOG(
           LoadBalancer, normal,
           "Transferer::migrationClusterHandler: adding task {} from cluster_gid={} received from rank {}\n",
           task.getId(), cluster_gid, from_rank
@@ -483,7 +483,7 @@ struct RelaxedClusterTransfer {
         }
       }
     } else {
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, normal,
         "Transferer::migrationClusterHandler: rejecting incoming cluster_gid={} from rank {}\n",
         cluster_gid, from_rank
@@ -496,7 +496,7 @@ struct RelaxedClusterTransfer {
   }
 
   void clusterAccepted(int cluster_gid) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "Transferer::clusterAccepted: cluster_gid={} accepted by remote rank\n",
       cluster_gid
@@ -510,7 +510,7 @@ struct RelaxedClusterTransfer {
     TaskClusterSummaryInfo cluster_gid_summary,
     std::vector<model::Task> const& tasks
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "Transferer::sendBackClusterHandler: cluster sent back cluster_gid={} with {} tasks\n",
       cluster_gid, tasks.size()
@@ -547,7 +547,7 @@ struct RelaxedClusterTransfer {
     int cluster_gid,
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "RelaxedClusterTransfer::outgoingCluster removing cluster_gid={}\n",
       cluster_gid
@@ -567,7 +567,7 @@ struct RelaxedClusterTransfer {
     int cluster_gid,
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "RelaxedClusterTransfer::incomingCluster adding cluster_gid={}\n",
       cluster_gid
@@ -605,7 +605,7 @@ struct RelaxedClusterTransfer {
     // );
 
 
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster_or_null={}, current_work={}, max_work={}, dst_work_before={}\n",
       recv_cluster_gid, has_cluster_or_null, current_work, stats_.max, dst_work_before

@@ -42,7 +42,7 @@
 */
 
 #include <vt-lb/util/yaml_lb.h>
-#include <vt-lb/comm/MPI/comm_mpi.h>
+#include <comm/comm/MPI/comm_mpi.h>
 #include <vt-lb/input/yaml_reader.h>
 #include <vt-lb/input/json_reader.h>
 #include <vt-lb/algo/driver/driver.h>
@@ -52,7 +52,7 @@
 namespace fs = std::filesystem;
 
 namespace vt_lb::util {
-void YAML_LB::loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& comm) {
+void YAML_LB::loadAndRun(std::string const& in_filename, ::comm::CommMPI& comm) {
   auto yaml_reader = vt_lb::input::YAMLReader();
   yaml_reader.readFile(in_filename);
   std::string jsonDir = yaml_reader.parseJSONRankPath();

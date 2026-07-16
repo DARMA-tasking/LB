@@ -54,6 +54,8 @@
 
 namespace vt_lb::tests::unit {
 
+using namespace ::comm::tests::unit;
+
 // Wrapper that zips a communicator type with a single integer seed
 template <typename CommT, int Seed>
 struct CommSeedPack {

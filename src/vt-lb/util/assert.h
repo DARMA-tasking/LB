@@ -44,14 +44,14 @@
 #if !defined INCLUDED_VT_LB_UTIL_ASSERT_H
 #define INCLUDED_VT_LB_UTIL_ASSERT_H
 
-#include <vt-lb/util/logging.h>
+#include <comm/util/logging.h>
 
 #include <cassert>
 
 #define vt_lb_assert(cond, str)                                      \
   do {                                                               \
     if (!(cond)) {                                                   \
-      VT_LB_LOG(                                                     \
+      COMM_LOG(                                                     \
         LoadBalancer, terse,                                         \
         "Assertion failed: {} \"{}\" at {}:{} in function {}\n",     \
         #cond, str, __FILE__, __LINE__, __func__                     \

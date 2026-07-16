@@ -53,6 +53,8 @@
 
 namespace vt_lb { namespace tests { namespace unit {
 
+using namespace ::comm::tests::unit;
+
 template <comm::Communicator CommType>
 struct TestGraphHelpers: TestParallelHarness<CommType> {
 };

@@ -41,7 +41,7 @@
 //@HEADER
 */
 
-#include <vt-lb/comm/MPI/comm_mpi.h>
+#include <comm/comm/MPI/comm_mpi.h>
 #include <vt-lb/algo/driver/driver.h>
 #include <vt-lb/input/json_reader.h>
 #include <vt-lb/algo/temperedlb/temperedlb.h>
@@ -86,7 +86,7 @@ static std::optional<std::string> find_rank_file(const std::string& dir, int ran
 }
 
 int main(int argc, char** argv) {
-  auto comm = vt_lb::comm::CommMPI();
+  auto comm = comm::CommMPI();
   comm.init(argc, argv);
 
   if (argc < 3) {

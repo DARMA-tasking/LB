@@ -2,8 +2,6 @@ set(
   TOP_LEVEL_SUBDIRS
   algo
     algo/baselb algo/temperedlb algo/driver
-  comm
-    comm/MPI comm/vt
   input
   model
   util
@@ -87,6 +85,10 @@ target_link_libraries(
 )
 
 target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC $<BUILD_INTERFACE:comm>
+)
+
+target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC fmt-lb
 )
 
@@ -151,6 +153,7 @@ install(TARGETS ${YAML_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 
 export(
   TARGETS                   ${VT_LB_LIBRARY}
+                            comm
                             ${JSON_LIBRARY}
                             fmt-lb
                             ${BROTLI_LIBRARY}

@@ -2,6 +2,10 @@
 
 This repo implements scalable load balancers for workloads independently of runtime (can run on an arbitrary communicator: e.g., MPI, [DARMA/vt](https://github.com/DARMA-tasking/vt/)).
 
+## Dependencies
+- `vt` needs `magistrate`
+- `LB` needs `vt` and `comm`
+
 ## Building with *vt*
 
 You need [magistrate](https://github.com/DARMA-tasking/magistrate/) and [vt](https://github.com/DARMA-tasking/vt/)
@@ -24,9 +28,18 @@ cmake -S vt -B vt/build                      \
 cmake --build vt/build --target install
 ```
 
-`LB` only requires `vt` installation directory:
-```
+`LB` requires `vt` and `comm` installation directory:
+```bash
+git clone git@github.com:DARMA-tasking/comm.git
+
 cmake -S LB -B LB/build \
+  -DVT_LB_COMM_ROOT=comm \
   -Dvt_ROOT=vt/build/install
-cmake --build LB/build --target install
+
+cmake --build LB/build
+```
+
+## Tests
+```bash
+ctest --test-dir LB/build
 ```

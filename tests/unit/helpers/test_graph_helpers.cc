@@ -44,7 +44,6 @@
 #include <gtest/gtest.h>
 
 #include "test_parallel_harness.h"
-#include "test_helpers.h"
 #include "graph_helpers.h"
 
 #include <vt-lb/model/PhaseData.h>
@@ -52,8 +51,6 @@
 #include <random>
 
 namespace vt_lb { namespace tests { namespace unit {
-
-using namespace ::comm::tests::unit;
 
 template <comm::Communicator CommType>
 struct TestGraphHelpers: TestParallelHarness<CommType> {

@@ -3,43 +3,77 @@
 This repo implements scalable load balancers for workloads independently of runtime (can run on an arbitrary communicator: e.g., MPI, [DARMA/vt](https://github.com/DARMA-tasking/vt/)).
 
 ## Dependencies
-- `vt` needs `magistrate`
-- `LB` needs `vt` and `comm`
 
-## Building with *vt*
+LB requires MPI and an installed copy of
+[DARMA/comm](https://github.com/DARMA-tasking/comm). The VT backend is optional.
+LB discovers comm with `find_package(comm CONFIG REQUIRED)`; it does not build
+comm's source tree or use comm's private test files.
 
-You need [magistrate](https://github.com/DARMA-tasking/magistrate/) and [vt](https://github.com/DARMA-tasking/vt/)
-to use `vt` as a communicator for `LB`. Check out `vt`'s [build script](https://darma-tasking.github.io/docs/html/vt-build.html#using-the-build-script)
-or use CMake directly:
-```
-# you can use development version of vt and magistrate
-git clone https://github.com/DARMA-tasking/magistrate.git
-cmake -S magistrate -B magistrate/build \
-  -DCMAKE_INSTALL_PREFIX=magistrate/build/install
-cmake --build magistrate/build --target install
+## Quick start: MPI backend
 
-git clone https://github.com/DARMA-tasking/vt.git
-cmake -S vt -B vt/build                      \
-  -DCMAKE_INSTALL_PREFIX=vt/build/install    \
-  -Dmagistrate_ROOT=magistrate/build/install \
-  -Dvt_build_examples=0                      \ # skip optional targets to speed up build
-  -Dvt_build_tests=0                         \
-  -Dvt_build_tools=0
-cmake --build vt/build --target install
-```
+The commands below assume that `LB` and `comm` are cloned next to each other.
 
-`LB` requires `vt` and `comm` installation directory:
 ```bash
-git clone git@github.com:DARMA-tasking/comm.git
+git clone https://github.com/DARMA-tasking/comm.git
+
+cmake -S comm -B comm/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$PWD/comm/install" \
+  -Dvt_backend_enabled=OFF
+cmake --build comm/build --target install
 
 cmake -S LB -B LB/build \
-  -DVT_LB_COMM_ROOT=comm \
-  -Dvt_ROOT=vt/build/install
-
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$PWD/comm/install" \
+  -Dvt_backend_enabled=OFF
 cmake --build LB/build
 ```
 
-## Tests
+`CMAKE_PREFIX_PATH` points CMake at comm's installation prefix. If comm is
+installed in a standard system location, that option can be omitted. You can
+also set `comm_DIR` directly to the directory containing `commConfig.cmake`,
+for example `-Dcomm_DIR=/path/to/comm/install/cmake`; its transitive dependency
+packages must still be discoverable by CMake.
+
+## Building with the VT backend
+
+First build and install VT, then build comm with VT enabled. See the
+[VT build documentation](https://darma-tasking.github.io/docs/html/vt-build.html#using-the-build-script)
+for the VT installation steps.
+
 ```bash
-ctest --test-dir LB/build
+cmake -S comm -B comm/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$PWD/comm/install" \
+  -DCMAKE_PREFIX_PATH="$PWD/vt/build/install" \
+  -Dvt_backend_enabled=ON
+cmake --build comm/build --target install
+
+cmake -S LB -B LB/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$PWD/comm/install;$PWD/vt/build/install" \
+  -Dvt_backend_enabled=ON
+cmake --build LB/build
+```
+
+## Tests and installation
+
+```bash
+ctest --test-dir LB/build --output-on-failure
+cmake --install LB/build --prefix "$PWD/LB/install"
+```
+
+To consume an installed LB from another CMake project:
+
+```cmake
+find_package(vtLB CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE vt::lib::vt-lb)
+```
+
+When configuring that project, add both installation prefixes to
+`CMAKE_PREFIX_PATH`, for example:
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_PREFIX_PATH="/path/to/LB/install;/path/to/comm/install"
 ```

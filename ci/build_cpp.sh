@@ -9,6 +9,7 @@ target=${3:-install}
 # Dependency versions, when fetched via git.
 vt_rev=develop
 checkpoint_rev=develop
+comm_rev=${COMM_REV:-develop}
 
 if [ -z "${4}" ]; then
     dashj=""
@@ -112,6 +113,22 @@ else
     cmake --build . ${dashj} --target install
 fi
 
+export COMM=${build_dir}/comm-src
+export COMM_BUILD=${build_dir}/comm
+rm -Rf "$COMM" "$COMM_BUILD"
+git clone -b "${comm_rev}" --depth 1 https://github.com/DARMA-tasking/comm.git "$COMM"
+cmake -G "${CMAKE_GENERATOR:-Ninja}" \
+    -S "$COMM" \
+    -B "$COMM_BUILD/build" \
+    -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}" \
+    -DCMAKE_CXX_COMPILER="${CXX:-c++}" \
+    -DCMAKE_C_COMPILER="${CC:-cc}" \
+    -DCMAKE_PREFIX_PATH="$VT_BUILD/install" \
+    -DCMAKE_INSTALL_PREFIX="$COMM_BUILD/install" \
+    -Dvt_DIR="$VT_BUILD/install/cmake" \
+    -Dvt_backend_enabled=ON
+cmake --build "$COMM_BUILD/build" ${dashj} --target install
+
 export LB=${source_dir}
 export LB_BUILD=${build_dir}/LB
 mkdir -p "$LB_BUILD"
@@ -120,6 +137,8 @@ rm -Rf ./*
 cmake -GNinja \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
       -Dvt_DIR="$VT_BUILD/install/cmake/" \
+      -Dcomm_DIR="$COMM_BUILD/install/cmake/" \
+      -DCMAKE_PREFIX_PATH="$COMM_BUILD/install;$VT_BUILD/install" \
       -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Debug}" \
       -DMPI_EXTRA_FLAGS="${MPI_EXTRA_FLAGS:-}" \
       "$LB"

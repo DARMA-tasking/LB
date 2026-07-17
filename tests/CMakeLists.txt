@@ -70,7 +70,6 @@ function(add_unit_test unit_test_name unit_test_files uses_mpi additional_args)
   add_dependencies(unit_tests ${unit_test_name})
 
   target_include_directories(${unit_test_name} PRIVATE ${PROJECT_TEST_UNIT_DIR})
-  target_include_directories(${unit_test_name} PRIVATE ${VT_LB_COMM_TEST_DIR})
   target_include_directories(${unit_test_name} PRIVATE ${PROJECT_GTEST_INCLUDE_DIR})
 
   turn_on_warnings(${unit_test_name})
@@ -124,12 +123,12 @@ endfunction()
 
 set(
   TEST_HEADER_FILES
-  ${VT_LB_COMM_TEST_DIR}/test_harness.h
+  ${PROJECT_TEST_UNIT_DIR}/test_parallel_harness.h
 )
 
 set(
   TEST_SOURCE_FILES
-  ${VT_LB_COMM_TEST_DIR}/main.cc
+  ${PROJECT_TEST_UNIT_DIR}/main.cc
 )
 
 # List of unit test files that should be excluded

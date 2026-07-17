@@ -3,13 +3,6 @@ cmake_minimum_required(VERSION 3.20)
 # Set the project name and version
 project(vt-lb VERSION 1.0 LANGUAGES CXX)
 
-set(
-  VT_LB_COMM_ROOT
-  "${CMAKE_CURRENT_SOURCE_DIR}/../comm"
-  CACHE PATH
-  "Path to the standalone comm source tree"
-)
-
 # Try to find ccache to speed up compilation
 find_program(ccache_binary ccache)
 if (ccache_binary)
@@ -43,8 +36,7 @@ else()
   set(vt_backend_feature_enabled 1)
 endif()
 
-set(FMT_LIBRARY fmt)
-add_subdirectory(tpl/fmt)
+find_package(comm REQUIRED CONFIG)
 
 # json library always included in the build
 set(JSON_BuildTests OFF)
@@ -88,31 +80,6 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 endif()
 message(STATUS "CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
-
-# Compatibility aliases for the target names expected by comm.
-if(vt_backend_enabled)
-  if(TARGET vt::runtime::checkpoint AND NOT TARGET vt::lib::checkpoint)
-    add_library(vt::lib::checkpoint ALIAS vt::runtime::checkpoint)
-  endif()
-  if(TARGET vt::runtime::vt AND NOT TARGET vt::vt)
-    add_library(vt::vt ALIAS vt::runtime::vt)
-  endif()
-endif()
-
-if(NOT TARGET fmt::fmt)
-  set(COMM_FMT_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/comm-fmt-include")
-  file(MAKE_DIRECTORY "${COMM_FMT_INCLUDE_DIR}/fmt")
-  file(WRITE "${COMM_FMT_INCLUDE_DIR}/fmt/format.h" "#include <fmt-lb/format.h>\n")
-  target_include_directories(fmt-lb PUBLIC "$<BUILD_INTERFACE:${COMM_FMT_INCLUDE_DIR}>")
-  add_library(fmt::fmt ALIAS fmt-lb)
-endif()
-
-add_subdirectory(
-  "${VT_LB_COMM_ROOT}/src"
-  "${CMAKE_CURRENT_BINARY_DIR}/comm"
-)
-
-set(VT_LB_COMM_TEST_DIR "${VT_LB_COMM_ROOT}/tests")
 
 option(VT_LB_TESTS_ENABLED "Build vt-lb with unit tests" ON)
 

@@ -10,6 +10,7 @@ target=${3:-install}
 vt_rev=develop
 checkpoint_rev=develop
 comm_rev=${COMM_REV:-develop}
+magistrate_rev=${MAGISTRATE_REV:-develop}
 
 if [ -z "${4}" ]; then
     dashj=""
@@ -116,8 +117,10 @@ fi
 export COMM=${build_dir}/comm-src
 export COMM_BUILD=${build_dir}/comm
 rm -Rf "$COMM" "$COMM_BUILD"
-git clone -b "${comm_rev}" --depth 1 --recurse-submodules --shallow-submodules \
+git clone -b "${comm_rev}" --depth 1 \
     https://github.com/DARMA-tasking/comm.git "$COMM"
+git clone -b "${magistrate_rev}" --depth 1 \
+    https://github.com/DARMA-tasking/magistrate.git "$COMM/lib/magistrate"
 cmake -G "${CMAKE_GENERATOR:-Ninja}" \
     -S "$COMM" \
     -B "$COMM_BUILD/build" \

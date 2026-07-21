@@ -116,7 +116,8 @@ fi
 export COMM=${build_dir}/comm-src
 export COMM_BUILD=${build_dir}/comm
 rm -Rf "$COMM" "$COMM_BUILD"
-git clone -b "${comm_rev}" --depth 1 https://github.com/DARMA-tasking/comm.git "$COMM"
+git clone -b "${comm_rev}" --depth 1 --recurse-submodules --shallow-submodules \
+    https://github.com/DARMA-tasking/comm.git "$COMM"
 cmake -G "${CMAKE_GENERATOR:-Ninja}" \
     -S "$COMM" \
     -B "$COMM_BUILD/build" \

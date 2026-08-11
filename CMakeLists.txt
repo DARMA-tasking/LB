@@ -15,6 +15,12 @@ message(STATUS "Running tests and examples with additional MPI flags = ${MPI_EXT
 
 include(cmake/load_mpi_package.cmake)
 
+option(LB_BUILD_DOCS "Build documentation for LB" OFF)
+
+if(LB_BUILD_DOCS)
+  include(cmake/load_doxygen.cmake)
+endif()
+
 option(vt_backend_enabled "Whether VT backend is enabled" ON)
 
 if (vt_backend_enabled)
@@ -95,16 +101,19 @@ configure_file(
 )
 
 add_subdirectory(src)
-add_subdirectory(examples)
 
-include(CTest) #adds option BUILD_TESTING (default ON)
-enable_testing()
+if(NOT LB_BUILD_DOCS)
+  add_subdirectory(examples)
 
-message(STATUS "VT_LB_TESTS_ENABLED: ${VT_LB_TESTS_ENABLED}")
-if (BUILD_TESTING AND VT_LB_TESTS_ENABLED)
-  set(CTEST_SOURCE_DIRECTORY ${SOURCE_DIR}/src)
-  add_custom_target(unit_tests)
-  add_subdirectory(tests)
+  include(CTest) #adds option BUILD_TESTING (default ON)
+  enable_testing()
+
+  message(STATUS "VT_LB_TESTS_ENABLED: ${VT_LB_TESTS_ENABLED}")
+  if (BUILD_TESTING AND VT_LB_TESTS_ENABLED)
+    set(CTEST_SOURCE_DIRECTORY ${SOURCE_DIR}/src)
+    add_custom_target(unit_tests)
+    add_subdirectory(tests)
+  endif()
 endif()
 
 configure_file(

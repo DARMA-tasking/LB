@@ -8,10 +8,16 @@ FROM --platform=${ARCH} ${BASE} AS build
 
 ARG IMAGE
 ARG CACHE_ID=${IMAGE}
+ARG GIT_BRANCH
+ARG LB_BUILD_DOCS=0
 
 RUN --mount=type=cache,id=${CACHE_ID},target=/build/ccache             \
     --mount=type=cache,id=BUILD-${CACHE_ID},target=/build/LB           \
     --mount=type=secret,id=GITHUB_TOKEN,env=GITHUB_TOKEN               \
     --mount=target=/LB,rw                                              \
-        /LB/ci/build_cpp.sh /LB /build &&                              \
-        /LB/ci/test_cpp.sh /LB /build
+        if [ "${LB_BUILD_DOCS}" = "1" ]; then                          \
+            /LB/ci/build_cpp.sh /LB /build;                            \
+        else                                                           \
+            /LB/ci/build_cpp.sh /LB /build &&                          \
+            /LB/ci/test_cpp.sh /LB /build;                             \
+        fi

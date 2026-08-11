@@ -86,6 +86,7 @@ jobs:
           GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
 
       - name: Retrieve build artifacts
+        if: ${{ !endsWith(matrix.target, '-docs') }}
         run: |
           # We rely on the persistence of data on cache mounts with identical IDs and builders.
           # This allows us to copy build artifacts from the "bake" step and use the Codecov action within the GitHub environment.

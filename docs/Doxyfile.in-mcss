@@ -1,0 +1,5 @@
+@INCLUDE                = Doxyfile
+GENERATE_HTML           = YES
+GENERATE_XML            = YES
+XML_PROGRAMLISTING      = YES
+XML_NS_MEMB_FILE_SCOPE  = YES

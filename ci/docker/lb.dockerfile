@@ -19,5 +19,5 @@ RUN --mount=type=cache,id=${CACHE_ID},target=/build/ccache             \
             /LB/ci/build_cpp.sh /LB /build;                            \
         else                                                           \
             /LB/ci/build_cpp.sh /LB /build &&                          \
-            /LB/ci/test_cpp.sh /lB /build;                             \
+            /LB/ci/test_cpp.sh /LB /build;                             \
         fi

@@ -108,7 +108,6 @@ else
         -Dvt_no_color_enabled="${VT_NO_COLOR_ENABLED:-0}" \
         -DCMAKE_CXX_STANDARD="${CMAKE_CXX_STANDARD:-17}" \
         -DBUILD_SHARED_LIBS="${BUILD_SHARED_LIBS:-0}" \
-        -DLB_DOXYGEN_ENABLED="${LB_DOXYGEN_ENABLED:-0}"
         "$VT"
     cmake --build . ${dashj} --target install
 fi
@@ -123,6 +122,7 @@ cmake -GNinja \
       -Dvt_DIR="$VT_BUILD/install/cmake/" \
       -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Debug}" \
       -DMPI_EXTRA_FLAGS="${MPI_EXTRA_FLAGS:-}" \
+      -DLB_DOXYGEN_ENABLED="${LB_DOXYGEN_ENABLED:-0}" \
       "$LB"
 cmake_conf_ret=$?
 

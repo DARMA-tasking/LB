@@ -9,6 +9,11 @@ function "arch" {
   result = lookup(item, "arch", "amd64")
 }
 
+function "lb_docs" {
+  params = [item]
+  result = lookup(item, "lb_docs", "0")
+}
+
 function "variant" {
   params = [item]
   result = lookup(item, "variant", "")
@@ -45,6 +50,7 @@ target "lb-build-all" {
     GIT_BRANCH = "${GIT_BRANCH}"
     IMAGE = "wf-${item.image}"
     REPO = REPO
+    LB_DOXYGEN_ENABLED = lb_docs(item)
   }
 
   # to get the list of available images from DARMA-tasking/workflows:
@@ -54,7 +60,6 @@ target "lb-build-all" {
       {
         image = "amd64-alpine-3.16-clang-cpp"
       },
-
       {
         image = "amd64-ubuntu-20.04-gcc-10-cpp"
       },
@@ -90,6 +95,8 @@ target "lb-build-all" {
       },
       {
         image = "amd64-ubuntu-24.04-gcc-14-cpp"
+        lb_docs = 1
+        variant = "docs"
       }
     ]
   }

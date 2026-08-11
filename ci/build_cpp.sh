@@ -108,6 +108,7 @@ else
         -Dvt_no_color_enabled="${VT_NO_COLOR_ENABLED:-0}" \
         -DCMAKE_CXX_STANDARD="${CMAKE_CXX_STANDARD:-17}" \
         -DBUILD_SHARED_LIBS="${BUILD_SHARED_LIBS:-0}" \
+        -DLB_DOXYGEN_ENABLED="${LB_DOXYGEN_ENABLED:-0}"
         "$VT"
     cmake --build . ${dashj} --target install
 fi
@@ -132,17 +133,43 @@ OUTPUT="$LB_BUILD"/compilation_errors_warnings.out
 OUTPUT_TMP="$OUTPUT".tmp
 WARNS_ERRS=""
 
-# To easily tell if compilation of given file succeeded special progress bar is used
-# (controlled by variable NINJA_STATUS)
-export NINJA_STATUS="[ninja][%f/%t] "
-time cmake --build . ${dashj} --target "${target}" | tee "$OUTPUT_TMP"
-compilation_ret=${PIPESTATUS[0]}
-sed -i '/ninja: build stopped:/d' "$OUTPUT_TMP"
+# Build the documentation
+if test "${LB_DOXYGEN_ENABLED:-0}" -eq 1
+then
+    MCSS=${LB_BUILD}/m.css
+    GHPAGE=${LB_BUILD}/DARMA-tasking.github.io
 
-# Now every line that doesn't start with [ninja][number]/[number] is an error or a warning
-WARNS_ERRS=$(grep -Ev '^(\[ninja\]\[[[:digit:]]+\/[[:digit:]]+\])|(--) .*$' "$OUTPUT_TMP" || true)
+    git clone --depth=1 "https://x-access-token:${GITHUB_TOKEN}@github.com/DARMA-tasking/DARMA-tasking.github.io" "${GHPAGE}"
+    git clone https://github.com/mosra/m.css "${MCSS}"
+    git -C "${MCSS}" checkout 699abdd5
+    "$MCSS/documentation/doxygen.py" "${LB_BUILD}/Doxyfile-mcss"
 
-echo "$WARNS_ERRS" > "$OUTPUT"
+    if test "${GIT_BRANCH:-}" = "48--------------------------------TODODOOTOTOTOODODODOO"
+    then
+        CKPT_NAME=lb_docs
+        git -C "${GHPAGE}" rm -r --ignore-unmatch "${CKPT_NAME}"
+        mv "${LB_BUILD}/docs" "${GHPAGE}/${CKPT_NAME}"
+
+        cd "$GHPAGE"
+        git config --global user.email "jliffla@sandia.gov"
+        git config --global user.name "Jonathan Lifflander"
+        git add "$CKPT_NAME"
+        git commit --allow-empty -m "Update lb_docs (auto-build)"
+        git push origin master
+    fi
+else
+    # To easily tell if compilation of given file succeeded special progress bar is used
+    # (controlled by variable NINJA_STATUS)
+    export NINJA_STATUS="[ninja][%f/%t] "
+    time cmake --build . ${dashj} --target "${target}" | tee "$OUTPUT_TMP"
+    compilation_ret=${PIPESTATUS[0]}
+    sed -i '/ninja: build stopped:/d' "$OUTPUT_TMP"
+
+    # Now every line that doesn't start with [ninja][number]/[number] is an error or a warning
+    WARNS_ERRS=$(grep -Ev '^(\[ninja\]\[[[:digit:]]+\/[[:digit:]]+\])|(--) .*$' "$OUTPUT_TMP" || true)
+
+    echo "$WARNS_ERRS" > "$OUTPUT"
+fi
 
 if test "$use_ccache"
 then

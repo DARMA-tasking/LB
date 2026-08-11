@@ -50,7 +50,7 @@ target "lb-build-all" {
     GIT_BRANCH = "${GIT_BRANCH}"
     IMAGE = "wf-${item.image}"
     REPO = REPO
-    LB_DOXYGEN_ENABLED = lb_docs(item)
+    LB_BUILD_DOCS = lb_docs(item)
   }
 
   # to get the list of available images from DARMA-tasking/workflows:

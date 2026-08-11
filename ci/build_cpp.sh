@@ -122,7 +122,7 @@ cmake -GNinja \
       -Dvt_DIR="$VT_BUILD/install/cmake/" \
       -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Debug}" \
       -DMPI_EXTRA_FLAGS="${MPI_EXTRA_FLAGS:-}" \
-      -DLB_DOXYGEN_ENABLED="${LB_DOXYGEN_ENABLED:-0}" \
+      -DLB_BUILD_DOCS="${LB_BUILD_DOCS:-0}" \
       "$LB"
 cmake_conf_ret=$?
 
@@ -134,7 +134,7 @@ OUTPUT_TMP="$OUTPUT".tmp
 WARNS_ERRS=""
 
 # Build the documentation
-if test "${LB_DOXYGEN_ENABLED:-0}" -eq 1
+if test "${LB_BUILD_DOCS:-0}" -eq 1
 then
     MCSS=${LB_BUILD}/m.css
     GHPAGE=${LB_BUILD}/DARMA-tasking.github.io

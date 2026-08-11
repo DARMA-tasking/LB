@@ -15,9 +15,9 @@ message(STATUS "Running tests and examples with additional MPI flags = ${MPI_EXT
 
 include(cmake/load_mpi_package.cmake)
 
-option(LB_DOXYGEN_ENABLED "Build doxygen documentation for LB" OFF)
+option(LB_BUILD_DOCS "Build documentation for LB" OFF)
 
-if(LB_DOXYGEN_ENABLED)
+if(LB_BUILD_DOCS)
   include(cmake/load_doxygen.cmake)
 endif()
 
@@ -102,7 +102,7 @@ configure_file(
 
 add_subdirectory(src)
 
-if(NOT LB_DOXYGEN_ENABLED)
+if(NOT LB_BUILD_DOCS)
   add_subdirectory(examples)
 
   include(CTest) #adds option BUILD_TESTING (default ON)

@@ -144,7 +144,7 @@ then
     git -C "${MCSS}" checkout 699abdd5
     "$MCSS/documentation/doxygen.py" "${LB_BUILD}/Doxyfile-mcss"
 
-    if test "${GIT_BRANCH:-}" = "48--------------------------------TODODOOTOTOTOODODODOO"
+    if test "${GIT_BRANCH:-}" = "48-get-documentation-working"
     then
         CKPT_NAME=lb_docs
         git -C "${GHPAGE}" rm -r --ignore-unmatch "${CKPT_NAME}"

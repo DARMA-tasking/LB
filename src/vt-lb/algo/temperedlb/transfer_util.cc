@@ -44,7 +44,7 @@
 #include <vt-lb/algo/temperedlb/transfer_util.h>
 #include <vt-lb/util/assert.h>
 #include <vt-lb/model/types.h>
-#include <vt-lb/util/logging.h>
+#include <comm/util/logging.h>
 
 #include <set>
 #include <cassert>
@@ -248,7 +248,7 @@ namespace vt_lb::algo::temperedlb {
         }
       );
       if (cur_objs.size() > 0) {
-        VT_LB_LOG(
+        COMM_LOG(
           LoadBalancer, verbose,
           "TemperedLB::decide: over_avg={}, single_obj_load={}\n",
           model::LoadType(over_avg),
@@ -309,7 +309,7 @@ namespace vt_lb::algo::temperedlb {
         }
       );
       if (cur_objs.size() > 0) {
-        VT_LB_LOG(
+        COMM_LOG(
           LoadBalancer, verbose,
           "TemperedLB::decide: over_avg={}, marginal_obj_load={}\n",
           model::LoadType(over_avg),

@@ -49,7 +49,7 @@
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/algo/temperedlb/clustering.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
-#include <vt-lb/util/logging.h>
+#include <comm/util/logging.h>
 
 #include <cassert>
 
@@ -62,7 +62,7 @@ void ClusterSummarizer<CommT>::resolveClusterIDForTask(
   model::TaskType source_task_id,
   int source_global_cluster_id
 ) {
-  VT_LB_LOG(
+  COMM_LOG(
     LoadBalancer, verbose,
     "ClusterSummarizer::resolveClusterIDForTask: trying to resolve task_id={}, source_task_id={}, "
     "source_global_cluster_id={}, from_rank={}, found={}\n",
@@ -89,7 +89,7 @@ void ClusterSummarizer<CommT>::recvClusterIDForTask(
   model::TaskType task_id,
   int global_cluster_id
 ) {
-  VT_LB_LOG(
+  COMM_LOG(
     LoadBalancer, verbose,
     "ClusterSummarizer: recvClusterIDForTask: task_id={}, global_cluster_id={}\n",
     task_id, global_cluster_id
@@ -166,7 +166,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
       continue;
     }
 
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, verbose,
       "buildClusterSummaries: rank={} edge from {}(cu={}) to {}(cv={}) vol={:.2f}\n",
       rank, u, cu, v, cv, vol
@@ -174,7 +174,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
 
     // Now, discover the target clusters that are not local to this rank
     if (cu != -1) {
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, verbose,
         "ClusterSummarizer: resolveClusterIDForTask: from_rank={}, to_rank={} task_id={} source_task_id={} "
         "source_global_cluster_id={}\n",
@@ -188,7 +188,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
       );
       to_resolve_later.push_back(e);
     } else if (cv != -1) {
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, verbose,
         "ClusterSummarizer: resolveClusterIDForTask: from_rank={}, to_rank={} task_id={} source_task_id={} "
         "source_global_cluster_id={}\n",
@@ -220,7 +220,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     // Find the global cluster ID for the remote task
     auto it_remote_gid = task_to_global_cluster_id_.find(remote_task);
     if (it_remote_gid == task_to_global_cluster_id_.end()) {
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, normal,
         "BUG: Missing global cluster ID for remote_task={} (local_cluster={}, cu={}, cv={}, rank={})\n",
         remote_task, local_cluster, cu, cv, rank
@@ -332,7 +332,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
   for (auto const& cl : clusterer_->clusters()) {
     auto global_cl_id = localToGlobalClusterID(cl.id, rank, global_max_clusters_);
     auto const& sum = summary_by_global.at(global_cl_id);
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer,
       verbose,
       "buildClusterSummaries cluster {} size={} load={:.2f} intra_send={:.2f} intra_recv={:.2f} "

@@ -41,8 +41,8 @@
 //@HEADER
 */
 
-#include <vt-lb/comm/MPI/comm_mpi.h>
-#include <vt-lb/comm/vt/comm_vt.h>
+#include <comm/comm/MPI/comm_mpi.h>
+#include <comm/comm/vt/comm_vt.h>
 #include <vt-lb/algo/driver/driver.h>
 #include <random>
 
@@ -135,7 +135,7 @@ static void buildTestGraph(vt_lb::model::PhaseData& pd, int rank, int num_ranks)
 }
 
 int main(int argc, char** argv) {
-  auto comm = vt_lb::comm::CommMPI();
+  auto comm = comm::CommMPI();
   comm.init(argc, argv);
 
   //auto cls = std::make_unique<MyClass>();

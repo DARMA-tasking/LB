@@ -2,8 +2,6 @@ set(
   TOP_LEVEL_SUBDIRS
   algo
     algo/baselb algo/temperedlb algo/driver
-  comm
-    comm/MPI comm/vt
   input
   model
   util
@@ -87,10 +85,6 @@ target_link_libraries(
 )
 
 target_link_libraries(
-  ${VT_LB_LIBRARY} PUBLIC fmt-lb
-)
-
-target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC ${JSON_LIBRARY}
 )
 
@@ -125,6 +119,8 @@ target_include_directories(
   $<INSTALL_INTERFACE:include>
 )
 
+target_link_libraries(${VT_LB_LIBRARY} PUBLIC comm::comm)
+
 # add_vtlb_definitions(${VT_LB_LIBRARY})
 
 install(
@@ -144,7 +140,6 @@ install(
   COMPONENT                 runtime
 )
 
-install(TARGETS fmt-lb EXPORT ${VT_LB_LIBRARY})
 install(TARGETS ${JSON_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 install(TARGETS ${BROTLI_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 install(TARGETS ${YAML_LIBRARY} EXPORT ${VT_LB_LIBRARY})
@@ -152,7 +147,6 @@ install(TARGETS ${YAML_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 export(
   TARGETS                   ${VT_LB_LIBRARY}
                             ${JSON_LIBRARY}
-                            fmt-lb
                             ${BROTLI_LIBRARY}
                             ${YAML_LIBRARY}
   FILE                      "vtLBTargets.cmake"

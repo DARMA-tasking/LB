@@ -47,7 +47,6 @@
 #include <string>
 
 #include "test_parallel_harness.h"
-#include "test_helpers.h"
 #include "graph_helpers.h"
 
 #include <vt-lb/algo/temperedlb/temperedlb.h>
@@ -113,7 +112,9 @@ TYPED_TEST_P(TestTemperedLB, test_lb_no_comm_task_counts) {
 	auto num_ranks = this->comm.numRanks();
 	auto rank = this->comm.getRank();
 
-  SET_MIN_NUM_NODES_CONSTRAINT(2);
+  if (num_ranks < 2) {
+    GTEST_SKIP() << "This test requires at least two ranks";
+  }
 
   int seed = TypeParam::seed;
   vt_lb::model::PhaseData pd(rank);
@@ -157,7 +158,9 @@ TYPED_TEST_P(TestTemperedLB, test_significant_load_imbalance_reduction) {
 	auto num_ranks = this->comm.numRanks();
 	auto rank = this->comm.getRank();
 
-  SET_MIN_NUM_NODES_CONSTRAINT(2);
+  if (num_ranks < 2) {
+    GTEST_SKIP() << "This test requires at least two ranks";
+  }
 
   int seed = TypeParam::seed;
   vt_lb::model::PhaseData pd(rank);

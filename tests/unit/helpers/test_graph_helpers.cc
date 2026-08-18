@@ -44,7 +44,6 @@
 #include <gtest/gtest.h>
 
 #include "test_parallel_harness.h"
-#include "test_helpers.h"
 #include "graph_helpers.h"
 
 #include <vt-lb/model/PhaseData.h>

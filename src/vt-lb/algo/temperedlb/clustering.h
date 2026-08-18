@@ -44,7 +44,7 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_CLUSTERING_H
 
 #include <vt-lb/model/PhaseData.h>
-#include <vt-lb/util/logging.h>
+#include <comm/util/logging.h>
 #include <vt-lb/util/assert.h>
 
 #include <algorithm>
@@ -87,7 +87,7 @@ struct Clusterer {
    * @return The assigned cluster ID
    */
   int addCluster(std::vector<TaskType> const& tasks, int cluster_global_id = -1) {
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "Clusterer: addCluster: cluster_global_id={}, num_tasks={}\n",
       cluster_global_id, tasks.size()
@@ -105,7 +105,7 @@ struct Clusterer {
     cl.id = next_id;
     cl.members = tasks;
     for (const auto& t : tasks) {
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, normal,
         "Clusterer: addCluster: assigning task {} to cluster {}\n",
         t, next_id
@@ -387,7 +387,7 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     if (node_to_tasks_.empty()) return;
 
     if (rank0()) {
-      VT_LB_LOG(
+      COMM_LOG(
         Clusterer, normal, "LeidenCPMStandalone: start nodes={} edges={} gamma={:.4f}\n",
         node_to_tasks_.size(), edges_.size(), gamma_
       );
@@ -396,14 +396,14 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     int level = 0;
     while (level < max_levels_) {
       if (rank0()) {
-        VT_LB_LOG(Clusterer, normal, "LeidenCPMStandalone: level {}\n", level);
+        COMM_LOG(Clusterer, normal, "LeidenCPMStandalone: level {}\n", level);
       }
       bool moved_any = localMovingPhase();
       refinementPhase();
 
       bool coarsened = coarsenGraph();
       if (rank0()) {
-        VT_LB_LOG(
+        COMM_LOG(
           Clusterer, normal, "  after level {}: moved={} coarsened={} nodes={} edges={}\n",
           level,
           moved_any ? "yes" : "no",
@@ -418,9 +418,9 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     materializeClusters();
 
     if (rank0()) {
-      VT_LB_LOG(Clusterer, normal, "LeidenCPMStandalone: final communities={}\n", clusters_.size());
+      COMM_LOG(Clusterer, normal, "LeidenCPMStandalone: final communities={}\n", clusters_.size());
       for (auto const& c : clusters_) {
-        VT_LB_LOG(Clusterer, normal, "  community {} size={} load={:.2f}\n", c.id, c.members.size(), c.load);
+        COMM_LOG(Clusterer, normal, "  community {} size={} load={:.2f}\n", c.id, c.members.size(), c.load);
       }
     }
   }
@@ -579,7 +579,7 @@ private:
       }
 
       if (rank0()) {
-        VT_LB_LOG(Clusterer, normal, "  local pass {} moved={}\n", pass, moved ? "yes" : "no");
+        COMM_LOG(Clusterer, normal, "  local pass {} moved={}\n", pass, moved ? "yes" : "no");
       }
       if (!moved) break;
     }
@@ -645,7 +645,7 @@ private:
       ++splits;
     }
     if (rank0()) {
-      VT_LB_LOG(Clusterer, normal, "  refinement: splits={}\n", splits);
+      COMM_LOG(Clusterer, normal, "  refinement: splits={}\n", splits);
     }
   }
 

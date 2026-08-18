@@ -46,7 +46,7 @@
 
 #include <string>
 #include <optional>
-#include <vt-lb/comm/MPI/comm_mpi.h>
+#include <comm/comm/MPI/comm_mpi.h>
 
 namespace vt_lb::util {
 
@@ -57,7 +57,7 @@ namespace vt_lb::util {
  */
 struct YAML_LB
 {
-    void loadAndRun(std::string const& in_filename, vt_lb::comm::CommMPI& comm);
+    void loadAndRun(std::string const& in_filename, ::comm::CommMPI& comm);
     static std::optional<std::string> findRankFile(std::string const& dir, int rank);
 };
 

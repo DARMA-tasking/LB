@@ -47,8 +47,8 @@
 
 #include <nlohmann-lb/json.hpp>
 
-#include <fmt-lb/core.h>
-#include <fmt-lb/format.h>
+#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <fstream>
 #include <iostream>

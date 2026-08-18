@@ -48,7 +48,7 @@
 
 #include <cassert>
 
-#include <fmt-lb/format.h>
+#include <fmt/format.h>
 
 namespace vt_lb::input {
 

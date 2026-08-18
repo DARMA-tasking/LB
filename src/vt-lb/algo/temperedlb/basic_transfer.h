@@ -45,8 +45,8 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_BASIC_TRANSFER_H
 
 #include <vt-lb/model/types.h>
-#include <vt-lb/comm/comm_traits.h>
-#include <vt-lb/util/logging.h>
+#include <comm/comm/comm_traits.h>
+#include <comm/util/logging.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/algo/temperedlb/transfer_util.h>
@@ -125,7 +125,7 @@ struct BasicTransfer final : Transferer<CommT> {
           // Select a node using the CMF
           auto const selected_rank = TransferUtil::sampleFromCMF(deterministic, under, cmf, gen_sample_, seed_);
 
-          VT_LB_LOG(
+          COMM_LOG(
             LoadBalancer, verbose,
             "BasicTransfer: selected_rank={}, load_info_.size()={}\n",
             selected_rank, load_info_.size()
@@ -142,7 +142,7 @@ struct BasicTransfer final : Transferer<CommT> {
             cur_load, selected_load, obj_load, target_max_load
           );
 
-          VT_LB_LOG(
+          COMM_LOG(
             LoadBalancer, verbose,
             "BasicTransfer: under.size()={}, "
             "selected_rank={}, selected_load={}, obj_id={}, "
@@ -166,7 +166,7 @@ struct BasicTransfer final : Transferer<CommT> {
             // to match the object load units on the receiving end
             this->migrateTask(selected_rank, cur_tasks[obj_id]);
 
-            VT_LB_LOG(
+            COMM_LOG(
               LoadBalancer, verbose,
               "BasicTransfer: migrating obj_id={:x} of load={} to rank={}\n",
               obj_id, model::LoadType(obj_load), selected_rank
@@ -198,7 +198,7 @@ struct BasicTransfer final : Transferer<CommT> {
 
   /*virtual*/ bool acceptIncomingTask(model::Task const& task) override final {
     RankInfo& cur_load = load_info_.at(this->pd_.getRank());
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, verbose,
       "BasicTransfer::acceptIncomingTask: current load={} task load={} total load={} max={}\n",
       cur_load.load, task.getLoad(), cur_load.load + task.getLoad(), stats_.max

@@ -42,8 +42,7 @@ else()
   set(vt_backend_feature_enabled 1)
 endif()
 
-set(FMT_LIBRARY fmt)
-add_subdirectory(tpl/fmt)
+find_package(comm REQUIRED CONFIG)
 
 # json library always included in the build
 set(JSON_BuildTests OFF)
@@ -94,11 +93,6 @@ set(PROJECT_BIN_DIR      ${CMAKE_CURRENT_BINARY_DIR})
 set(PROJECT_BASE_DIR     ${CMAKE_CURRENT_SOURCE_DIR})
 set(PROJECT_LIB_DIR      ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(PROJECT_EXAMPLE_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/examples)
-
-configure_file(
-  ${PROJECT_BASE_DIR}/src/vt-lb/config/cmake_config.h.in
-  ${PROJECT_BIN_DIR}/src/vt-lb/config/cmake_config.h @ONLY
-)
 
 add_subdirectory(src)
 

@@ -44,7 +44,7 @@
 #include <vt-lb/util/yaml_lb.h>
 
 int main(int argc, char** argv) {
-  auto comm = vt_lb::comm::CommMPI();
+  auto comm = comm::CommMPI();
   comm.init(argc, argv);
   if (argc < 2) {
     if (comm.getRank() == 0) {

@@ -123,7 +123,7 @@ endfunction()
 
 set(
   TEST_HEADER_FILES
-  ${PROJECT_TEST_UNIT_DIR}/test_harness.h
+  ${PROJECT_TEST_UNIT_DIR}/test_parallel_harness.h
 )
 
 set(

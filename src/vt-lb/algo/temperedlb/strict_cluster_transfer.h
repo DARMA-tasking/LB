@@ -147,11 +147,6 @@ struct StrictClusterTransfer {
     bool waiting_for_transaction = false;
   };
 
-  /// Memory available on a rank; we assume all ranks have equal memory
-  double rankAvailableMemory() const {
-    return pd_.getRankMaxMemoryAvailable();
-  }
-
   Candidate evaluateSwapCandidate(
     int this_rank,
     RankClusterInfo const& this_rank_info,
@@ -183,8 +178,7 @@ struct StrictClusterTransfer {
     if (
       config_.hasMemoryInfo() and
       not WorkModelCalculator::checkMemoryFitUpdate(
-        config_, this_rank_info, to_add_this, to_remove_this,
-        rankAvailableMemory()
+        config_, this_rank_info, to_add_this, to_remove_this
       )
     ) {
       c.improvement = -std::numeric_limits<double>::infinity();
@@ -194,8 +188,7 @@ struct StrictClusterTransfer {
     if (
       config_.hasMemoryInfo() and
       not WorkModelCalculator::checkMemoryFitUpdate(
-        config_, dst_info, to_add_dst, to_remove_dst,
-        rankAvailableMemory()
+        config_, dst_info, to_add_dst, to_remove_dst
       )
     ) {
       c.improvement = -std::numeric_limits<double>::infinity();
@@ -696,8 +689,7 @@ struct StrictClusterTransfer {
     if (
       config_.hasMemoryInfo() &&
       !WorkModelCalculator::checkMemoryFitUpdate(
-        config_, this_rank_info, give_cluster_gid_summary, recv_cluster_summary,
-        rankAvailableMemory()
+        config_, this_rank_info, give_cluster_gid_summary, recv_cluster_summary
       )
     ) {
       return false;

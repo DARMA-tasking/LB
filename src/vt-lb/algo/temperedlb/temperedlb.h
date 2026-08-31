@@ -352,6 +352,7 @@ struct TemperedLB final : baselb::BaseLB {
       auto rank_info = RankClusterInfo{
         local_summary,
         this->getPhaseData().getRankFootprintBytes(),
+        this->getPhaseData().getRankMaxMemoryAvailable(),
         config_.work_model_.rank_alpha,
         work_breakdown,
         this->getPhaseData().getSharedBlockIdsHomed()

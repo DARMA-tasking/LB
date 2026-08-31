@@ -451,8 +451,7 @@ namespace vt_lb::algo::temperedlb {
   Configuration const& config,
   RankClusterInfo rank_cluster_info,
   TaskClusterSummaryInfo to_add,
-  TaskClusterSummaryInfo to_remove,
-  double rank_available_memory
+  TaskClusterSummaryInfo to_remove
 ) {
   if (!config.hasMemoryInfo()) {
     return true;
@@ -520,7 +519,7 @@ namespace vt_lb::algo::temperedlb {
     }
   }
 
-  return updated_usage <= rank_available_memory;
+  return updated_usage <= rank_cluster_info.rank_available_memory;
 }
 
 } /* end namespace vt_lb::algo::temperedlb */

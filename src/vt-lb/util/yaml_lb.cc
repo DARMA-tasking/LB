@@ -79,6 +79,7 @@ void YAML_LB::loadAndRun(std::string const& in_filename, ::comm::CommMPI& comm) 
   phase_data->setRank(comm.getRank());
 
   auto lb_config = yaml_reader.parseLBConfig(comm.numRanks());
+  phase_data->setRankMaxMemoryAvailable(lb_config.work_model_.rank_max_memory_bytes);
 
   std::printf("%d: Running algorithm %d on '%s' (phase=%d)\n", rank, static_cast<int>(algo),
               maybe_file->c_str(), phase_id);

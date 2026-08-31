@@ -233,6 +233,9 @@ vt_lb::algo::temperedlb::Configuration YAMLReader::parseLBConfig(int num_ranks) 
         if (mem_info["has_shared_block_mem_info"]) {
           config.work_model_.has_shared_block_memory_info = get_value<bool>(mem_info, "has_shared_block_mem_info");
         }
+        if (mem_info["rank_max_memory_bytes"]) {
+          config.work_model_.rank_max_memory_bytes = get_value<double>(mem_info, "rank_max_memory_bytes");
+        }
       }
     }
 

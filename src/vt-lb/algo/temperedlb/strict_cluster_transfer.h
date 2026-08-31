@@ -421,6 +421,11 @@ struct StrictClusterTransfer {
     );
   }
 
+  /// This rank's incrementally-maintained cluster info
+  RankClusterInfo const& thisRankInfo() const {
+    return cluster_info_.at(comm_.getRank());
+  }
+
   void migrateCluster(
     int const rank,
     LockToken token,
@@ -631,28 +636,32 @@ struct StrictClusterTransfer {
     int cluster_gid,
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
-    auto iter = cluster_info_[this->comm_.getRank()].cluster_summaries.find(cluster_gid);
+    auto& info = cluster_info_[this->comm_.getRank()];
+    auto iter = info.cluster_summaries.find(cluster_gid);
     vt_lb_assert(
-      iter != cluster_info_[this->comm_.getRank()].cluster_summaries.end(),
+      iter != info.cluster_summaries.end(),
       "StrictClusterTransfer::outgoingCluster: cluster_gid not found in local summaries"
     );
-    cluster_info_[this->comm_.getRank()].cluster_summaries.erase(iter);
-    cluster_info_[this->comm_.getRank()].rank_breakdown =
-      WorkModelCalculator::computeWorkUpdateSummary(
-        cluster_info_[this->comm_.getRank()], {}, cluster_gid_summary
-      );
+    // Must be computed against the pre-swap summaries: the calculator reclassifies
+    // edges and shared blocks by comparing local membership before and after
+    auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      info, {}, cluster_gid_summary
+    );
+    info.cluster_summaries.erase(iter);
+    info.rank_breakdown = new_breakdown;
   }
 
   void incomingCluster(
     int cluster_gid,
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
-    cluster_info_[this->comm_.getRank()].cluster_summaries[cluster_gid] =
-      cluster_gid_summary;
-    cluster_info_[this->comm_.getRank()].rank_breakdown =
-      WorkModelCalculator::computeWorkUpdateSummary(
-        cluster_info_[this->comm_.getRank()], cluster_gid_summary, {}
-      );
+    auto& info = cluster_info_[this->comm_.getRank()];
+    // Must be computed against the pre-swap summaries; see outgoingCluster
+    auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      info, cluster_gid_summary, {}
+    );
+    info.cluster_summaries[cluster_gid] = cluster_gid_summary;
+    info.rank_breakdown = new_breakdown;
   }
 
   bool acceptIncomingClusterSwap(

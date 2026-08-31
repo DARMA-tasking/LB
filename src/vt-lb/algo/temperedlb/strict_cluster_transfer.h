@@ -242,22 +242,27 @@ struct StrictClusterTransfer {
       config_.work_model_, dst_info.rank_breakdown
     );
 
-    for (auto const& [give_gid, _] : local_cluster_summaries) {
+    auto consider = [&](int give_gid, int recv_gid) {
       auto candidate = evaluateSwapCandidate(
-        this_rank, this_rank_info, dst_rank, dst_info, before_work, give_gid, -1
+        this_rank, this_rank_info, dst_rank, dst_info, before_work, give_gid,
+        recv_gid
       );
       if (candidate.improvement > best.improvement) {
         best = std::move(candidate);
+      }
+    };
+
+    // Give a cluster away, either outright or in exchange for one of theirs
+    for (auto const& [give_gid, give_summary] : local_cluster_summaries) {
+      consider(give_gid, -1);
+      for (auto const& [recv_gid, recv_summary] : dst_info.cluster_summaries) {
+        consider(give_gid, recv_gid);
       }
     }
 
-    for (auto const& [recv_gid, _] : dst_info.cluster_summaries) {
-      auto candidate = evaluateSwapCandidate(
-        this_rank, this_rank_info, dst_rank, dst_info, before_work, -1, recv_gid
-      );
-      if (candidate.improvement > best.improvement) {
-        best = std::move(candidate);
-      }
+    // Take a cluster without giving one in return
+    for (auto const& [recv_gid, recv_summary] : dst_info.cluster_summaries) {
+      consider(-1, recv_gid);
     }
 
     return best;

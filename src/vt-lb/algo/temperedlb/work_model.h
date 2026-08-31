@@ -82,6 +82,8 @@ struct WorkModel {
   bool has_task_footprint_memory_info = true;
   /// @brief Has shared block memory info
   bool has_shared_block_memory_info = true;
+  /// @brief Memory a rank may use, in bytes; 0 means unconstrained
+  double rank_max_memory_bytes = 0.0;
 
   /**
    * @brief Apply the work formula to compute the work of a task

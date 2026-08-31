@@ -317,14 +317,49 @@ std::unique_ptr<model::PhaseData> JSONReader::parse(int phase) {
     return e.id.has_value() ? e.id.value() : e.seq_id.value();
   };
 
+  // Optional numeric field from a task's "user_defined" block
+  auto get_user_defined = [](json const& ud, char const* key) -> std::optional<double> {
+    if (ud.is_object() and ud.contains(key) and ud[key].is_number()) {
+      return ud[key].get<double>();
+    }
+    return std::nullopt;
+  };
+
   // Map parsed tasks into PhaseData
   for (auto const& td : tasks) {
-    model::TaskMemory memory{};
+    auto const& ud = td.user_defined;
+
+    model::TaskMemory memory{
+      get_user_defined(ud, "task_working_bytes").value_or(0.0),
+      get_user_defined(ud, "task_footprint_bytes").value_or(0.0),
+      get_user_defined(ud, "task_serialized_bytes").value_or(0.0)
+    };
+
     // simple fallback if id is not available to seq_id
     auto id = get_id(td.entity);
-    pd->addTask(
-      model::Task(id, td.entity.home.value(), td.node, td.entity.migratable, memory, td.time)
-    );
+    auto const home = td.entity.home.value();
+    model::Task task(id, home, td.node, td.entity.migratable, memory, td.time);
+
+    // A shared block is homed on the rank its tasks are homed on, and is sized
+    // once regardless of how many tasks reference it
+    if (auto const shared_id = get_user_defined(ud, "shared_id"); shared_id) {
+      auto const block_id = static_cast<model::SharedBlockType>(*shared_id);
+      task.addSharedBlock(block_id);
+      if (not pd->hasSharedBlock(block_id)) {
+        pd->addSharedBlock(
+          model::SharedBlock{
+            block_id, get_user_defined(ud, "shared_bytes").value_or(0.0), home
+          }
+        );
+      }
+    }
+
+    // Constant across a rank's tasks, so the last one seen wins
+    if (auto const rank_bytes = get_user_defined(ud, "rank_working_bytes"); rank_bytes) {
+      pd->setRankFootprintBytes(*rank_bytes);
+    }
+
+    pd->addTask(task);
   }
 
   // Map communications into PhaseData

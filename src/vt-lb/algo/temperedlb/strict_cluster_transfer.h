@@ -579,7 +579,10 @@ struct StrictClusterTransfer {
       }
     }
 
-    incomingCluster(cluster_gid, cluster_gid_summary);
+    // A receive-only swap sends nothing, so there is nothing to restore
+    if (cluster_gid != -1) {
+      incomingCluster(cluster_gid, cluster_gid_summary);
+    }
     transactionComplete(token, TransactionStatus::Rejected);
   }
 
@@ -655,6 +658,10 @@ struct StrictClusterTransfer {
     int cluster_gid,
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
+    vt_lb_assert(
+      cluster_gid != -1,
+      "StrictClusterTransfer::incomingCluster: cluster_gid must be a real cluster"
+    );
     auto& info = cluster_info_[this->comm_.getRank()];
     // Must be computed against the pre-swap summaries; see outgoingCluster
     auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(

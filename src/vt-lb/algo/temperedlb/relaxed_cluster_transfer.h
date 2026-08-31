@@ -535,8 +535,10 @@ struct RelaxedClusterTransfer {
       }
     }
 
-     // Add the cluster to the bookkeeping
-    incomingCluster(cluster_gid, cluster_gid_summary);
+    // A receive-only swap sends nothing, so there is nothing to restore
+    if (cluster_gid != -1) {
+      incomingCluster(cluster_gid, cluster_gid_summary);
+    }
 
     // Cluster is sent back; notify that the transaction is complete
     transactionComplete(TransactionStatus::Rejected);
@@ -578,6 +580,10 @@ struct RelaxedClusterTransfer {
       LoadBalancer, normal,
       "RelaxedClusterTransfer::incomingCluster adding cluster_gid={}\n",
       cluster_gid
+    );
+    vt_lb_assert(
+      cluster_gid != -1,
+      "RelaxedClusterTransfer::incomingCluster: cluster_gid must be a real cluster"
     );
     auto& info = cluster_info_[this->comm_.getRank()];
     // Must be computed against the pre-swap summaries; see outgoingCluster

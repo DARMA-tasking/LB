@@ -147,8 +147,7 @@ struct RelaxedClusterTransfer {
       // Check memory fit on this rank
       if (config_.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
-          config_, this_rank_info, to_add_this, to_remove_this,
-          this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
+          config_, this_rank_info, to_add_this, to_remove_this
         );
         if (!fits) {
           c.improvement = -std::numeric_limits<double>::infinity();
@@ -159,8 +158,7 @@ struct RelaxedClusterTransfer {
       // Check memory fit on destination rank
       if (config_.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
-          config_, dst_info, to_add_dst, to_remove_dst,
-          this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
+          config_, dst_info, to_add_dst, to_remove_dst
         );
         if (!fits) {
           c.improvement = -std::numeric_limits<double>::infinity();

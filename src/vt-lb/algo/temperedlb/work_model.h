@@ -248,7 +248,6 @@ struct WorkModelCalculator {
    * @param rank_cluster_info The rank cluster info
    * @param to_add The cluster of tasks to add
    * @param to_remove The cluster of tasks to remove
-   * @param rank_available_memory The available memory on the rank
    *
    * @return True if it fits, false otherwise
    */
@@ -256,8 +255,7 @@ struct WorkModelCalculator {
     Configuration const& config,
     RankClusterInfo rank_cluster_info,
     TaskClusterSummaryInfo to_add,
-    TaskClusterSummaryInfo to_remove,
-    double rank_available_memory
+    TaskClusterSummaryInfo to_remove
   );
 
   /**

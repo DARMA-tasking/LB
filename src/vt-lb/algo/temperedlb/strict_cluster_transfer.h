@@ -218,21 +218,18 @@ struct StrictClusterTransfer {
     return c;
   }
 
-  Candidate findBestSwapCandidateForTarget(
-    int dst_rank,
-    RankClusterInfo const& dst_info
+  /**
+   * @brief Visit every give/take combination for one destination
+   *
+   * Gives are considered before takes so an overloaded rank sheds work first.
+   * The visitor returns false to stop the walk early.
+   */
+  template <typename VisitorT>
+  void forEachSwapCandidate(
+    int dst_rank, RankClusterInfo const& dst_info, VisitorT&& visit
   ) const {
-    Candidate best{};
-    best.dst_rank = dst_rank;
-    best.improvement = -std::numeric_limits<double>::infinity();
-
     int const this_rank = comm_.getRank();
-    if (dst_rank <= this_rank) {
-      return best;
-    }
-
     RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
-    auto const& local_cluster_summaries = this_rank_info.cluster_summaries;
 
     std::unordered_map<int, double> before_work;
     before_work[this_rank] = WorkModelCalculator::computeWork(
@@ -242,48 +239,105 @@ struct StrictClusterTransfer {
       config_.work_model_, dst_info.rank_breakdown
     );
 
-    auto consider = [&](int give_gid, int recv_gid) {
-      auto candidate = evaluateSwapCandidate(
+    auto evaluate = [&](int give_gid, int recv_gid) {
+      return evaluateSwapCandidate(
         this_rank, this_rank_info, dst_rank, dst_info, before_work, give_gid,
         recv_gid
       );
+    };
+
+    for (auto const& [give_gid, give_summary] : this_rank_info.cluster_summaries) {
+      if (not visit(evaluate(give_gid, -1))) {
+        return;
+      }
+      for (auto const& [recv_gid, recv_summary] : dst_info.cluster_summaries) {
+        if (not visit(evaluate(give_gid, recv_gid))) {
+          return;
+        }
+      }
+    }
+
+    for (auto const& [recv_gid, recv_summary] : dst_info.cluster_summaries) {
+      if (not visit(evaluate(-1, recv_gid))) {
+        return;
+      }
+    }
+  }
+
+  /**
+   * @brief The best combination for one destination
+   *
+   * Exhaustive, so it is only run once the destination is locked and its info
+   * is known to be up to date.
+   */
+  Candidate findBestSwapCandidateForTarget(
+    int dst_rank,
+    RankClusterInfo const& dst_info
+  ) const {
+    Candidate best{};
+    best.dst_rank = dst_rank;
+    best.improvement = -std::numeric_limits<double>::infinity();
+
+    if (dst_rank <= comm_.getRank()) {
+      return best;
+    }
+
+    forEachSwapCandidate(dst_rank, dst_info, [&best](Candidate candidate) {
       if (candidate.improvement > best.improvement) {
         best = std::move(candidate);
       }
-    };
-
-    // Give a cluster away, either outright or in exchange for one of theirs
-    for (auto const& [give_gid, give_summary] : local_cluster_summaries) {
-      consider(give_gid, -1);
-      for (auto const& [recv_gid, recv_summary] : dst_info.cluster_summaries) {
-        consider(give_gid, recv_gid);
-      }
-    }
-
-    // Take a cluster without giving one in return
-    for (auto const& [recv_gid, recv_summary] : dst_info.cluster_summaries) {
-      consider(-1, recv_gid);
-    }
+      return true;
+    });
 
     return best;
   }
 
-  Candidate findBestSwapCandidate() {
-    int this_rank = this->comm_.getRank();
+  /**
+   * @brief The first improving combination for one destination
+   *
+   * A cheap screen over possibly out-of-date info, used only to decide which
+   * rank is worth locking. The improvement it reports is an approximation that
+   * serves as the lock priority, not a value we commit to.
+   */
+  Candidate screenSwapCandidateForTarget(
+    int dst_rank,
+    RankClusterInfo const& dst_info
+  ) const {
+    Candidate found{};
+    found.dst_rank = dst_rank;
+    found.improvement = -std::numeric_limits<double>::infinity();
 
-    std::vector<int> dest_ranks;
-    dest_ranks.reserve(cluster_info_.size());
-    for (auto const& [rank, _] : cluster_info_) {
-      if (rank > this_rank) {
-        dest_ranks.push_back(rank);
-      }
+    if (dst_rank <= comm_.getRank()) {
+      return found;
     }
+
+    forEachSwapCandidate(dst_rank, dst_info, [&found](Candidate candidate) {
+      if (candidate.improvement > 0.0) {
+        found = std::move(candidate);
+        return false;
+      }
+      return true;
+    });
+
+    return found;
+  }
+
+  /**
+   * @brief Pick which destination to lock next
+   *
+   * Screens each candidate destination and keeps the most promising, without
+   * exhaustively costing any of them.
+   */
+  Candidate findSwapTarget() {
+    int const this_rank = this->comm_.getRank();
+
     Candidate best{};
     best.improvement = -std::numeric_limits<double>::infinity();
-    for (int dst_rank : dest_ranks) {
-      auto candidate = findBestSwapCandidateForTarget(
-        dst_rank, cluster_info_.at(dst_rank)
-      );
+    for (auto const& [dst_rank, dst_info] : cluster_info_) {
+      if (dst_rank <= this_rank) {
+        continue;
+      }
+      auto candidate = screenSwapCandidateForTarget(dst_rank, dst_info);
       if (candidate.improvement > best.improvement) {
         best = std::move(candidate);
       }
@@ -296,7 +350,7 @@ struct StrictClusterTransfer {
 
     VT_LB_LOG(
       LoadBalancer, normal,
-      "StrictClusterTransfer: best candidate dst_rank={} give_gid={} recv_gid={} "
+      "StrictClusterTransfer: screened candidate dst_rank={} give_gid={} recv_gid={} "
       "this_work_before={:.2f} this_work_after={:.2f} dst_work_before={:.2f} "
       "dst_work_after={:.2f} improvement={:.2f}\n",
       best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
@@ -313,7 +367,7 @@ struct StrictClusterTransfer {
     }
 
     while (true) {
-      auto best = findBestSwapCandidate();
+      auto best = findSwapTarget();
       if (best.improvement <= 0.0) {
         break;
       }

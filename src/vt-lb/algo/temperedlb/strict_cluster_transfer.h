@@ -362,10 +362,10 @@ struct StrictClusterTransfer {
   }
 
   void run() {
-    while (comm_.poll()) {
-      tryGrantNextLock();
-    }
-
+    // Drive our own transfers first. Lock requests from other ranks are served
+    // by the handlers as messages arrive during the waits below, so there is no
+    // leading drain here: polling to quiescence before doing any work would
+    // retire the termination detector and strand every later request.
     while (true) {
       auto best = findSwapTarget();
       if (best.improvement <= 0.0) {
@@ -383,8 +383,24 @@ struct StrictClusterTransfer {
       while (active_lock_request_.has_value() and comm_.poll()) {
         tryGrantNextLock();
       }
+
+      // Everyone else finished before our request was answered
+      if (active_lock_request_.has_value()) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "StrictClusterTransfer: quiesced with a lock request outstanding\n"
+        );
+        break;
+      }
+
+      // A rejection means the destination's live state did not match what we
+      // proposed against, so stop rather than re-deriving the same candidate
+      if (transaction_status_ == TransactionStatus::Rejected) {
+        break;
+      }
     }
 
+    // Keep serving other ranks until everyone is done
     while (this->comm_.poll()) {
       tryGrantNextLock();
     }
@@ -398,6 +414,7 @@ struct StrictClusterTransfer {
 
     LockToken token{comm_.getRank(), next_lock_sequence_++};
     active_lock_request_ = ActiveLockRequest{token, dst_rank, true, false};
+    transaction_status_ = TransactionStatus::Pending;
     handle_[dst_rank].template send<&ThisType::requestLock>(token, priority);
   }
 
@@ -419,6 +436,11 @@ struct StrictClusterTransfer {
       handle_[locked_rank].template send<&ThisType::releaseLock>(token);
       return;
     }
+
+    // The locked rank's own view supersedes whatever we had propagated, so
+    // record it before deciding: otherwise a fruitless lock is requested again
+    // on the next pass and run() never makes progress
+    cluster_info_[locked_rank] = locked_rank_info;
 
     auto best = findBestSwapCandidateForTarget(locked_rank, locked_rank_info);
     if (best.improvement <= 0.0) {
@@ -480,9 +502,14 @@ struct StrictClusterTransfer {
     );
   }
 
+  /// A rank's cluster info as currently known here
+  RankClusterInfo const& rankInfo(int rank) const {
+    return cluster_info_.at(rank);
+  }
+
   /// This rank's incrementally-maintained cluster info
   RankClusterInfo const& thisRankInfo() const {
-    return cluster_info_.at(comm_.getRank());
+    return rankInfo(comm_.getRank());
   }
 
   void migrateCluster(

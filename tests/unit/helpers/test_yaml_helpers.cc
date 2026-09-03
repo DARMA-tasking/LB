@@ -74,6 +74,7 @@ configuration:
 
   transfer_decisions:
     criterion: Grapevine
+    cluster_transfer_strategy: StrictSharedBlock
     obj_ordering: Arbitrary
     cmf_type: Original
 
@@ -108,6 +109,10 @@ configuration:
   EXPECT_EQ(lb_config.deterministic_, false);
   EXPECT_EQ(lb_config.seed_, 42);
   EXPECT_EQ(lb_config.criterion_, vt_lb::algo::temperedlb::CriterionEnum::Grapevine);
+  EXPECT_EQ(
+    lb_config.cluster_transfer_strategy_,
+    vt_lb::algo::temperedlb::ClusterTransferStrategy::StrictSharedBlock
+  );
   EXPECT_EQ(lb_config.obj_ordering_, vt_lb::algo::temperedlb::TransferUtil::ObjectOrder::Arbitrary);
   EXPECT_EQ(lb_config.cmf_type_, vt_lb::algo::temperedlb::TransferUtil::CMFType::Original);
   EXPECT_DOUBLE_EQ(lb_config.work_model_.rank_alpha, 2.3);
@@ -148,6 +153,9 @@ TEST_F(TestYamlHelpers, test_read_yaml_config_incomplete) {
   EXPECT_EQ(lb_config.deterministic_, base_config.deterministic_);
   EXPECT_EQ(lb_config.seed_, base_config.seed_);
   EXPECT_EQ(lb_config.criterion_, base_config.criterion_);
+  EXPECT_EQ(
+    lb_config.cluster_transfer_strategy_, base_config.cluster_transfer_strategy_
+  );
   EXPECT_EQ(lb_config.obj_ordering_, base_config.obj_ordering_);
   EXPECT_EQ(lb_config.cmf_type_, base_config.cmf_type_);
   EXPECT_DOUBLE_EQ(lb_config.work_model_.rank_alpha, 2.3);

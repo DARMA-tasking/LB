@@ -168,7 +168,7 @@ struct RelaxedClusterTransfer {
 
       // Compute post-swap work on this rank
       c.this_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-        this_rank_info, to_add_this, to_remove_this
+        config_, this_rank_info, to_add_this, to_remove_this
       );
       c.this_work_after = WorkModelCalculator::computeWork(
         config_.work_model_, c.this_work_breakdown_after
@@ -176,7 +176,7 @@ struct RelaxedClusterTransfer {
 
       // Compute post-swap work on destination rank
       c.dst_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-        dst_info, to_add_dst, to_remove_dst
+        config_, dst_info, to_add_dst, to_remove_dst
       );
       c.dst_work_after = WorkModelCalculator::computeWork(
         config_.work_model_, c.dst_work_breakdown_after
@@ -566,6 +566,7 @@ struct RelaxedClusterTransfer {
     // Must be computed against the pre-swap summaries: the calculator reclassifies
     // edges and shared blocks by comparing local membership before and after
     auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
       info, {}, cluster_gid_summary
     );
     info.cluster_summaries.erase(iter);
@@ -588,6 +589,7 @@ struct RelaxedClusterTransfer {
     auto& info = cluster_info_[this->comm_.getRank()];
     // Must be computed against the pre-swap summaries; see outgoingCluster
     auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
       info, cluster_gid_summary, {}
     );
     info.cluster_summaries[cluster_gid] = cluster_gid_summary;
@@ -609,17 +611,6 @@ struct RelaxedClusterTransfer {
     auto current_work = WorkModelCalculator::computeWork(
       config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
     );
-    // auto recv_cluster_summary =
-    //   contains_cluster ?
-    //   cluster_info_[this->comm_.getRank()].cluster_summaries.at(recv_cluster_gid) :
-    //   TaskClusterSummaryInfo{};
-    // auto new_bd = WorkModelCalculator::computeWorkUpdateSummary(
-    //   cluster_info_[this->comm_.getRank()], give_cluster_gid_summary, recv_cluster_summary
-    // );
-    // auto new_work = WorkModelCalculator::computeWork(
-    //   config_.work_model_, new_bd
-    // );
-
 
     VT_LB_LOG(
       LoadBalancer, normal,

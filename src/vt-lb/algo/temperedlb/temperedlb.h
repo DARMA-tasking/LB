@@ -66,6 +66,7 @@
 #include <vt-lb/algo/temperedlb/transfer.h>
 #include <vt-lb/algo/temperedlb/basic_transfer.h>
 #include <vt-lb/algo/temperedlb/relaxed_cluster_transfer.h>
+#include <vt-lb/algo/temperedlb/strict_cluster_transfer.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
 #include <vt-lb/algo/temperedlb/graph_edge_resolver.h>
 
@@ -313,8 +314,7 @@ struct TemperedLB final : baselb::BaseLB {
       "temperedlb_full_graph_trial" + std::to_string(trial) + "_iter" + std::to_string(iter)
     );
 
-    auto& wm = config_.work_model_;
-    if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
+    if (not config_.usesClusterTransfer()) {
       auto rank_info = RankInfo{total_work, config_.work_model_.rank_alpha};
       auto info = runInformationPropagation(rank_info);
       VT_LB_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
@@ -365,10 +365,31 @@ struct TemperedLB final : baselb::BaseLB {
         info.size()
       );
 
-      RelaxedClusterTransfer<CommT> transfer(
-        comm_, *phase_data_, config_, clusterer_.get(), global_max_clusters_, info, work_stats
-      );
-      transfer.run();
+      if (
+        config_.cluster_transfer_strategy_ ==
+        ClusterTransferStrategy::StrictSharedBlock
+      ) {
+        vt_lb_assert(
+          config_.cluster_based_on_shared_blocks_,
+          "StrictSharedBlock transfer requires shared-block clustering"
+        );
+        vt_lb_assert(
+          config_.hasMemoryInfo(),
+          "StrictSharedBlock transfer requires memory information"
+        );
+
+        StrictClusterTransfer<CommT> transfer(
+          comm_, *phase_data_, config_, clusterer_.get(), global_max_clusters_,
+          info, work_stats
+        );
+        transfer.run();
+      } else {
+        RelaxedClusterTransfer<CommT> transfer(
+          comm_, *phase_data_, config_, clusterer_.get(), global_max_clusters_,
+          info, work_stats
+        );
+        transfer.run();
+      }
     }
   }
 

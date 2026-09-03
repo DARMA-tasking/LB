@@ -43,16 +43,31 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
+#include <filesystem>
+#include <cstdint>
 #include <utility>
 #include <string>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+#include <limits>
+#include <algorithm>
 
 #include "test_parallel_harness.h"
 #include "test_helpers.h"
 #include "graph_helpers.h"
 
+#include <nlohmann-lb/json.hpp>
+#include <fmt-lb/format.h>
+
 #include <vt-lb/algo/temperedlb/temperedlb.h>
 
+#include "temperedlb/lb_run_helpers.h"
+#include "temperedlb/toy_memory_run.h"
+
 namespace vt_lb::tests::unit {
+
 
 // Wrapper that zips a communicator type with a single integer seed
 template <typename CommT, int Seed>
@@ -60,48 +75,6 @@ struct CommSeedPack {
   using Comm = CommT;
   static constexpr int seed = Seed;
 };
-
-// Helper: build TemperedLB, compute initial and final global distributions
-template <typename CommT>
-struct LbRunSummary {
-  std::unordered_map<int, std::vector<int>> initial;
-  std::unordered_map<int, std::vector<int>> final;
-};
-
-template <typename CommT>
-LbRunSummary<CommT> runTemperedLB(
-  CommT& comm,
-  vt_lb::algo::temperedlb::Configuration const& config,
-  vt_lb::model::PhaseData const& pd
-) {
-  vt_lb::algo::temperedlb::TemperedLB<CommT> lb(comm, config);
-  lb.inputData(std::make_unique<vt_lb::model::PhaseData>(pd));
-
-  auto initial_global = lb.getGlobalDistribution(pd.getTaskIds());
-  std::unordered_map<int, std::vector<int>> initial_int;
-  for (auto const& [r, vec] : initial_global) {
-    auto& out = initial_int[r];
-    out.reserve(vec.size());
-    for (auto tid : vec) {
-      out.push_back(static_cast<int>(tid));
-    }
-  }
-
-  auto local_after = lb.run();
-  (void)local_after; // not needed for summary
-
-  auto final_global = lb.getGlobalDistribution(local_after);
-  std::unordered_map<int, std::vector<int>> final_int;
-  for (auto const& [r, vec] : final_global) {
-    auto& out = final_int[r];
-    out.reserve(vec.size());
-    for (auto tid : vec) {
-      out.push_back(static_cast<int>(tid));
-    }
-  }
-
-  return {std::move(initial_int), std::move(final_int)};
-}
 
 // Typed fixture over zipped communicator+seeds; communicator type remains implicit
 template <typename Pack>
@@ -300,8 +273,152 @@ TYPED_TEST_P(TestTemperedLB, test_significant_load_imbalance_reduction) {
   // );
 };
 
+TYPED_TEST_P(TestTemperedLB, test_strict_shared_block_transfer_preserves_tasks) {
+	auto num_ranks = this->comm.numRanks();
+	auto rank = this->comm.getRank();
+
+  SET_MIN_NUM_NODES_CONSTRAINT(2);
+
+  int seed = TypeParam::seed;
+  vt_lb::model::PhaseData pd(rank);
+
+  bool uniform_shared_block_count = false;
+  bool uniform_task_count = false;
+  bool include_comm = false;
+  int seed_same_across_ranks = seed;
+  int seed_diff_each_rank = 24601 * rank + 19;
+
+  generateGraphWithSharedBlocks(
+    pd, num_ranks, uniform_shared_block_count, uniform_task_count,
+    include_comm, seed_same_across_ranks, seed_diff_each_rank
+  );
+
+  EXPECT_GT(pd.getSharedBlocksMap().size(), 0);
+
+  if (rank == 0) {
+    for (auto tid : pd.getTaskIds()) {
+      auto task = pd.getTask(tid);
+      task->setLoad(task->getLoad() * 25.0);
+    }
+  }
+
+  vt_lb::algo::temperedlb::Configuration config(num_ranks);
+  config.cluster_based_on_shared_blocks_ = true;
+  config.cluster_transfer_strategy_ =
+    vt_lb::algo::temperedlb::ClusterTransferStrategy::StrictSharedBlock;
+  // Charges ~10 work units per off-home shared block, comparable to task
+  // loads of 5-120. At delta=1.0 the 1.6 GB block dwarfs every load and
+  // no transfer ever looks beneficial.
+  config.work_model_.delta = 6.25e-9;
+
+  auto const memory_usage =
+    vt_lb::algo::temperedlb::WorkModelCalculator::computeMemoryUsage(
+      config, pd
+    ).current_memory_usage;
+  pd.setRankMaxMemoryAvailable(memory_usage + 1024.0);
+
+  auto summary = runTemperedLB(this->comm, config, pd);
+
+  auto const& initial_global = summary.initial;
+  std::size_t initial_total = 0;
+  std::unordered_set<int> initial_task_set;
+  for (auto const& [r, vec] : initial_global) {
+    (void)r;
+    initial_total += vec.size();
+    for (auto tid : vec) {
+      initial_task_set.insert(tid);
+    }
+  }
+
+  auto const& final_global = summary.final;
+  std::size_t final_total = 0;
+  std::unordered_set<int> final_task_set;
+  for (auto const& [r, vec] : final_global) {
+    (void)r;
+    final_total += vec.size();
+    for (auto tid : vec) {
+      final_task_set.insert(tid);
+    }
+  }
+
+  EXPECT_EQ(final_total, initial_total);
+  EXPECT_EQ(final_task_set, initial_task_set);
+}
+
+// Charging ~10 work units per off-home 1.6 GB block puts locality on the same
+// scale as the task loads of 5-120. At delta=1.0 the block dwarfs every load
+// and no transfer ever looks beneficial.
+double constexpr toy_memory_aware_delta = 6.25e-9;
+
+void reportToyMemoryOutcome(char const* label, ToyMemoryOutcome const& out) {
+  fmt::print(
+    "Toy memory strict ({}): initial_max={}, final_max={}, "
+    "exact_optimal_max={}, whole_block_optimal_max={}, gap_to_exact={}, "
+    "gap_to_whole_block={}\n",
+    label, out.initial_max, out.final_max, out.exact_optimal_max,
+    out.whole_block_optimal_max, out.final_max - out.exact_optimal_max,
+    out.final_max - out.whole_block_optimal_max
+  );
+}
+
+void checkToyMemoryInvariants(ToyMemoryOutcome const& out) {
+  EXPECT_LE(out.local_shared_bytes_after, toy_rank_memory_limit);
+  EXPECT_LE(
+    out.local_shared_blocks_after,
+    static_cast<std::size_t>(toy_max_shared_blocks_per_rank)
+  );
+  EXPECT_NEAR(out.exact_optimal_max, 87.5, 1e-9);
+  EXPECT_NEAR(out.whole_block_optimal_max, 120.0, 1e-9);
+  EXPECT_LT(out.final_max, out.initial_max);
+}
+
+// Load only: the memory budget still binds, but off-home blocks cost nothing,
+// so the balancer is free to place clusters purely by load.
+TYPED_TEST_P(TestTemperedLB, test_strict_shared_block_transfer_toy_problem_load_only) {
+  SET_NUM_NODES_CONSTRAINT(4);
+
+  if constexpr (TypeParam::seed != 1) {
+    GTEST_SKIP() << "Toy memory test only runs for the canonical seed";
+  }
+
+  auto const out = runToyMemoryProblem(this->comm, 0.0);
+
+  if (this->comm.getRank() == 0) {
+    reportToyMemoryOutcome("load only", out);
+  }
+
+  checkToyMemoryInvariants(out);
+  EXPECT_LE(out.final_max, out.whole_block_optimal_max + 5.0)
+    << "Load-only strict transfer should get close to the constrained optimum";
+}
+
+// Memory aware: off-home blocks are charged, so the balancer trades load
+// imbalance against locality.
+TYPED_TEST_P(TestTemperedLB, test_strict_shared_block_transfer_toy_problem_memory_aware) {
+  SET_NUM_NODES_CONSTRAINT(4);
+
+  if constexpr (TypeParam::seed != 1) {
+    GTEST_SKIP() << "Toy memory test only runs for the canonical seed";
+  }
+
+  auto const out = runToyMemoryProblem(this->comm, toy_memory_aware_delta);
+
+  if (this->comm.getRank() == 0) {
+    reportToyMemoryOutcome("memory aware", out);
+  }
+
+  checkToyMemoryInvariants(out);
+  EXPECT_LE(out.final_max, out.whole_block_optimal_max + 5.0)
+    << "Memory-aware strict transfer should get close to the constrained optimum";
+}
+
 REGISTER_TYPED_TEST_SUITE_P(
-  TestTemperedLB, test_lb_no_comm_task_counts, test_significant_load_imbalance_reduction
+  TestTemperedLB,
+  test_lb_no_comm_task_counts,
+  test_significant_load_imbalance_reduction,
+  test_strict_shared_block_transfer_preserves_tasks,
+  test_strict_shared_block_transfer_toy_problem_load_only,
+  test_strict_shared_block_transfer_toy_problem_memory_aware
 );
 
 // Zip communicator type list with an integer seed sequence

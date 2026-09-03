@@ -140,6 +140,13 @@ struct StrictClusterTransfer {
     }
   };
 
+  /// A grant that arrived while this rank was locked, to act on once released
+  struct DeferredGrant {
+    LockToken token = {};
+    int locked_rank = -1;
+    RankClusterInfo locked_rank_info = {};
+  };
+
   struct ActiveLockRequest {
     LockToken token = {};
     int target_rank = -1;
@@ -147,11 +154,25 @@ struct StrictClusterTransfer {
     bool waiting_for_transaction = false;
   };
 
+  /**
+   * @brief Whether a transfer leaves the pair's maximum work no worse
+   *
+   * Every accepted transfer holds the pair's maximum at or below what it was,
+   * so the global maximum decreases monotonically and cannot cycle.
+   */
+  static bool pairMaxDoesNotIncrease(
+    double src_before, double src_after, double dst_before, double dst_after
+  ) {
+    return std::max(src_after, dst_after) <= std::max(src_before, dst_before);
+  }
+
   Candidate evaluateSwapCandidate(
     int this_rank,
     RankClusterInfo const& this_rank_info,
+    RankUpdateContext const& this_ctx,
     int dst_rank,
     RankClusterInfo const& dst_info,
+    RankUpdateContext const& dst_ctx,
     std::unordered_map<int, double> const& before_work,
     int give_gid,
     int recv_gid
@@ -178,7 +199,7 @@ struct StrictClusterTransfer {
     if (
       config_.hasMemoryInfo() and
       not WorkModelCalculator::checkMemoryFitUpdate(
-        config_, this_rank_info, to_add_this, to_remove_this
+        config_, this_ctx, this_rank_info, to_add_this, to_remove_this
       )
     ) {
       c.improvement = -std::numeric_limits<double>::infinity();
@@ -188,7 +209,7 @@ struct StrictClusterTransfer {
     if (
       config_.hasMemoryInfo() and
       not WorkModelCalculator::checkMemoryFitUpdate(
-        config_, dst_info, to_add_dst, to_remove_dst
+        config_, dst_ctx, dst_info, to_add_dst, to_remove_dst
       )
     ) {
       c.improvement = -std::numeric_limits<double>::infinity();
@@ -196,14 +217,14 @@ struct StrictClusterTransfer {
     }
 
     c.this_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-      this_rank_info, to_add_this, to_remove_this
+      config_, this_ctx, this_rank_info, to_add_this, to_remove_this
     );
     c.this_work_after = WorkModelCalculator::computeWork(
       config_.work_model_, c.this_work_breakdown_after
     );
 
     c.dst_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-      dst_info, to_add_dst, to_remove_dst
+      config_, dst_ctx, dst_info, to_add_dst, to_remove_dst
     );
     c.dst_work_after = WorkModelCalculator::computeWork(
       config_.work_model_, c.dst_work_breakdown_after
@@ -231,6 +252,12 @@ struct StrictClusterTransfer {
     int const this_rank = comm_.getRank();
     RankClusterInfo const& this_rank_info = cluster_info_.at(this_rank);
 
+    // O(clusters) each; building them per candidate is what made a swap
+    // search quadratic in the number of clusters
+    auto const this_ctx =
+      WorkModelCalculator::makeRankUpdateContext(this_rank_info);
+    auto const dst_ctx = WorkModelCalculator::makeRankUpdateContext(dst_info);
+
     std::unordered_map<int, double> before_work;
     before_work[this_rank] = WorkModelCalculator::computeWork(
       config_.work_model_, this_rank_info.rank_breakdown
@@ -241,8 +268,8 @@ struct StrictClusterTransfer {
 
     auto evaluate = [&](int give_gid, int recv_gid) {
       return evaluateSwapCandidate(
-        this_rank, this_rank_info, dst_rank, dst_info, before_work, give_gid,
-        recv_gid
+        this_rank, this_rank_info, this_ctx, dst_rank, dst_info, dst_ctx,
+        before_work, give_gid, recv_gid
       );
     };
 
@@ -437,6 +464,21 @@ struct StrictClusterTransfer {
       return;
     }
 
+    // We are serving another rank's transaction, which was validated against
+    // state that acting on this grant would mutate. Wait for the release.
+    if (is_locked_) {
+      deferred_grant_ = DeferredGrant{token, locked_rank, locked_rank_info};
+      return;
+    }
+
+    actOnLockGrant(token, locked_rank, locked_rank_info);
+  }
+
+  void actOnLockGrant(
+    LockToken token,
+    int locked_rank,
+    RankClusterInfo const& locked_rank_info
+  ) {
     // The locked rank's own view supersedes whatever we had propagated, so
     // record it before deciding: otherwise a fruitless lock is requested again
     // on the next pass and run() never makes progress
@@ -468,7 +510,8 @@ struct StrictClusterTransfer {
       give_cluster_summary,
       best.recv_cluster_gid,
       false,
-      best.dst_work_before
+      best.this_work_before,
+      best.this_work_after
     );
   }
 
@@ -479,6 +522,14 @@ struct StrictClusterTransfer {
 
     is_locked_ = false;
     current_lock_token_ = {};
+
+    if (deferred_grant_.has_value()) {
+      auto const grant = *deferred_grant_;
+      deferred_grant_.reset();
+      actOnLockGrant(grant.token, grant.locked_rank, grant.locked_rank_info);
+      return;
+    }
+
     tryGrantNextLock();
   }
 
@@ -519,7 +570,8 @@ struct StrictClusterTransfer {
     TaskClusterSummaryInfo cluster_gid_summary,
     int request_cluster_gid,
     bool sending_requested_cluster = false,
-    double dst_work_before = 0.0
+    double src_work_before = 0.0,
+    double src_work_after = 0.0
   ) {
     vt_lb_assert(
       clusterer_ != nullptr,
@@ -567,7 +619,8 @@ struct StrictClusterTransfer {
     handle_[rank].template send<&ThisType::migrationClusterHandler>(
       comm_.getRank(), token, cluster_gid, cluster_gid_summary,
       tasks_to_migrate, edges_to_migrate, shared_blocks_to_migrate,
-      request_cluster_gid, sending_requested_cluster, dst_work_before
+      request_cluster_gid, sending_requested_cluster, src_work_before,
+      src_work_after
     );
   }
 
@@ -581,13 +634,14 @@ struct StrictClusterTransfer {
     std::vector<model::SharedBlock> const& shared_blocks,
     int request_cluster_gid,
     bool sending_requested_cluster,
-    double dst_work_before
+    double src_work_before,
+    double src_work_after
   ) {
     bool accept =
       sending_requested_cluster ||
       acceptIncomingClusterSwap(
         from_rank, token, cluster_gid, cluster_gid_summary, request_cluster_gid,
-        dst_work_before
+        src_work_before, src_work_after
       );
 
     if (accept) {
@@ -734,6 +788,7 @@ struct StrictClusterTransfer {
     // Must be computed against the pre-swap summaries: the calculator reclassifies
     // edges and shared blocks by comparing local membership before and after
     auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
       info, {}, cluster_gid_summary
     );
     info.cluster_summaries.erase(iter);
@@ -751,6 +806,7 @@ struct StrictClusterTransfer {
     auto& info = cluster_info_[this->comm_.getRank()];
     // Must be computed against the pre-swap summaries; see outgoingCluster
     auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
       info, cluster_gid_summary, {}
     );
     info.cluster_summaries[cluster_gid] = cluster_gid_summary;
@@ -763,7 +819,8 @@ struct StrictClusterTransfer {
     [[maybe_unused]] int give_cluster_gid,
     TaskClusterSummaryInfo const& give_cluster_gid_summary,
     int recv_cluster_gid,
-    double dst_work_before
+    double src_work_before,
+    double src_work_after
   ) {
     if (
       not is_locked_ or
@@ -798,18 +855,31 @@ struct StrictClusterTransfer {
     }
 
     auto new_bd = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
       this_rank_info, give_cluster_gid_summary, recv_cluster_summary
     );
-    auto new_work = WorkModelCalculator::computeWork(config_.work_model_, new_bd);
+
+    // Our own work is the authoritative "before"; the requester's view of it
+    // may be stale, which is the whole reason for re-checking here
+    auto const dst_work_before = WorkModelCalculator::computeWork(
+      config_.work_model_, this_rank_info.rank_breakdown
+    );
+    auto const dst_work_after =
+      WorkModelCalculator::computeWork(config_.work_model_, new_bd);
+
+    bool const accept = pairMaxDoesNotIncrease(
+      src_work_before, src_work_after, dst_work_before, dst_work_after
+    );
 
     VT_LB_LOG(
       LoadBalancer, normal,
-      "StrictClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster_or_null={}, "
-      "new_work={}, dst_work_before={}\n",
-      recv_cluster_gid, has_cluster_or_null, new_work, dst_work_before
+      "StrictClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, "
+      "has_cluster_or_null={}, src={:.2f}->{:.2f}, dst={:.2f}->{:.2f}, accept={}\n",
+      recv_cluster_gid, has_cluster_or_null, src_work_before, src_work_after,
+      dst_work_before, dst_work_after, accept
     );
 
-    return new_work <= dst_work_before;
+    return accept;
   }
 
   bool hasTentativeLocalTransaction() const {
@@ -830,6 +900,7 @@ private:
   LockToken current_lock_token_ = {};
   std::set<PendingLockRequest> pending_lock_requests_;
   std::optional<ActiveLockRequest> active_lock_request_;
+  std::optional<DeferredGrant> deferred_grant_;
   std::optional<Candidate> pending_candidate_;
   std::uint64_t next_lock_sequence_ = 1;
   Configuration const& config_;

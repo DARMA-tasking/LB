@@ -144,8 +144,15 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
 
     // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
     if (cu != -1 && cv != -1 && cu == cv) {
-      assert(
-        e.getFromRank() == e.getToRank() && e.getFromRank() == rank &&
+      if (not ( e.getFromRank() == e.getToRank() && e.getFromRank() == rank)) {
+        VT_LB_LOG(
+          LoadBalancer, normal,
+          "BUG: Intra-cluster edge must be intra-rank: from_rank={}, to_rank={}, u={}, v={}, cu={}, cv={}, rank={}\n",
+          e.getFromRank(), e.getToRank(), u, v, cu, cv, rank
+        );
+      }
+      vt_lb_assert(
+        e.getFromRank() == e.getToRank() && e.getFromRank() == rank,
         "Intra-cluster edge must be intra-rank"
       );
       auto& sum = summary_by_global.at(cug);
@@ -226,8 +233,8 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
         remote_task, local_cluster, cu, cv, rank
       );
     }
-    assert(
-      it_remote_gid != task_to_global_cluster_id_.end() &&
+    vt_lb_assert(
+      it_remote_gid != task_to_global_cluster_id_.end(),
       "Should not happen if all resolutions are complete"
     );
 

@@ -99,6 +99,11 @@ enum struct CriterionEnum : uint8_t {
   ModifiedGrapevine = 1
 };
 
+enum struct ClusterTransferStrategy : uint8_t {
+  Relaxed = 0,
+  StrictSharedBlock = 1
+};
+
 struct GrapevineCriterion {
   bool operator()(RankInfo, RankInfo under, model::LoadType obj, model::LoadType avg) const {
     return !(under.getScaledLoad() + obj * under.rank_alpha > avg);
@@ -143,6 +148,22 @@ inline auto format_as(CriterionEnum c) {
     break;
   case CriterionEnum::ModifiedGrapevine:
     name = "ModifiedGrapevine";
+    break;
+  default:
+    name = "Unknown";
+    break;
+  }
+  return name;
+}
+
+inline auto format_as(ClusterTransferStrategy strategy) {
+  std::string_view name = "Unknown";
+  switch (strategy) {
+  case ClusterTransferStrategy::Relaxed:
+    name = "Relaxed";
+    break;
+  case ClusterTransferStrategy::StrictSharedBlock:
+    name = "StrictSharedBlock";
     break;
   default:
     name = "Unknown";

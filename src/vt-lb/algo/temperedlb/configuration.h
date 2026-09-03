@@ -73,6 +73,13 @@ struct Configuration {
     return hasMemoryInfo() && work_model_.has_shared_block_memory_info;
   }
 
+  /// @brief Whether the transfer stage moves clusters rather than single tasks
+  bool usesClusterTransfer() const {
+    return cluster_based_on_shared_blocks_ or cluster_based_on_communication_ or
+      work_model_.beta != 0.0 or work_model_.gamma != 0.0 or
+      work_model_.delta != 0.0;
+  }
+
   /// @brief  Number of trials to perform
   int num_trials_ = 1;
   /// @brief  Number of iterations per trial
@@ -88,6 +95,9 @@ struct Configuration {
 
   /// @brief  Criterion type for transfer decisions
   CriterionEnum criterion_ = CriterionEnum::ModifiedGrapevine;
+  /// @brief Clustered transfer strategy
+  ClusterTransferStrategy cluster_transfer_strategy_ =
+    ClusterTransferStrategy::Relaxed;
   /// @brief  Object ordering for transfer decisions
   TransferUtil::ObjectOrder obj_ordering_ = TransferUtil::ObjectOrder::ElmID;
   /// @brief  CMF type for transfer decisions

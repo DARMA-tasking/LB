@@ -78,7 +78,21 @@ CommMPI CommMPI::clone(bool dup_comm) const {
   } else {
     new_comm = comm_;
   }
-  return CommMPI{new_comm, cached_rank_, cached_size_};
+  return CommMPI{new_comm, cached_rank_, cached_size_, dup_comm};
+}
+
+CommMPI::~CommMPI() {
+  if (not owns_comm_ or comm_ == MPI_COMM_NULL) {
+    return;
+  }
+
+  // MPI_Comm_free is invalid once MPI has shut down, and a duplicated
+  // communicator is released by MPI_Finalize anyway
+  int finalized = 0;
+  MPI_Finalized(&finalized);
+  if (not finalized) {
+    MPI_Comm_free(&comm_);
+  }
 }
 
 void CommMPI::finalize() {

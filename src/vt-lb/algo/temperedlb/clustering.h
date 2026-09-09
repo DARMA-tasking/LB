@@ -48,6 +48,8 @@
 #include <vt-lb/util/assert.h>
 
 #include <algorithm>
+#include <map>
+#include <optional>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -191,8 +193,11 @@ private:
   }
 
   void collectTasks() {
-    for (auto const& kv : pd_.getTasksMap()) {
-      tasks_.push_back(kv.first);
+    for (auto const& [task_id, task] : pd_.getTasksMap()) {
+      // Clusters exist to be migrated, so a pinned task cannot be in one
+      if (task.isMigratable()) {
+        tasks_.push_back(task_id);
+      }
     }
   }
 
@@ -237,8 +242,18 @@ private:
 };
 
 // Shared-block-based clustering
+// Shared-block clustering: every task touching a block forms one cluster with
+// the rest of that block's local tasks, so migrating the cluster migrates the
+// block. Matching tasks pairwise instead would split a block across ranks and
+// force it resident on both.
+//
+// Unlike vt, a migratable task with no shared block still becomes a singleton
+// cluster. vt parks those in non_cluster_objs_ because other transfer stages
+// move them; here the cluster transfer is the only stage running, so excluding
+// them would pin them for the whole run.
 struct SharedBlockClusterer : Clusterer {
   using TaskType = vt_lb::model::TaskType;
+  using SharedBlockType = vt_lb::model::SharedBlockType;
   using BytesType = vt_lb::model::BytesType;
   using LoadType = vt_lb::model::LoadType;
   using PhaseData = vt_lb::model::PhaseData;
@@ -247,118 +262,76 @@ struct SharedBlockClusterer : Clusterer {
 
   void compute() override {
     clear();
-    buildAggregatedEdgesFromSharedBlocks(); // only shared-block-derived edges
-    collectTasks();
-    if (sb_edges_.empty()) {
-      // Each task its own cluster
-      int cid = 0;
-      for (auto const& t : tasks_) {
-        task_to_cluster_[t] = cid++;
+
+    // Sorted so cluster IDs do not depend on hash order
+    std::map<SharedBlockType, std::vector<TaskType>> block_to_tasks;
+    std::vector<TaskType> blockless_tasks;
+
+    for (auto const& [task_id, task] : pd_.getTasksMap()) {
+      // A pinned task cannot move, so it must not join a cluster that can.
+      // Its load still counts toward the rank through the work breakdown.
+      if (not task.isMigratable()) {
+        continue;
       }
-      materializeClusters();
-      return;
+      if (auto const block = primarySharedBlock(task); block.has_value()) {
+        block_to_tasks[*block].push_back(task_id);
+      } else {
+        blockless_tasks.push_back(task_id);
+      }
     }
-    std::sort(
-      sb_edges_.begin(), sb_edges_.end(),
-      [](auto const& a, auto const& b){ return std::get<2>(a) > std::get<2>(b); }
-    );
-    std::unordered_set<TaskType> matched;
+
     int next_cid = 0;
-    for (auto const& e : sb_edges_) {
-      auto u = std::get<0>(e);
-      auto v = std::get<1>(e);
-      if (!matched.count(u) && !matched.count(v)) {
-        task_to_cluster_[u] = next_cid;
-        task_to_cluster_[v] = next_cid;
-        matched.insert(u);
-        matched.insert(v);
-        ++next_cid;
+    for (auto& [block, task_ids] : block_to_tasks) {
+      std::sort(task_ids.begin(), task_ids.end());
+      for (auto task_id : task_ids) {
+        task_to_cluster_[task_id] = next_cid;
       }
+      ++next_cid;
     }
-    for (auto const& t : tasks_) {
-      if (!task_to_cluster_.count(t)) {
-        task_to_cluster_[t] = next_cid++;
-      }
+
+    // A task with no shared block has nothing to keep it with any other
+    std::sort(blockless_tasks.begin(), blockless_tasks.end());
+    for (auto task_id : blockless_tasks) {
+      task_to_cluster_[task_id] = next_cid++;
     }
+
     materializeClusters();
   }
 
 private:
+  /// The block a task is clustered by; the lowest id when a task has several
+  static std::optional<SharedBlockType> primarySharedBlock(
+    vt_lb::model::Task const& task
+  ) {
+    auto const& blocks = task.getSharedBlocks();
+    if (blocks.empty()) {
+      return std::nullopt;
+    }
+    return *std::min_element(blocks.begin(), blocks.end());
+  }
+
   void clear() {
-    tasks_.clear();
-    sb_edges_.clear();
     task_to_cluster_.clear();
     clusters_.clear();
   }
 
-  void collectTasks() {
-    for (auto const& kv : pd_.getTasksMap()) {
-      tasks_.push_back(kv.first);
-    }
-  }
-
-  void buildAggregatedEdgesFromSharedBlocks() {
-    // Build edges exclusively from shared block co-access (communication edges are ignored)
-    // Map shared block -> tasks
-    std::unordered_map<vt_lb::model::SharedBlockType, std::vector<TaskType>> blk_to_tasks;
-    for (auto const& kv : pd_.getTasksMap()) {
-      auto const& task = kv.second;
-      for (auto const& sb : task.getSharedBlocks()) {
-        blk_to_tasks[sb].push_back(task.getId());
-      }
-    }
-    // Aggregate edges: weight is sum of shared block sizes across pairs
-    struct PairHash {
-      size_t operator()(std::pair<TaskType,TaskType> const& p) const noexcept {
-        auto a = p.first < p.second ? p.first : p.second;
-        auto b = p.first < p.second ? p.second : p.first;
-        return (static_cast<size_t>(a) << 32) ^ static_cast<size_t>(b);
-      }
-    };
-    std::unordered_map<std::pair<TaskType,TaskType>, BytesType, PairHash> agg;
-    auto const& sb_map = pd_.getSharedBlocksMap();
-    for (auto const& kv : blk_to_tasks) {
-      auto blk_id = kv.first;
-      auto it_blk = sb_map.find(blk_id);
-      if (it_blk == sb_map.end()) continue;
-      BytesType size = it_blk->second.getSize();
-      auto const& vec = kv.second;
-      for (size_t i=0;i<vec.size();++i) {
-        for (size_t j=i+1;j<vec.size();++j) {
-          auto u = vec[i]; auto v = vec[j];
-          auto key = (u < v) ? std::make_pair(u,v) : std::make_pair(v,u);
-          agg[key] += size;
-        }
-      }
-    }
-    sb_edges_.reserve(agg.size());
-    for (auto const& kv : agg) {
-      sb_edges_.emplace_back(kv.first.first, kv.first.second, kv.second);
-    }
-  }
-
   void materializeClusters() {
-    std::unordered_map<int, Cluster> tmp;
-    for (auto const& [t,cid] : task_to_cluster_) {
-      auto& cl = tmp[cid];
+    std::map<int, Cluster> by_id;
+    for (auto const& [task_id, cid] : task_to_cluster_) {
+      auto& cl = by_id[cid];
       cl.id = cid;
-      cl.members.push_back(t);
+      cl.members.push_back(task_id);
+      cl.load += pd_.getTasksMap().at(task_id).getLoad();
     }
-    for (auto& kv : tmp) {
-      auto& cl = kv.second;
-      for (auto const& t : cl.members) {
-        cl.load += pd_.getTasksMap().at(t).getLoad();
-      }
+    for (auto& [cid, cl] : by_id) {
+      (void)cid;
+      std::sort(cl.members.begin(), cl.members.end());
       clusters_.push_back(std::move(cl));
     }
-    std::sort(clusters_.begin(), clusters_.end(), [](auto const& a, auto const& b){ return a.id < b.id; });
   }
 
 private:
   PhaseData const& pd_;
-  std::vector<TaskType> tasks_;
-  // aggregated undirected shared-block edges: (u,v,weight)
-  std::vector<std::tuple<TaskType,TaskType,BytesType>> sb_edges_;
 };
 
 // Standalone Leiden-style clustering using CPM (Constant Potts Model) objective.

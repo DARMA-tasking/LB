@@ -103,7 +103,14 @@ struct StrictClusterTransfer {
     double dst_work_before = 0.0;
     double dst_work_after = 0.0;
     WorkBreakdown dst_work_breakdown_after = {};
+    /// How much the pair's maximum work drops
     double improvement = 0.0;
+    /// How much the pair's total work drops, the tie-break among plateau moves
+    double total_improvement = 0.0;
+
+    bool isImproving() const {
+      return improvement > 0.0 or (improvement == 0.0 and total_improvement > 0.0);
+    }
   };
 
   struct LockToken {
@@ -155,15 +162,25 @@ struct StrictClusterTransfer {
   };
 
   /**
-   * @brief Whether a transfer leaves the pair's maximum work no worse
+   * @brief Whether a transfer improves the pair, maximum first then total
    *
-   * Every accepted transfer holds the pair's maximum at or below what it was,
-   * so the global maximum decreases monotonically and cannot cycle.
+   * vt accepts any transfer that does not raise the pair maximum, which lets it
+   * step sideways out of a local optimum. vt can do that safely because it
+   * proposes once per iteration; run() keeps proposing until it is stuck, so a
+   * flat sideways step here could cycle forever. Requiring the total to fall
+   * whenever the maximum is unchanged makes (maximum, total) a potential that
+   * strictly decreases on every accepted transfer, so over a finite set of
+   * cluster placements the loop must terminate.
    */
-  static bool pairMaxDoesNotIncrease(
+  static bool pairImproves(
     double src_before, double src_after, double dst_before, double dst_after
   ) {
-    return std::max(src_after, dst_after) <= std::max(src_before, dst_before);
+    auto const max_before = std::max(src_before, dst_before);
+    auto const max_after = std::max(src_after, dst_after);
+    if (max_after != max_before) {
+      return max_after < max_before;
+    }
+    return src_after + dst_after < src_before + dst_before;
   }
 
   Candidate evaluateSwapCandidate(
@@ -235,6 +252,9 @@ struct StrictClusterTransfer {
     double w_max_0 = std::max(c.this_work_before, c.dst_work_before);
     double w_max_new = std::max(c.this_work_after, c.dst_work_after);
     c.improvement = w_max_0 - w_max_new;
+    c.total_improvement =
+      (c.this_work_before + c.dst_work_before) -
+      (c.this_work_after + c.dst_work_after);
 
     return c;
   }
@@ -297,20 +317,35 @@ struct StrictClusterTransfer {
    * Exhaustive, so it is only run once the destination is locked and its info
    * is known to be up to date.
    */
+  /// Rank candidates the way pairImproves does: maximum first, then total
+  static bool isBetterCandidate(Candidate const& a, Candidate const& b) {
+    if (a.improvement != b.improvement) {
+      return a.improvement > b.improvement;
+    }
+    return a.total_improvement > b.total_improvement;
+  }
+
+  /// A candidate that loses to anything, including a non-improving one
+  static Candidate worstCandidate(int dst_rank) {
+    Candidate c{};
+    c.dst_rank = dst_rank;
+    c.improvement = -std::numeric_limits<double>::infinity();
+    c.total_improvement = -std::numeric_limits<double>::infinity();
+    return c;
+  }
+
   Candidate findBestSwapCandidateForTarget(
     int dst_rank,
     RankClusterInfo const& dst_info
   ) const {
-    Candidate best{};
-    best.dst_rank = dst_rank;
-    best.improvement = -std::numeric_limits<double>::infinity();
+    auto best = worstCandidate(dst_rank);
 
     if (dst_rank <= comm_.getRank()) {
       return best;
     }
 
     forEachSwapCandidate(dst_rank, dst_info, [&best](Candidate candidate) {
-      if (candidate.improvement > best.improvement) {
+      if (isBetterCandidate(candidate, best)) {
         best = std::move(candidate);
       }
       return true;
@@ -330,16 +365,14 @@ struct StrictClusterTransfer {
     int dst_rank,
     RankClusterInfo const& dst_info
   ) const {
-    Candidate found{};
-    found.dst_rank = dst_rank;
-    found.improvement = -std::numeric_limits<double>::infinity();
+    auto found = worstCandidate(dst_rank);
 
     if (dst_rank <= comm_.getRank()) {
       return found;
     }
 
     forEachSwapCandidate(dst_rank, dst_info, [&found](Candidate candidate) {
-      if (candidate.improvement > 0.0) {
+      if (candidate.isImproving()) {
         found = std::move(candidate);
         return false;
       }
@@ -358,19 +391,18 @@ struct StrictClusterTransfer {
   Candidate findSwapTarget() {
     int const this_rank = this->comm_.getRank();
 
-    Candidate best{};
-    best.improvement = -std::numeric_limits<double>::infinity();
+    auto best = worstCandidate(-1);
     for (auto const& [dst_rank, dst_info] : cluster_info_) {
       if (dst_rank <= this_rank) {
         continue;
       }
       auto candidate = screenSwapCandidateForTarget(dst_rank, dst_info);
-      if (candidate.improvement > best.improvement) {
+      if (isBetterCandidate(candidate, best)) {
         best = std::move(candidate);
       }
     }
 
-    if (best.improvement == -std::numeric_limits<double>::infinity()) {
+    if (not best.isImproving()) {
       VT_LB_LOG(LoadBalancer, normal, "StrictClusterTransfer: no swap candidates\n");
       return Candidate{};
     }
@@ -395,7 +427,7 @@ struct StrictClusterTransfer {
     // retire the termination detector and strand every later request.
     while (true) {
       auto best = findSwapTarget();
-      if (best.improvement <= 0.0) {
+      if (not best.isImproving()) {
         break;
       }
 
@@ -485,7 +517,7 @@ struct StrictClusterTransfer {
     cluster_info_[locked_rank] = locked_rank_info;
 
     auto best = findBestSwapCandidateForTarget(locked_rank, locked_rank_info);
-    if (best.improvement <= 0.0) {
+    if (not best.isImproving()) {
       handle_[locked_rank].template send<&ThisType::releaseLock>(token);
       active_lock_request_.reset();
       pending_candidate_.reset();
@@ -867,7 +899,7 @@ struct StrictClusterTransfer {
     auto const dst_work_after =
       WorkModelCalculator::computeWork(config_.work_model_, new_bd);
 
-    bool const accept = pairMaxDoesNotIncrease(
+    bool const accept = pairImproves(
       src_work_before, src_work_after, dst_work_before, dst_work_after
     );
 
@@ -880,6 +912,11 @@ struct StrictClusterTransfer {
     );
 
     return accept;
+  }
+
+  /// Whether a lock this rank asked for is still unresolved
+  bool hasOutstandingLockRequest() const {
+    return active_lock_request_.has_value();
   }
 
   bool hasTentativeLocalTransaction() const {

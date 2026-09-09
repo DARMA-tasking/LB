@@ -264,7 +264,26 @@ TYPED_TEST_P(TestTemperedLB, test_significant_load_imbalance_reduction) {
   }
   EXPECT_GT(I_before, 0.0);
   EXPECT_LT(I_after, I_before);
-  EXPECT_NEAR(I_after, 0.0, 0.02);
+
+  // Tasks are indivisible, so no arrangement can beat one rank holding the
+  // single largest task. That bound tightens the more ranks there are, which a
+  // fixed tolerance calibrated at two ranks does not capture.
+  double local_max_task = 0.0;
+  for (auto const& [tid, task] : pd.getTasksMap()) {
+    (void)tid;
+    local_max_task = std::max(local_max_task, task.getLoad());
+  }
+  double global_max_task = 0.0;
+  handle.reduce(0, MPI_DOUBLE, MPI_MAX, &local_max_task, &global_max_task, 1);
+  handle.broadcast(0, MPI_DOUBLE, &global_max_task, 1);
+
+  double const granularity_bound = global_after_avg > 0.0
+    ? global_max_task / global_after_avg
+    : 0.0;
+  EXPECT_LE(I_after, granularity_bound)
+    << "left more imbalance than the largest single task forces";
+  EXPECT_LT(I_after, I_before / 10.0)
+    << "imbalance was not reduced by at least an order of magnitude";
 
   // fmt::print(
   //   "Rank {}: before max={}, avg={}, I={:.4f}; after max={}, avg={}, I={:.4f}\n",
@@ -388,8 +407,8 @@ TYPED_TEST_P(TestTemperedLB, test_strict_shared_block_transfer_toy_problem_load_
   }
 
   checkToyMemoryInvariants(out);
-  EXPECT_LE(out.final_max, out.whole_block_optimal_max + 5.0)
-    << "Load-only strict transfer should get close to the constrained optimum";
+  EXPECT_LE(out.final_max, out.whole_block_optimal_max)
+    << "Blocks are atomic, so the whole-block optimum is reachable and best";
 }
 
 // Memory aware: off-home blocks are charged, so the balancer trades load
@@ -408,8 +427,8 @@ TYPED_TEST_P(TestTemperedLB, test_strict_shared_block_transfer_toy_problem_memor
   }
 
   checkToyMemoryInvariants(out);
-  EXPECT_LE(out.final_max, out.whole_block_optimal_max + 5.0)
-    << "Memory-aware strict transfer should get close to the constrained optimum";
+  EXPECT_LE(out.final_max, out.whole_block_optimal_max)
+    << "Charging for off-home blocks must not cost load balance here";
 }
 
 REGISTER_TYPED_TEST_SUITE_P(

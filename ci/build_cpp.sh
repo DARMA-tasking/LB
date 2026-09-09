@@ -101,7 +101,7 @@ else
         -Dvt_ci_build="${VT_CI_BUILD:-0}" \
         -Dvt_ci_generate_lb_files="${VT_CI_TEST_LB_SCHEMA:-0}" \
         -Dvt_debug_verbose="${VT_DEBUG_VERBOSE:-0}" \
-        -Dvt_tests_num_nodes="${VT_TESTS_NUM_NODES:-}" \
+        -Dlb_tests_num_nodes="${VT_TESTS_NUM_NODES:-}" \
         -Dvt_external_fmt="${VT_EXTERNAL_FMT:-0}" \
         -Dfmt_DIR="${FMT_DIR}" \
         -Dlibunwind_ROOT="${LIBUNWIND_ROOT:-/usr}" \

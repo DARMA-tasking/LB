@@ -250,4 +250,22 @@ TYPED_TEST(TestCommBasic, test_allgather_int_array) {
   }
 }
 
+// clone() duplicates the underlying communicator. Without a destructor to
+// release it, MPI runs out of context ids after a couple of thousand clones,
+// which is well within reach of a long run that balances every phase.
+//
+// The drain matters: MPI defers freeing a communicator that still has work in
+// flight, so a clone abandoned mid-conversation holds its context id anyway.
+TYPED_TEST(TestCommBasic, test_clone_releases_its_communicator) {
+  // Comfortably past the 2048 context ids MPICH offers
+  constexpr int num_clones = 4000;
+
+  for (int i = 0; i < num_clones; ++i) {
+    auto clone = this->comm.clone();
+    EXPECT_EQ(clone.getRank(), this->comm.getRank());
+    EXPECT_EQ(clone.numRanks(), this->comm.numRanks());
+    while (clone.poll()) { }
+  }
+}
+
 }}} // end namespace vt_lb::tests::unit

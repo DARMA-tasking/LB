@@ -276,6 +276,15 @@ void forEachChangedSharedBlock(
   RankClusterInfo const& rank_cluster_info
 ) {
   RankUpdateContext ctx;
+
+  // A block held by an unclustered task never leaves, so seed its count with a
+  // reference no cluster departure can take away
+  for (auto const& [id, bytes] : rank_cluster_info.unclustered_shared_blocks) {
+    auto& use = ctx.shared_blocks[id];
+    use.bytes = bytes;
+    use.cluster_count++;
+  }
+
   ctx.local_clusters.reserve(rank_cluster_info.cluster_summaries.size());
   for (auto const& [gid, summary] : rank_cluster_info.cluster_summaries) {
     ctx.local_clusters.insert(summary.cluster_id);

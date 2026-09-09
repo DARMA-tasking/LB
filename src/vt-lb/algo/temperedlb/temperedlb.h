@@ -125,6 +125,31 @@ struct TemperedLB final : baselb::BaseLB {
     }
   }
 
+  /**
+   * @brief Blocks kept alive by tasks that belong to no cluster
+   *
+   * A pinned task holds its block whatever the clusters do, so the memory model
+   * has to keep counting it or a rank looks emptier than it is.
+   */
+  std::unordered_map<model::SharedBlockType, model::BytesType>
+  collectUnclusteredSharedBlocks() const {
+    std::unordered_map<model::SharedBlockType, model::BytesType> blocks;
+    auto const* clusterer = getClusterer();
+    auto const& pd = this->getPhaseData();
+
+    for (auto const& [task_id, task] : pd.getTasksMap()) {
+      if (clusterer != nullptr and clusterer->taskToCluster().count(task_id) > 0) {
+        continue;
+      }
+      for (auto const& sb : task.getSharedBlocks()) {
+        if (auto const* block = pd.getSharedBlock(sb); block != nullptr) {
+          blocks[sb] = block->getSize();
+        }
+      }
+    }
+    return blocks;
+  }
+
   std::unordered_map<int, TaskClusterSummaryInfo> buildClusterSummaries() {
     ClusterSummarizer<CommT> cs(comm_, getClusterer(), global_max_clusters_);
     return cs.buildClusterSummaries(
@@ -355,7 +380,8 @@ struct TemperedLB final : baselb::BaseLB {
         this->getPhaseData().getRankMaxMemoryAvailable(),
         config_.work_model_.rank_alpha,
         work_breakdown,
-        this->getPhaseData().getSharedBlockIdsHomed()
+        this->getPhaseData().getSharedBlockIdsHomed(),
+        collectUnclusteredSharedBlocks()
       };
       auto info = runInformationPropagation(rank_info);
 

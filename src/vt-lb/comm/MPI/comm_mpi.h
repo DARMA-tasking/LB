@@ -88,9 +88,13 @@ struct CommMPI {
   CommMPI& operator=(CommMPI const&) = delete;
   CommMPI& operator=(CommMPI&&) = delete;
 
+  /// Frees the communicator when this instance duplicated one of its own
+  ~CommMPI();
+
 private:
-  CommMPI(MPI_Comm comm, int rank, int size)
-    : comm_(comm), cached_rank_(rank), cached_size_(size)
+  CommMPI(MPI_Comm comm, int rank, int size, bool owns_comm)
+    : comm_(comm), owns_comm_(owns_comm), cached_rank_(rank),
+      cached_size_(size)
   {
     initTermination();
   }
@@ -384,6 +388,8 @@ private:
   bool interop_mode_ = false;
   /// @brief MPI communicator
   MPI_Comm comm_ = MPI_COMM_NULL;
+  /// @brief Whether comm_ was duplicated here and must be freed
+  bool owns_comm_ = false;
   /// @brief Pending operations we are waiting on with buffers
   std::list<std::tuple<MPI_Request, std::unique_ptr<char[]>>> pending_;
   /// @brief Next class index to use for registering class instances

@@ -78,6 +78,7 @@ struct RankInfo {
 struct RankClusterInfo {
   std::unordered_map<int, TaskClusterSummaryInfo> cluster_summaries;
   double rank_footprint_bytes = 0.0;
+  double rank_available_memory = 0.0;
   double rank_alpha = 0.0;
   WorkBreakdown rank_breakdown;
   std::unordered_set<model::SharedBlockType> shared_blocks_homed;
@@ -86,6 +87,7 @@ struct RankClusterInfo {
   void serialize(SerializerT& s) {
     s | cluster_summaries;
     s | rank_footprint_bytes;
+    s | rank_available_memory;
     s | rank_alpha;
     s | rank_breakdown;
     s | shared_blocks_homed;
@@ -95,6 +97,11 @@ struct RankClusterInfo {
 enum struct CriterionEnum : uint8_t {
   Grapevine         = 0,
   ModifiedGrapevine = 1
+};
+
+enum struct ClusterTransferStrategy : uint8_t {
+  Relaxed = 0,
+  StrictSharedBlock = 1
 };
 
 struct GrapevineCriterion {
@@ -141,6 +148,22 @@ inline auto format_as(CriterionEnum c) {
     break;
   case CriterionEnum::ModifiedGrapevine:
     name = "ModifiedGrapevine";
+    break;
+  default:
+    name = "Unknown";
+    break;
+  }
+  return name;
+}
+
+inline auto format_as(ClusterTransferStrategy strategy) {
+  std::string_view name = "Unknown";
+  switch (strategy) {
+  case ClusterTransferStrategy::Relaxed:
+    name = "Relaxed";
+    break;
+  case ClusterTransferStrategy::StrictSharedBlock:
+    name = "StrictSharedBlock";
     break;
   default:
     name = "Unknown";

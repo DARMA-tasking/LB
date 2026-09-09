@@ -17,6 +17,7 @@ configuration:
 
   transfer_decisions:
     criterion: Grapevine
+    cluster_transfer_strategy: Relaxed
     obj_ordering: Arbitrary
     cmf_type: Original
 

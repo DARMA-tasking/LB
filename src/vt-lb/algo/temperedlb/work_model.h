@@ -48,6 +48,8 @@
 #include <vt-lb/model/Task.h>
 #include <vt-lb/algo/temperedlb/task_cluster_summary_info.h>
 
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace vt_lb::algo::temperedlb {
@@ -82,6 +84,8 @@ struct WorkModel {
   bool has_task_footprint_memory_info = true;
   /// @brief Has shared block memory info
   bool has_shared_block_memory_info = true;
+  /// @brief Memory a rank may use, in bytes; 0 means unconstrained
+  double rank_max_memory_bytes = 0.0;
 
   /**
    * @brief Apply the work formula to compute the work of a task
@@ -160,6 +164,34 @@ struct WorkBreakdown {
 };
 
 /**
+ * @struct RankUpdateContext
+ *
+ * @brief Per-rank state reused across many candidate evaluations
+ *
+ * These depend only on the rank, not on the clusters being considered, so a
+ * swap search builds them once rather than once per candidate.
+ */
+/**
+ * @struct SharedBlockUse
+ *
+ * @brief How many local clusters reference a shared block, and its size
+ *
+ * Clusters that came from different ranks can reference the same block, so
+ * dropping one cluster does not necessarily free the block.
+ */
+struct SharedBlockUse {
+  model::BytesType bytes = 0;
+  int cluster_count = 0;
+};
+
+struct RankUpdateContext {
+  /// @brief Global IDs of the clusters currently on the rank
+  std::unordered_set<int> local_clusters;
+  /// @brief Shared blocks currently on the rank, with their sizes
+  std::unordered_map<model::SharedBlockType, SharedBlockUse> shared_blocks;
+};
+
+/**
  * @struct WorkModelCalculator
  *
  * @brief Calculator for computing work from scratch or incrementally
@@ -223,9 +255,65 @@ struct WorkModelCalculator {
    * @return The new work breakdown
    */
   static WorkBreakdown computeWorkUpdateSummary(
-    RankClusterInfo rank_cluster_info,
-    TaskClusterSummaryInfo to_add,
-    TaskClusterSummaryInfo to_remove
+    Configuration const& config,
+    RankClusterInfo const& rank_cluster_info,
+    TaskClusterSummaryInfo const& to_add,
+    TaskClusterSummaryInfo const& to_remove
+  );
+
+  /**
+   * @brief Build the reusable per-rank context for update calculations
+   *
+   * @param rank_cluster_info The rank cluster info
+   *
+   * @return The context
+   */
+  static RankUpdateContext makeRankUpdateContext(
+    RankClusterInfo const& rank_cluster_info
+  );
+
+  /// @brief As computeWorkUpdateSummary, reusing a prebuilt rank context
+  static WorkBreakdown computeWorkUpdateSummary(
+    Configuration const& config,
+    RankUpdateContext const& ctx,
+    RankClusterInfo const& rank_cluster_info,
+    TaskClusterSummaryInfo const& to_add,
+    TaskClusterSummaryInfo const& to_remove
+  );
+
+  /// @brief As computeMemoryUpdateSummary, reusing a prebuilt rank context
+  static MemoryBreakdown computeMemoryUpdateSummary(
+    Configuration const& config,
+    RankUpdateContext const& ctx,
+    RankClusterInfo const& rank_cluster_info,
+    TaskClusterSummaryInfo const& to_add,
+    TaskClusterSummaryInfo const& to_remove
+  );
+
+  /// @brief As checkMemoryFitUpdate, reusing a prebuilt rank context
+  static bool checkMemoryFitUpdate(
+    Configuration const& config,
+    RankUpdateContext const& ctx,
+    RankClusterInfo const& rank_cluster_info,
+    TaskClusterSummaryInfo const& to_add,
+    TaskClusterSummaryInfo const& to_remove
+  );
+
+  /**
+   * @brief Compute the memory breakdown after adding/removing cluster summaries
+   *
+   * @param config The configuration
+   * @param rank_cluster_info The rank cluster info
+   * @param to_add The cluster of tasks to add
+   * @param to_remove The cluster of tasks to remove
+   *
+   * @return The new memory breakdown
+   */
+  static MemoryBreakdown computeMemoryUpdateSummary(
+    Configuration const& config,
+    RankClusterInfo const& rank_cluster_info,
+    TaskClusterSummaryInfo const& to_add,
+    TaskClusterSummaryInfo const& to_remove
   );
 
   /**
@@ -248,16 +336,14 @@ struct WorkModelCalculator {
    * @param rank_cluster_info The rank cluster info
    * @param to_add The cluster of tasks to add
    * @param to_remove The cluster of tasks to remove
-   * @param rank_available_memory The available memory on the rank
    *
    * @return True if it fits, false otherwise
    */
   static bool checkMemoryFitUpdate(
     Configuration const& config,
-    RankClusterInfo rank_cluster_info,
-    TaskClusterSummaryInfo to_add,
-    TaskClusterSummaryInfo to_remove,
-    double rank_available_memory
+    RankClusterInfo const& rank_cluster_info,
+    TaskClusterSummaryInfo const& to_add,
+    TaskClusterSummaryInfo const& to_remove
   );
 
   /**

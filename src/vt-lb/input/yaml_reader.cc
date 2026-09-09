@@ -166,6 +166,21 @@ vt_lb::algo::temperedlb::Configuration YAMLReader::parseLBConfig(int num_ranks) 
           throw std::runtime_error("Unknown criterion type");
         }
       }
+      if (td["cluster_transfer_strategy"]) {
+        std::string strategy_str = get_value<std::string>(td, "cluster_transfer_strategy");
+        if (strategy_str == "Relaxed") {
+          config.cluster_transfer_strategy_ =
+            algo::temperedlb::ClusterTransferStrategy::Relaxed;
+        } else if (strategy_str == "StrictSharedBlock") {
+          config.cluster_transfer_strategy_ =
+            algo::temperedlb::ClusterTransferStrategy::StrictSharedBlock;
+        } else {
+          fmt::print(
+            "Unknown cluster transfer strategy: '{}'\n", strategy_str
+          );
+          throw std::runtime_error("Unknown cluster transfer strategy");
+        }
+      }
       if (td["obj_ordering"]) {
         std::string order_str = get_value<std::string>(td, "obj_ordering");
         if (order_str == "Arbitrary") {
@@ -232,6 +247,9 @@ vt_lb::algo::temperedlb::Configuration YAMLReader::parseLBConfig(int num_ranks) 
         }
         if (mem_info["has_shared_block_mem_info"]) {
           config.work_model_.has_shared_block_memory_info = get_value<bool>(mem_info, "has_shared_block_mem_info");
+        }
+        if (mem_info["rank_max_memory_bytes"]) {
+          config.work_model_.rank_max_memory_bytes = get_value<double>(mem_info, "rank_max_memory_bytes");
         }
       }
     }

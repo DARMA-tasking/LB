@@ -147,8 +147,7 @@ struct RelaxedClusterTransfer {
       // Check memory fit on this rank
       if (config_.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
-          config_, this_rank_info, to_add_this, to_remove_this,
-          this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
+          config_, this_rank_info, to_add_this, to_remove_this
         );
         if (!fits) {
           c.improvement = -std::numeric_limits<double>::infinity();
@@ -159,8 +158,7 @@ struct RelaxedClusterTransfer {
       // Check memory fit on destination rank
       if (config_.hasMemoryInfo()) {
         bool fits = WorkModelCalculator::checkMemoryFitUpdate(
-          config_, dst_info, to_add_dst, to_remove_dst,
-          this->pd_.getRankMaxMemoryAvailable() // assume all ranks have equal memory available
+          config_, dst_info, to_add_dst, to_remove_dst
         );
         if (!fits) {
           c.improvement = -std::numeric_limits<double>::infinity();
@@ -170,7 +168,7 @@ struct RelaxedClusterTransfer {
 
       // Compute post-swap work on this rank
       c.this_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-        this_rank_info, to_add_this, to_remove_this
+        config_, this_rank_info, to_add_this, to_remove_this
       );
       c.this_work_after = WorkModelCalculator::computeWork(
         config_.work_model_, c.this_work_breakdown_after
@@ -178,7 +176,7 @@ struct RelaxedClusterTransfer {
 
       // Compute post-swap work on destination rank
       c.dst_work_breakdown_after = WorkModelCalculator::computeWorkUpdateSummary(
-        dst_info, to_add_dst, to_remove_dst
+        config_, dst_info, to_add_dst, to_remove_dst
       );
       c.dst_work_after = WorkModelCalculator::computeWork(
         config_.work_model_, c.dst_work_breakdown_after
@@ -332,6 +330,11 @@ struct RelaxedClusterTransfer {
     while (this->comm_.poll()) {
       // do nothing
     }
+  }
+
+  /// This rank's incrementally-maintained cluster info
+  RankClusterInfo const& thisRankInfo() const {
+    return cluster_info_.at(comm_.getRank());
   }
 
   void migrateCluster(
@@ -532,8 +535,10 @@ struct RelaxedClusterTransfer {
       }
     }
 
-     // Add the cluster to the bookkeeping
-    incomingCluster(cluster_gid, cluster_gid_summary);
+    // A receive-only swap sends nothing, so there is nothing to restore
+    if (cluster_gid != -1) {
+      incomingCluster(cluster_gid, cluster_gid_summary);
+    }
 
     // Cluster is sent back; notify that the transaction is complete
     transactionComplete(TransactionStatus::Rejected);
@@ -552,15 +557,20 @@ struct RelaxedClusterTransfer {
       "RelaxedClusterTransfer::outgoingCluster removing cluster_gid={}\n",
       cluster_gid
     );
-    auto iter = cluster_info_[this->comm_.getRank()].cluster_summaries.find(cluster_gid);
+    auto& info = cluster_info_[this->comm_.getRank()];
+    auto iter = info.cluster_summaries.find(cluster_gid);
     vt_lb_assert(
-      iter != cluster_info_[this->comm_.getRank()].cluster_summaries.end(),
+      iter != info.cluster_summaries.end(),
       "RelaxedClusterTransfer::outgoingCluster: cluster_gid not found in local summaries"
     );
-    cluster_info_[this->comm_.getRank()].cluster_summaries.erase(iter);
-    cluster_info_[this->comm_.getRank()].rank_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
-      cluster_info_[this->comm_.getRank()], {}, cluster_gid_summary
+    // Must be computed against the pre-swap summaries: the calculator reclassifies
+    // edges and shared blocks by comparing local membership before and after
+    auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
+      info, {}, cluster_gid_summary
     );
+    info.cluster_summaries.erase(iter);
+    info.rank_breakdown = new_breakdown;
   }
 
   void incomingCluster(
@@ -572,10 +582,18 @@ struct RelaxedClusterTransfer {
       "RelaxedClusterTransfer::incomingCluster adding cluster_gid={}\n",
       cluster_gid
     );
-    cluster_info_[this->comm_.getRank()].cluster_summaries[cluster_gid] = cluster_gid_summary;
-    cluster_info_[this->comm_.getRank()].rank_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
-      cluster_info_[this->comm_.getRank()], cluster_gid_summary, {}
+    vt_lb_assert(
+      cluster_gid != -1,
+      "RelaxedClusterTransfer::incomingCluster: cluster_gid must be a real cluster"
     );
+    auto& info = cluster_info_[this->comm_.getRank()];
+    // Must be computed against the pre-swap summaries; see outgoingCluster
+    auto const new_breakdown = WorkModelCalculator::computeWorkUpdateSummary(
+      config_,
+      info, cluster_gid_summary, {}
+    );
+    info.cluster_summaries[cluster_gid] = cluster_gid_summary;
+    info.rank_breakdown = new_breakdown;
   }
 
   bool acceptIncomingClusterSwap(
@@ -593,17 +611,6 @@ struct RelaxedClusterTransfer {
     auto current_work = WorkModelCalculator::computeWork(
       config_.work_model_, cluster_info_[this->comm_.getRank()].rank_breakdown
     );
-    // auto recv_cluster_summary =
-    //   contains_cluster ?
-    //   cluster_info_[this->comm_.getRank()].cluster_summaries.at(recv_cluster_gid) :
-    //   TaskClusterSummaryInfo{};
-    // auto new_bd = WorkModelCalculator::computeWorkUpdateSummary(
-    //   cluster_info_[this->comm_.getRank()], give_cluster_gid_summary, recv_cluster_summary
-    // );
-    // auto new_work = WorkModelCalculator::computeWork(
-    //   config_.work_model_, new_bd
-    // );
-
 
     COMM_LOG(
       LoadBalancer, normal,

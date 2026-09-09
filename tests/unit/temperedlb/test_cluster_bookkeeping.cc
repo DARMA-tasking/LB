@@ -477,32 +477,87 @@ TEST_F(TestClusterBookkeeping, strict_run_completes_when_the_locked_rank_decline
   }
 }
 
+// Granting a lock and acting on one of our own at the same time lets two
+// transactions mutate this rank concurrently, each validated against a state
+// that ignored the other. The grant has to wait for the release.
+TEST_F(TestClusterBookkeeping, strict_defers_a_grant_while_serving_another_rank) {
+  if (comm.numRanks() != 2) {
+    GTEST_SKIP() << "fixture is written for exactly two ranks";
+  }
+  auto const this_rank = comm.getRank();
+
+  Configuration config;
+  PhaseData pd(this_rank);
+
+  // Rank 1 is the loaded one, so once rank 0 acts on the grant it declines and
+  // clears the request. That makes "still outstanding" mean "still deferred".
+  std::unordered_map<int, RankClusterInfo> info;
+  info[0] = makeLoadOnlyRankInfo(20.0, {{1, 5.0}});
+  info[1] = makeLoadOnlyRankInfo(200.0, {});
+
+  StrictClusterTransfer<comm::CommMPI> transfer(
+    comm, pd, config, nullptr, 1000, info, Statistics{}
+  );
+
+  using Strict = StrictClusterTransfer<comm::CommMPI>;
+
+  if (this_rank == 0) {
+    Strict::LockToken const peer_token{1, 99};
+
+    transfer.requestRemoteLock(1, 40.0);
+    ASSERT_TRUE(transfer.hasOutstandingLockRequest());
+
+    // Rank 1 takes our lock before our own grant comes back
+    transfer.requestLock(peer_token, 1.0);
+
+    transfer.lockGranted(Strict::LockToken{0, 1}, 1, transfer.rankInfo(1));
+    EXPECT_TRUE(transfer.hasOutstandingLockRequest())
+      << "acted on our own grant while locked by another rank";
+
+    // Releasing runs the deferred grant, which declines and clears the request
+    transfer.releaseLock(peer_token);
+    EXPECT_FALSE(transfer.hasOutstandingLockRequest())
+      << "deferred grant was dropped rather than resumed";
+  }
+
+  while (comm.poll()) { }
+}
+
 TEST_F(TestClusterBookkeeping, strict_accepts_when_the_pair_maximum_falls) {
   using Strict = StrictClusterTransfer<comm::CommMPI>;
 
   // The receiver gets busier (20 -> 150) yet the pair's maximum drops from
   // 190 to 150, which is exactly the transfer that balances a hot rank
-  EXPECT_TRUE(Strict::pairMaxDoesNotIncrease(190.0, 70.0, 20.0, 150.0));
+  EXPECT_TRUE(Strict::pairImproves(190.0, 70.0, 20.0, 150.0));
 }
 
-TEST_F(TestClusterBookkeeping, strict_accepts_when_the_pair_maximum_is_unchanged) {
+TEST_F(TestClusterBookkeeping, strict_accepts_a_sideways_move_that_lowers_the_total) {
   using Strict = StrictClusterTransfer<comm::CommMPI>;
 
-  // Monotonically non-increasing, so equality is allowed
-  EXPECT_TRUE(Strict::pairMaxDoesNotIncrease(100.0, 80.0, 80.0, 100.0));
+  // Neither rank holds the maximum alone, so shedding an off-home block leaves
+  // the pair maximum at 100 while the total falls from 180 to 170. Refusing
+  // this is what used to strand a block away from home.
+  EXPECT_TRUE(Strict::pairImproves(100.0, 100.0, 80.0, 70.0));
+}
+
+TEST_F(TestClusterBookkeeping, strict_rejects_a_sideways_move_that_changes_nothing) {
+  using Strict = StrictClusterTransfer<comm::CommMPI>;
+
+  // Same maximum and same total: run() would propose this forever
+  EXPECT_FALSE(Strict::pairImproves(100.0, 80.0, 80.0, 100.0));
 }
 
 TEST_F(TestClusterBookkeeping, strict_rejects_when_the_receiver_becomes_the_bottleneck) {
   using Strict = StrictClusterTransfer<comm::CommMPI>;
 
   // Source improves a lot, but the destination overshoots past the old maximum
-  EXPECT_FALSE(Strict::pairMaxDoesNotIncrease(200.0, 50.0, 50.0, 210.0));
+  EXPECT_FALSE(Strict::pairImproves(200.0, 50.0, 50.0, 210.0));
 }
 
 TEST_F(TestClusterBookkeeping, strict_rejects_when_the_pair_maximum_rises) {
   using Strict = StrictClusterTransfer<comm::CommMPI>;
 
-  EXPECT_FALSE(Strict::pairMaxDoesNotIncrease(100.0, 60.0, 90.0, 130.0));
+  EXPECT_FALSE(Strict::pairImproves(100.0, 60.0, 90.0, 130.0));
 }
 
 } // end namespace vt_lb::tests::unit

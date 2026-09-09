@@ -44,6 +44,8 @@
 #if !defined INCLUDED_VT_LB_TESTS_UNIT_TEMPEREDLB_LB_RUN_HELPERS_H
 #define INCLUDED_VT_LB_TESTS_UNIT_TEMPEREDLB_LB_RUN_HELPERS_H
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -73,6 +75,40 @@ inline std::unordered_map<int, std::vector<int>> toIntDistribution(
     }
   }
   return out;
+}
+
+/// Flatten allgathered per-rank vectors into one id-keyed map
+template <typename ValueT>
+std::unordered_map<std::int64_t, ValueT> zipByRank(
+  std::unordered_map<vt_lb::model::RankType, std::vector<std::int64_t>> const& ids,
+  std::unordered_map<vt_lb::model::RankType, std::vector<ValueT>> const& values
+) {
+  std::unordered_map<std::int64_t, ValueT> out;
+  for (auto const& [rank, id_vec] : ids) {
+    auto const& value_vec = values.at(rank);
+    for (std::size_t i = 0; i < id_vec.size(); ++i) {
+      out.emplace(id_vec[i], value_vec[i]);
+    }
+  }
+  return out;
+}
+
+/// Broadcast the maximum of a per-rank value to every rank
+template <typename HandleT>
+double allMax(HandleT& handle, double local) {
+  double result = 0.0;
+  handle.reduce(0, MPI_DOUBLE, MPI_MAX, &local, &result, 1);
+  handle.broadcast(0, MPI_DOUBLE, &result, 1);
+  return result;
+}
+
+/// Broadcast the sum of a per-rank value to every rank
+template <typename HandleT>
+double allSum(HandleT& handle, double local) {
+  double result = 0.0;
+  handle.reduce(0, MPI_DOUBLE, MPI_SUM, &local, &result, 1);
+  handle.broadcast(0, MPI_DOUBLE, &result, 1);
+  return result;
 }
 
 } // namespace detail

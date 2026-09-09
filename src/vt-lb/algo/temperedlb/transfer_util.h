@@ -82,6 +82,9 @@ struct RankClusterInfo {
   double rank_alpha = 0.0;
   WorkBreakdown rank_breakdown;
   std::unordered_set<model::SharedBlockType> shared_blocks_homed;
+  /// Blocks held by tasks that are in no cluster, so they can never leave
+  std::unordered_map<model::SharedBlockType, model::BytesType>
+    unclustered_shared_blocks;
 
   template <typename SerializerT>
   void serialize(SerializerT& s) {
@@ -91,6 +94,7 @@ struct RankClusterInfo {
     s | rank_alpha;
     s | rank_breakdown;
     s | shared_blocks_homed;
+    s | unclustered_shared_blocks;
   }
 };
 

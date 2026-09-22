@@ -63,8 +63,13 @@ enum class TransactionStatus : int {
   Rejected = 2
 };
 
-template <comm::Communicator CommT>
+template <typename CommT>
 struct Transferer {
+  static_assert(
+    comm::CommunicatorTraits<CommT>::is_valid,
+    "CommT must satisfy the communicator interface"
+  );
+
   using HandleType = typename CommT::template HandleType<Transferer<CommT>>;
 
   /**

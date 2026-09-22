@@ -27,7 +27,7 @@ namespace vt_lb::tests::unit {
 extern int test_argc;
 extern char** test_argv;
 
-template <comm::Communicator CommType>
+template <typename CommType>
 struct TestParallelHarness : testing::Test {
   void SetUp() override {
     int initialized = 0;
@@ -61,7 +61,7 @@ private:
 };
 
 struct CommNameGenerator {
-  template <comm::Communicator CommType>
+  template <typename CommType>
   static std::string GetName(int) {
     if constexpr (std::is_same_v<CommType, comm::CommMPI>) {
       return "CommMPI";

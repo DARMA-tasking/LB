@@ -29,6 +29,11 @@ extern char** test_argv;
 
 template <typename CommType>
 struct TestParallelHarness : testing::Test {
+  static_assert(
+    comm::CommunicatorTraits<CommType>::is_valid,
+    "CommType must satisfy the communicator interface"
+  );
+
   void SetUp() override {
     int initialized = 0;
     MPI_Initialized(&initialized);

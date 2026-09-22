@@ -2,6 +2,7 @@ set(
   TOP_LEVEL_SUBDIRS
   algo
     algo/baselb algo/temperedlb algo/driver
+  comm
   input
   model
   util

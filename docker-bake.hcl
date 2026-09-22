@@ -14,6 +14,16 @@ function "lb_docs" {
   result = lookup(item, "lb_docs", "0")
 }
 
+function "cpp_standard" {
+  params = [item]
+  result = lookup(item, "cpp_standard", "20")
+}
+
+function "cpp_standard_suffix" {
+  params = [item]
+  result = cpp_standard(item) == "20" ? "" : "-cpp${cpp_standard(item)}"
+}
+
 function "variant" {
   params = [item]
   result = lookup(item, "variant", "")
@@ -43,7 +53,7 @@ target "lb-build" {
 target "lb-build-all" {
   name = "lb-build-${replace(item.image, ".", "-")}${target_suffix(item)}"
   inherits = ["lb-build"]
-  tags = ["${REPO}:lb-${item.image}"]
+  tags = ["${REPO}:lb-${item.image}${cpp_standard_suffix(item)}"]
 
   args = {
     ARCH = arch(item)
@@ -51,6 +61,7 @@ target "lb-build-all" {
     IMAGE = "wf-${item.image}"
     REPO = REPO
     LB_BUILD_DOCS = lb_docs(item)
+    LB_CMAKE_CXX_STANDARD = cpp_standard(item)
   }
 
   # to get the list of available images from DARMA-tasking/workflows:
@@ -83,6 +94,11 @@ target "lb-build-all" {
       },
       {
         image = "amd64-ubuntu-22.04-gcc-12-cpp"
+      },
+      {
+        image = "amd64-ubuntu-22.04-gcc-12-cpp"
+        cpp_standard = "17"
+        variant = "cpp17"
       },
       {
         image = "amd64-ubuntu-24.04-clang-17-cpp"

@@ -7,7 +7,7 @@
 #define INCLUDED_VT_LB_UNIT_TEST_PARALLEL_HARNESS_H
 
 #include <comm/comm/MPI/comm_mpi.h>
-#include <comm/comm/comm_traits.h>
+#include <vt-lb/comm/comm_traits.h>
 #include <comm/config/cmake_config.h>
 
 #if vt_backend_enabled
@@ -30,7 +30,7 @@ extern char** test_argv;
 template <typename CommType>
 struct TestParallelHarness : testing::Test {
   static_assert(
-    comm::CommunicatorTraits<CommType>::is_valid,
+    comm_traits::CommunicatorTraits<CommType>::is_valid,
     "CommType must satisfy the communicator interface"
   );
 

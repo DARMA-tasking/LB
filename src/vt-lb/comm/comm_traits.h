@@ -47,9 +47,14 @@
 #include <cstddef>
 #include <type_traits>
 #include <utility>
+
+#if __cplusplus >= 202002L
 #include <concepts>
+#endif
 
 namespace vt_lb::comm {
+
+#if __cplusplus >= 202002L
 
 // New concept helpers capturing common communicator API across CommMPI and CommVT
 namespace detail {
@@ -123,17 +128,21 @@ concept Communicator =
   detail::HasRegisterInstanceCollective<Comm, detail::DummyClass> &&
   detail::HasSendUnified<Comm>;
 
-// Backward-compatible traits shim implemented in terms of concepts
+#endif
+
+// Traits are enforced when C++20 concepts are available. C++17 builds skip
+// communicator validation, allowing consumers without C++20 support to use LB.
 template <typename Comm>
 struct CommunicatorTraits {
+#if __cplusplus >= 202002L
   static constexpr bool has_init = detail::HasInit<Comm>;
   static constexpr bool has_finalize = detail::HasFinalize<Comm>;
   static constexpr bool has_num_ranks = detail::HasNumRanks<Comm>;
   static constexpr bool has_get_rank = detail::HasGetRank<Comm>;
   static constexpr bool has_poll = detail::HasPoll<Comm>;
 
-  template <typename T>
-  using instance_handle_t = detail::instance_handle_t<Comm, T>;
+  template <typename T, typename CommT = Comm>
+  using instance_handle_t = detail::instance_handle_t<CommT, T>;
 
   template <typename T>
   static constexpr bool has_register_instance =
@@ -143,11 +152,31 @@ struct CommunicatorTraits {
     detail::HasSendUnified<Comm>;
 
   static constexpr bool is_valid = Communicator<Comm>;
+#else
+  static constexpr bool has_init = true;
+  static constexpr bool has_finalize = true;
+  static constexpr bool has_num_ranks = true;
+  static constexpr bool has_get_rank = true;
+  static constexpr bool has_poll = true;
+
+  template <typename T, typename CommT = Comm>
+  using instance_handle_t = decltype(
+    std::declval<CommT&>().template registerInstanceCollective<T>(
+      std::declval<T*>()
+    )
+  );
+
+  template <typename T>
+  static constexpr bool has_register_instance = true;
+
+  static constexpr bool has_send_unified = true;
+  static constexpr bool is_valid = true;
+#endif
 };
 
 // Convenience alias to check conformance at compile time
 template <typename Comm>
-using is_comm_conformant = std::bool_constant<Communicator<Comm>>;
+using is_comm_conformant = std::bool_constant<CommunicatorTraits<Comm>::is_valid>;
 
 } /* end namespace vt_lb::comm */
 

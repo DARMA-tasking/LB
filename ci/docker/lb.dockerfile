@@ -10,14 +10,17 @@ ARG IMAGE
 ARG CACHE_ID=${IMAGE}
 ARG GIT_BRANCH
 ARG LB_BUILD_DOCS=0
+ARG LB_CMAKE_CXX_STANDARD=20
 
 RUN --mount=type=cache,id=${CACHE_ID},target=/build/ccache             \
     --mount=type=cache,id=BUILD-${CACHE_ID},target=/build/LB           \
     --mount=type=secret,id=GITHUB_TOKEN,env=GITHUB_TOKEN               \
     --mount=target=/LB,rw                                              \
         if [ "${LB_BUILD_DOCS}" = "1" ]; then                          \
-            /LB/ci/build_cpp.sh /LB /build;                            \
+            LB_CMAKE_CXX_STANDARD="${LB_CMAKE_CXX_STANDARD}"           \
+              /LB/ci/build_cpp.sh /LB /build;                          \
         else                                                           \
-            /LB/ci/build_cpp.sh /LB /build &&                          \
+            LB_CMAKE_CXX_STANDARD="${LB_CMAKE_CXX_STANDARD}"           \
+              /LB/ci/build_cpp.sh /LB /build &&                        \
             /LB/ci/test_cpp.sh /LB /build;                             \
         fi

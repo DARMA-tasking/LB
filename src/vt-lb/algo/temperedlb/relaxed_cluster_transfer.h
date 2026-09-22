@@ -61,8 +61,13 @@
 
 namespace vt_lb::algo::temperedlb {
 
-template <comm::Communicator CommT>
+template <typename CommT>
 struct RelaxedClusterTransfer {
+  static_assert(
+    comm::CommunicatorTraits<CommT>::is_valid,
+    "CommT must satisfy the communicator interface"
+  );
+
   using ThisType = RelaxedClusterTransfer<CommT>;
   using HandleType = typename CommT::template HandleType<ThisType>;
 
@@ -585,7 +590,10 @@ struct RelaxedClusterTransfer {
     int recv_cluster_gid,
     double dst_work_before
   ) {
-    bool contains_cluster = cluster_info_.at(this->comm_.getRank()).cluster_summaries.contains(recv_cluster_gid);
+    auto const& cluster_summaries =
+      cluster_info_.at(this->comm_.getRank()).cluster_summaries;
+    bool contains_cluster =
+      cluster_summaries.find(recv_cluster_gid) != cluster_summaries.end();
     bool has_cluster_or_null =
       recv_cluster_gid == -1 ||
       contains_cluster;

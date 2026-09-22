@@ -24,9 +24,19 @@ cmake -S vt -B vt/build                      \
 cmake --build vt/build --target install
 ```
 
-`LB` only requires `vt` installation directory:
+`LB` uses `C++20` by default (*so communicator implementations are checked*
+*against the required interface at compile time*) and only requires `vt`
+installation directory:
 ```
 cmake -S LB -B LB/build \
   -Dvt_ROOT=vt/build/install
 cmake --build LB/build --target install
+```
+
+To build *without* those interface checks on a `C++17` toolchain, configure `LB`
+with:
+```
+cmake -S LB -B LB/build \
+  -Dvt_ROOT=vt/build/install \
+  -DCMAKE_CXX_STANDARD=17
 ```

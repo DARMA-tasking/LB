@@ -66,6 +66,11 @@ extern char** test_argv;
 
 template <typename TestBase, typename CommType>
 struct TestParallelHarnessAny : TestHarnessAny<TestBase> {
+  static_assert(
+    comm::CommunicatorTraits<CommType>::is_valid,
+    "CommType must satisfy the communicator interface"
+  );
+
   virtual void SetUp() override {
     TestHarnessAny<TestBase>::SetUp();
 

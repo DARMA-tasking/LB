@@ -54,7 +54,7 @@
 
 namespace vt_lb { namespace tests { namespace unit {
 
-template <comm::Communicator CommType>
+template <typename CommType>
 struct TestCommBasic : TestParallelHarness<CommType> {
   struct TestObject {
     int calls = 0;

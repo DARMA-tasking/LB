@@ -55,8 +55,13 @@
 
 namespace vt_lb::algo::temperedlb {
 
-template <comm::Communicator CommT>
+template <typename CommT>
 struct BasicTransfer final : Transferer<CommT> {
+  static_assert(
+    comm::CommunicatorTraits<CommT>::is_valid,
+    "CommT must satisfy the communicator interface"
+  );
+
   BasicTransfer(
     CommT& comm,
     model::PhaseData& pd,

@@ -33,12 +33,6 @@ fi
 
 mkdir -p "${build_dir}"
 
-export COMM=${build_dir}/comm-src
-export COMM_BUILD=${build_dir}/comm
-rm -Rf "$COMM" "$COMM_BUILD"
-git clone -b "${comm_rev}" --depth 1 \
-    https://github.com/DARMA-tasking/comm.git "$COMM"
-
 # Match `nvcc_wrapper` and also a path ending with 'nvcc_wrapper'
 case $CXX in
     *nvcc_wrapper)
@@ -55,20 +49,6 @@ if test -d "/vt"
 then
     { echo "VT already exists... not downloading, building, and installing"; } 2>/dev/null
 else
-    # Build comm's fmt dependency first so VT and comm link the same archive.
-    # Otherwise both projects contribute a static fmt library and executables
-    # fail to link with duplicate fmt symbols.
-    cmake -G "${CMAKE_GENERATOR:-Ninja}" \
-        -S "$COMM/lib/fmt" \
-        -B "$COMM_BUILD/fmt" \
-        -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}" \
-        -DCMAKE_CXX_COMPILER="${CXX:-c++}" \
-        -DCMAKE_C_COMPILER="${CC:-cc}" \
-        -DCMAKE_INSTALL_PREFIX="$COMM_BUILD/install" \
-        -DFMT_DOC=OFF \
-        -DFMT_TEST=OFF
-    cmake --build "$COMM_BUILD/fmt" ${dashj} --target install
-
     git clone -b "${vt_rev}" --depth 1 https://github.com/DARMA-tasking/vt.git
     cd /vt/lib
     git clone -b "${checkpoint_rev}" --depth 1 https://github.com/DARMA-tasking/checkpoint.git
@@ -124,8 +104,8 @@ else
         -Dvt_ci_generate_lb_files="${VT_CI_TEST_LB_SCHEMA:-0}" \
         -Dvt_debug_verbose="${VT_DEBUG_VERBOSE:-0}" \
         -Dvt_tests_num_nodes="${VT_TESTS_NUM_NODES:-}" \
-        -Dvt_external_fmt=ON \
-        -Dfmt_DIR="$COMM_BUILD/install/lib/cmake/fmt" \
+        -Dvt_external_fmt="${VT_EXTERNAL_FMT:-0}" \
+        -Dfmt_DIR="${FMT_DIR}" \
         -Dlibunwind_ROOT="${LIBUNWIND_ROOT:-/usr}" \
         -Dvt_no_color_enabled="${VT_NO_COLOR_ENABLED:-0}" \
         -DCMAKE_CXX_STANDARD="${CMAKE_CXX_STANDARD:-17}" \
@@ -134,6 +114,11 @@ else
     cmake --build . ${dashj} --target install
 fi
 
+export COMM=${build_dir}/comm-src
+export COMM_BUILD=${build_dir}/comm
+rm -Rf "$COMM" "$COMM_BUILD"
+git clone -b "${comm_rev}" --depth 1 \
+    https://github.com/DARMA-tasking/comm.git "$COMM"
 git clone -b "${magistrate_rev}" --depth 1 \
     https://github.com/DARMA-tasking/magistrate.git "$COMM/lib/magistrate"
 cmake -G "${CMAKE_GENERATOR:-Ninja}" \

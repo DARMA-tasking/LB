@@ -7,7 +7,7 @@
 #define INCLUDED_VT_LB_UNIT_TEST_PARALLEL_HARNESS_H
 
 #include <comm/comm/MPI/comm_mpi.h>
-#include <comm/comm/comm_traits.h>
+#include <vt-lb/comm/comm_traits.h>
 #include <comm/config/cmake_config.h>
 
 #if vt_backend_enabled
@@ -27,8 +27,13 @@ namespace vt_lb::tests::unit {
 extern int test_argc;
 extern char** test_argv;
 
-template <comm::Communicator CommType>
+template <typename CommType>
 struct TestParallelHarness : testing::Test {
+  static_assert(
+    comm_traits::CommunicatorTraits<CommType>::is_valid,
+    "CommType must satisfy the communicator interface"
+  );
+
   void SetUp() override {
     int initialized = 0;
     MPI_Initialized(&initialized);
@@ -61,7 +66,7 @@ private:
 };
 
 struct CommNameGenerator {
-  template <comm::Communicator CommType>
+  template <typename CommType>
   static std::string GetName(int) {
     if constexpr (std::is_same_v<CommType, comm::CommMPI>) {
       return "CommMPI";

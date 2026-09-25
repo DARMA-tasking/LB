@@ -10,6 +10,16 @@ set(
 set(VT_LB_INSTALL_DESTINATION "include/vt-lb")
 set(VT_LB_EXTERNAL_DESTINATION "include")
 
+configure_file(
+  ${PROJECT_BASE_DIR}/src/vt-lb/config/cmake_config.h.in
+  ${PROJECT_BINARY_DIR}/include/vt-lb/config/cmake_config.h @ONLY
+)
+
+install(
+  FILES ${PROJECT_BINARY_DIR}/include/vt-lb/config/cmake_config.h
+  DESTINATION ${VT_LB_INSTALL_DESTINATION}/config
+)
+
 foreach(DIR ${TOP_LEVEL_SUBDIRS})
   install(
     DIRECTORY "vt-lb/${DIR}"

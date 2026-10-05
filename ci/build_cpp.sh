@@ -145,6 +145,7 @@ cmake -GNinja \
       -Dcomm_DIR="$COMM_BUILD/install/cmake/" \
       -DCMAKE_PREFIX_PATH="$COMM_BUILD/install;$VT_BUILD/install" \
       -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Debug}" \
+      -DCMAKE_CXX_STANDARD="${LB_CMAKE_CXX_STANDARD:-20}" \
       -DMPI_EXTRA_FLAGS="${MPI_EXTRA_FLAGS:-}" \
       -DLB_BUILD_DOCS="${LB_BUILD_DOCS:-0}" \
       "$LB"

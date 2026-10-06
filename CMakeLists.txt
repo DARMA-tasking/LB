@@ -42,6 +42,8 @@ else()
   set(vt_backend_feature_enabled 1)
 endif()
 
+find_package(comm REQUIRED CONFIG)
+
 include(cmake/setup_fmt.cmake)
 darma_setup_fmt(
   SOURCE_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/tpl/fmt"
@@ -105,11 +107,6 @@ if(FMT_LIBRARY)
 else()
   set(VT_LB_USES_PARENT_FMT 1)
 endif()
-
-configure_file(
-  ${PROJECT_BASE_DIR}/src/vt-lb/config/cmake_config.h.in
-  ${PROJECT_BIN_DIR}/src/vt-lb/config/cmake_config.h @ONLY
-)
 
 add_subdirectory(src)
 

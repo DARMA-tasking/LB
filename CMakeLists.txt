@@ -44,6 +44,14 @@ endif()
 
 find_package(comm REQUIRED CONFIG)
 
+include(cmake/setup_fmt.cmake)
+darma_setup_fmt(
+  SOURCE_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/tpl/fmt"
+  VENDORED_TARGET fmt-lb
+  OUT_LIBRARY     FMT_LIBRARY
+  OUT_LINK_TARGET FMT_LINK_TARGET
+)
+
 # json library always included in the build
 set(JSON_BuildTests OFF)
 set(JSON_MultipleHeaders ON)
@@ -93,6 +101,12 @@ set(PROJECT_BIN_DIR      ${CMAKE_CURRENT_BINARY_DIR})
 set(PROJECT_BASE_DIR     ${CMAKE_CURRENT_SOURCE_DIR})
 set(PROJECT_LIB_DIR      ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(PROJECT_EXAMPLE_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+
+if(FMT_LIBRARY)
+  set(VT_LB_USES_PARENT_FMT 0)
+else()
+  set(VT_LB_USES_PARENT_FMT 1)
+endif()
 
 add_subdirectory(src)
 

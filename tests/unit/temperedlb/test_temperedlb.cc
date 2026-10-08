@@ -55,10 +55,11 @@
 #include <algorithm>
 
 #include "test_parallel_harness.h"
+#include "test_helpers.h"
 #include "graph_helpers.h"
 
 #include <nlohmann-lb/json.hpp>
-#include <fmt-lb/format.h>
+#include <fmt/format.h>
 
 #include <vt-lb/algo/temperedlb/temperedlb.h>
 

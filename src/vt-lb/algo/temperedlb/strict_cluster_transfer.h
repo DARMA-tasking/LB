@@ -47,12 +47,12 @@
 #include <vt-lb/algo/temperedlb/transfer.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
-#include <vt-lb/comm/comm_traits.h>
+#include <comm/comm/comm_traits.h>
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
 #include <vt-lb/util/assert.h>
-#include <vt-lb/util/logging.h>
+#include <comm/util/logging.h>
 
 #include <cstdint>
 #include <optional>
@@ -403,11 +403,11 @@ struct StrictClusterTransfer {
     }
 
     if (not best.isImproving()) {
-      VT_LB_LOG(LoadBalancer, normal, "StrictClusterTransfer: no swap candidates\n");
+      COMM_LOG(LoadBalancer, normal, "StrictClusterTransfer: no swap candidates\n");
       return Candidate{};
     }
 
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "StrictClusterTransfer: screened candidate dst_rank={} give_gid={} recv_gid={} "
       "this_work_before={:.2f} this_work_after={:.2f} dst_work_before={:.2f} "
@@ -431,7 +431,7 @@ struct StrictClusterTransfer {
         break;
       }
 
-      VT_LB_LOG(
+      COMM_LOG(
         LoadBalancer, normal,
         "StrictClusterTransfer: requesting lock for dst_rank={} "
         "anticipated improvement={:.2f}\n",
@@ -445,7 +445,7 @@ struct StrictClusterTransfer {
 
       // Everyone else finished before our request was answered
       if (active_lock_request_.has_value()) {
-        VT_LB_LOG(
+        COMM_LOG(
           LoadBalancer, normal,
           "StrictClusterTransfer: quiesced with a lock request outstanding\n"
         );
@@ -903,7 +903,7 @@ struct StrictClusterTransfer {
       src_work_before, src_work_after, dst_work_before, dst_work_after
     );
 
-    VT_LB_LOG(
+    COMM_LOG(
       LoadBalancer, normal,
       "StrictClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, "
       "has_cluster_or_null={}, src={:.2f}->{:.2f}, dst={:.2f}->{:.2f}, accept={}\n",

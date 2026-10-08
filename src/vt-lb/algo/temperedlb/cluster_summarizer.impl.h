@@ -145,7 +145,7 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
     // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
     if (cu != -1 && cv != -1 && cu == cv) {
       if (not ( e.getFromRank() == e.getToRank() && e.getFromRank() == rank)) {
-        VT_LB_LOG(
+        COMM_LOG(
           LoadBalancer, normal,
           "BUG: Intra-cluster edge must be intra-rank: from_rank={}, to_rank={}, u={}, v={}, cu={}, cv={}, rank={}\n",
           e.getFromRank(), e.getToRank(), u, v, cu, cv, rank

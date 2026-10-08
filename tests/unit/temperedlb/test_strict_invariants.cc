@@ -46,7 +46,6 @@
 #include <gtest/gtest.h>
 
 #include "test_parallel_harness.h"
-#include "test_helpers.h"
 #include "temperedlb/random_shared_block_problem.h"
 #include "temperedlb/strict_invariants.h"
 #include "temperedlb/toy_memory_problem.h"

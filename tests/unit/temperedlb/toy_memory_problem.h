@@ -56,7 +56,7 @@
 
 #include <gtest/gtest.h>
 #include <nlohmann-lb/json.hpp>
-#include <fmt-lb/format.h>
+#include <fmt/format.h>
 
 #include "temperedlb/lb_run_helpers.h"
 

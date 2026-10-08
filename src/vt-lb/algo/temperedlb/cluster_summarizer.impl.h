@@ -106,8 +106,11 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
   vt_lb_assert(clusterer_ != nullptr, "Clusterer must be initialized to build summaries");
   int const rank = pd.getRank();
 
-  // Validate assumption: every task must be assigned to a cluster
-  vt_lb_assert(allTasksClustered(*clusterer_, pd), "All tasks must exist in at least one cluster");
+  // Validate assumption: every task that may move must be in a cluster
+  vt_lb_assert(
+    allMigratableTasksClustered(*clusterer_, pd),
+    "Every migratable task must exist in at least one cluster"
+  );
 
   // Task -> local cluster id
   auto const& t2c = clusterer_->taskToCluster();
@@ -144,8 +147,15 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
 
     // Intra-cluster: both endpoints mapped and equal -> accumulate send/recv
     if (cu != -1 && cv != -1 && cu == cv) {
-      assert(
-        e.getFromRank() == e.getToRank() && e.getFromRank() == rank &&
+      if (not ( e.getFromRank() == e.getToRank() && e.getFromRank() == rank)) {
+        COMM_LOG(
+          LoadBalancer, normal,
+          "BUG: Intra-cluster edge must be intra-rank: from_rank={}, to_rank={}, u={}, v={}, cu={}, cv={}, rank={}\n",
+          e.getFromRank(), e.getToRank(), u, v, cu, cv, rank
+        );
+      }
+      vt_lb_assert(
+        e.getFromRank() == e.getToRank() && e.getFromRank() == rank,
         "Intra-cluster edge must be intra-rank"
       );
       auto& sum = summary_by_global.at(cug);
@@ -226,8 +236,8 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
         remote_task, local_cluster, cu, cv, rank
       );
     }
-    assert(
-      it_remote_gid != task_to_global_cluster_id_.end() &&
+    vt_lb_assert(
+      it_remote_gid != task_to_global_cluster_id_.end(),
       "Should not happen if all resolutions are complete"
     );
 

@@ -2,7 +2,7 @@
 //@HEADER
 // *****************************************************************************
 //
-//                             toy_memory_run.h 
+//                             toy_memory_run.h
 //                 DARMA/vt-lb => Virtual Transport/Load Balancers
 //
 // Copyright 2019-2024 National Technology & Engineering Solutions of Sandia, LLC

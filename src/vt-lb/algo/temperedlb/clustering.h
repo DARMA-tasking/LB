@@ -749,12 +749,15 @@ private:
 
 };
 
-// Utility: verify that all tasks in pd are present in the cluster mapping
-inline bool allTasksClustered(Clusterer const& clusterer, vt_lb::model::PhaseData const& pd) {
+// Utility: verify the clusterer dropped no task that is allowed to move.
+// Pinned tasks are deliberately left out, so they are not checked here; their
+// load reaches the model through the rank work breakdown instead.
+inline bool allMigratableTasksClustered(
+  Clusterer const& clusterer, vt_lb::model::PhaseData const& pd
+) {
   auto const& t2c = clusterer.taskToCluster();
-  for (auto const& kv : pd.getTasksMap()) {
-    auto const task_id = kv.first;
-    if (t2c.find(task_id) == t2c.end()) {
+  for (auto const& [task_id, task] : pd.getTasksMap()) {
+    if (task.isMigratable() and t2c.find(task_id) == t2c.end()) {
       return false;
     }
   }

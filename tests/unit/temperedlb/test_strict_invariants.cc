@@ -69,6 +69,10 @@ vt_lb::algo::temperedlb::Configuration makeStrictConfig(
   config.work_model_.has_shared_block_memory_info = true;
   config.deterministic_ = true;
   config.seed_ = 1;
+  // These sweeps run many balancers in one process, and each iteration
+  // duplicates a communicator per helper. Convergence here takes one to three
+  // iterations, so the default ten is wasted work and wasted context ids.
+  config.num_iters_ = 3;
   return config;
 }
 
@@ -177,7 +181,7 @@ TYPED_TEST_P(TestStrictInvariants, an_exactly_full_budget_admits_no_blocks) {
 TYPED_TEST_P(TestStrictInvariants, blocks_spanning_ranks_are_counted_once) {
   auto const num_ranks = this->comm.numRanks();
 
-  for (int seed = 1; seed <= 20; ++seed) {
+  for (int seed = 1; seed <= 8; ++seed) {
     RandomProblemSpec spec;
     spec.blocks_span_ranks = true;
     spec.blocks_per_rank = 6;

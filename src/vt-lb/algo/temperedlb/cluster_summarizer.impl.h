@@ -106,8 +106,11 @@ ClusterSummarizer<CommT>::buildClusterSummaries(
   vt_lb_assert(clusterer_ != nullptr, "Clusterer must be initialized to build summaries");
   int const rank = pd.getRank();
 
-  // Validate assumption: every task must be assigned to a cluster
-  vt_lb_assert(allTasksClustered(*clusterer_, pd), "All tasks must exist in at least one cluster");
+  // Validate assumption: every task that may move must be in a cluster
+  vt_lb_assert(
+    allMigratableTasksClustered(*clusterer_, pd),
+    "Every migratable task must exist in at least one cluster"
+  );
 
   // Task -> local cluster id
   auto const& t2c = clusterer_->taskToCluster();

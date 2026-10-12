@@ -85,6 +85,10 @@ target_link_libraries(
 )
 
 target_link_libraries(
+  ${VT_LB_LIBRARY} PUBLIC ${FMT_LINK_TARGET}
+)
+
+target_link_libraries(
   ${VT_LB_LIBRARY} PUBLIC ${JSON_LIBRARY}
 )
 
@@ -140,15 +144,33 @@ install(
   COMPONENT                 runtime
 )
 
+if(FMT_LIBRARY)
+  install(TARGETS ${FMT_LIBRARY} EXPORT ${VT_LB_LIBRARY})
+endif()
+
+install(
+  DIRECTORY    ${PROJECT_BASE_DIR}/tpl/fmt/include/fmt-lb
+  DESTINATION  include
+  FILES_MATCHING PATTERN "*.h"
+)
 install(TARGETS ${JSON_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 install(TARGETS ${BROTLI_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 install(TARGETS ${YAML_LIBRARY} EXPORT ${VT_LB_LIBRARY})
 
+set(
+  VT_LB_BUILD_EXPORT_TARGETS
+  ${VT_LB_LIBRARY}
+  ${JSON_LIBRARY}
+  ${BROTLI_LIBRARY}
+  ${YAML_LIBRARY}
+)
+
+if(FMT_LIBRARY)
+  list(APPEND VT_LB_BUILD_EXPORT_TARGETS ${FMT_LIBRARY})
+endif()
+
 export(
-  TARGETS                   ${VT_LB_LIBRARY}
-                            ${JSON_LIBRARY}
-                            ${BROTLI_LIBRARY}
-                            ${YAML_LIBRARY}
+  TARGETS                   ${VT_LB_BUILD_EXPORT_TARGETS}
   FILE                      "vtLBTargets.cmake"
   NAMESPACE                 vt::lib::
 )

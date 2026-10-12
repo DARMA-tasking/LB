@@ -8,4 +8,8 @@ else()
   find_dependency(magistrate REQUIRED CONFIG)
 endif()
 
+if(@VT_LB_USES_PARENT_FMT@)
+  find_dependency(fmt REQUIRED CONFIG)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/vtLBTargets.cmake")

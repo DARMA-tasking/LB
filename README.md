@@ -21,11 +21,28 @@ cmake -S comm -B comm/build \
   -DCMAKE_INSTALL_PREFIX="$PWD/comm/install" \
   -Dvt_backend_enabled=OFF
 cmake --build comm/build --target install
+```
 
+`LB` uses `C++20` by default, so communicator implementations are checked
+against the required interface at compile time.
+
+```bash
 cmake -S LB -B LB/build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH="$PWD/comm/install" \
   -Dvt_backend_enabled=OFF
+cmake --build LB/build
+```
+
+To build without those interface checks on a `C++17` toolchain, add
+`-DCMAKE_CXX_STANDARD=17` when configuring LB:
+
+```bash
+cmake -S LB -B LB/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$PWD/comm/install" \
+  -Dvt_backend_enabled=OFF \
+  -DCMAKE_CXX_STANDARD=17
 cmake --build LB/build
 ```
 

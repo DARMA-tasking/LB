@@ -342,14 +342,16 @@ namespace vt_lb::algo::temperedlb {
   };
 
   for (auto const& sb : all_sbs) {
-    bool before = present_before.contains(sb.first);
+    bool before = present_before.find(sb.first) != present_before.end();
     bool removed_here = (to_remove.cluster_id != -1) &&
-                        (to_remove.shared_block_bytes_.contains(sb.first));
+                        (to_remove.shared_block_bytes_.find(sb.first) !=
+                         to_remove.shared_block_bytes_.end());
     bool added_here = (to_add.cluster_id != -1) &&
-                      (to_add.shared_block_bytes_.contains(sb.first));
+                      (to_add.shared_block_bytes_.find(sb.first) !=
+                       to_add.shared_block_bytes_.end());
     bool after = (before && !removed_here) || added_here;
 
-    bool is_homed_here = homed_blocks.contains(sb.first);
+    bool is_homed_here = homed_blocks.find(sb.first) != homed_blocks.end();
     if (is_homed_here) {
       continue;
     }
@@ -505,11 +507,13 @@ namespace vt_lb::algo::temperedlb {
     };
 
     for (auto const& sb : all_sbs) {
-      bool before = present_before.contains(sb.first);
+      bool before = present_before.find(sb.first) != present_before.end();
       bool removed_here = (to_remove.cluster_id != -1) &&
-                          (to_remove.shared_block_bytes_.contains(sb.first));
+                          (to_remove.shared_block_bytes_.find(sb.first) !=
+                           to_remove.shared_block_bytes_.end());
       bool added_here = (to_add.cluster_id != -1) &&
-                        (to_add.shared_block_bytes_.contains(sb.first));
+                        (to_add.shared_block_bytes_.find(sb.first) !=
+                         to_add.shared_block_bytes_.end());
       bool after = (before && !removed_here) || added_here;
 
       if (before && !after) {

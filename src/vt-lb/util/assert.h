@@ -52,7 +52,7 @@
   do {                                                               \
     if (!(cond)) {                                                   \
       COMM_LOG(                                                     \
-        LoadBalancer, terse,                                         \
+        ::comm::util::loadBalancerComponent(), terse,                 \
         "Assertion failed: {} \"{}\" at {}:{} in function {}\n",     \
         #cond, str, __FILE__, __LINE__, __func__                     \
       );                                                             \

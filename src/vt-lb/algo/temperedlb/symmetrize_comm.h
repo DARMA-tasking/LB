@@ -82,7 +82,7 @@ struct CommunicationsSymmetrizer {
       RankType tr = e.getToRank();
 
       COMM_LOG(
-        LoadBalancer, verbose,
+        ::comm::util::loadBalancerComponent(), verbose,
         "symmetrize_comm: rank={} processing edge from {}(rank={}) to {}(rank={}) vol={:.2f}\n",
         my_rank, e.getFrom(), fr, e.getTo(), tr, e.getVolume()
       );
@@ -106,7 +106,7 @@ struct CommunicationsSymmetrizer {
     }
 
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "completed symmetrization of communications\n"
     );
   }
@@ -122,7 +122,7 @@ private:
   // Add edge only if not already present locally; do not add reverse
   void addIfMissingLocal(Edge const& e) {
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "addIfMissingLocal: checking edge from {} to {} vol={:.2f} exists={}\n",
       e.getFrom(), e.getTo(), e.getVolume(), hasEdge(e.getFrom(), e.getTo())
     );
@@ -133,7 +133,7 @@ private:
 
   void recvEdgesHandler(std::vector<Edge> edges) {
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "recvEdgesHandler: received {} edges to symmetrize\n",
       edges.size()
     );

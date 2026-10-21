@@ -258,7 +258,7 @@ namespace vt_lb::algo::temperedlb {
       );
       if (cur_objs.size() > 0) {
         COMM_LOG(
-          LoadBalancer, verbose,
+          ::comm::util::loadBalancerComponent(), verbose,
           "TemperedLB::decide: over_avg={}, single_obj_load={}\n",
           model::LoadType(over_avg),
           model::LoadType(cur_objs[ordered_obj_ids[0]].getLoad())
@@ -319,7 +319,7 @@ namespace vt_lb::algo::temperedlb {
       );
       if (cur_objs.size() > 0) {
         COMM_LOG(
-          LoadBalancer, verbose,
+          ::comm::util::loadBalancerComponent(), verbose,
           "TemperedLB::decide: over_avg={}, marginal_obj_load={}\n",
           model::LoadType(over_avg),
           model::LoadType(cur_objs[ordered_obj_ids[0]].getLoad())

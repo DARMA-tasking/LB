@@ -217,7 +217,7 @@ struct RelaxedClusterTransfer {
     }
 
     if (candidates.empty()) {
-      COMM_LOG(LoadBalancer, normal, "RelaxedClusterTransfer: no swap candidates\n");
+      COMM_LOG(::comm::util::loadBalancerComponent(), normal, "RelaxedClusterTransfer: no swap candidates\n");
       return Candidate{};
     }
 
@@ -237,7 +237,7 @@ struct RelaxedClusterTransfer {
     for (int i = 0; i < n_print; ++i) {
       const auto& c = candidates[i];
       COMM_LOG(
-        LoadBalancer, normal,
+        ::comm::util::loadBalancerComponent(), normal,
         "RelaxedClusterTransfer: candidate[{}] dst_rank={} give_gid={} recv_gid={} "
         "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
         i, c.dst_rank, c.give_cluster_gid, c.recv_cluster_gid,
@@ -248,7 +248,7 @@ struct RelaxedClusterTransfer {
 
     auto const& best = candidates.front();
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "RelaxedClusterTransfer: best candidate dst_rank={} give_gid={} recv_gid={} "
       "this_work_before={:.2f} this_work_after={:.2f} dst_work_before={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
       best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
@@ -271,7 +271,7 @@ struct RelaxedClusterTransfer {
         auto best = findBestSwapCandidate();
         if (best.improvement > 0.0) {
           COMM_LOG(
-            LoadBalancer, normal,
+            ::comm::util::loadBalancerComponent(), normal,
             "RelaxedClusterTransfer: executing swap dst_rank={} give_gid={} recv_gid={} "
             "this_work_after={:.2f} dst_work_after={:.2f} improvement={:.2f}\n",
             best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid,
@@ -297,7 +297,7 @@ struct RelaxedClusterTransfer {
 
         if (transaction_status_ == TransactionStatus::Accepted) {
           COMM_LOG(
-            LoadBalancer, normal,
+            ::comm::util::loadBalancerComponent(), normal,
             "RelaxedClusterTransfer: swap accepted dst_rank={} give_gid={} recv_gid={}\n",
             best.dst_rank, best.give_cluster_gid, best.recv_cluster_gid
           );
@@ -325,7 +325,7 @@ struct RelaxedClusterTransfer {
             config_.work_model_, ci_r.rank_breakdown
           );
           COMM_LOG(
-            LoadBalancer, normal,
+            ::comm::util::loadBalancerComponent(), normal,
             "RelaxedClusterTransfer: post-swap this_rank={} new_work={:.2f}\n",
             this_rank, new_work
           );
@@ -371,7 +371,7 @@ struct RelaxedClusterTransfer {
                 edge.setToRank(rank);
               }
               COMM_LOG(
-                LoadBalancer, verbose,
+                ::comm::util::loadBalancerComponent(), verbose,
                 "RelaxedClusterTransfer::migrateCluster: migrating edge from task {} rank {} to task {} rank {} volume {}\n",
                 edge.getFrom(), edge.getFromRank(), edge.getTo(), edge.getToRank(), edge.getVolume()
               );
@@ -396,7 +396,7 @@ struct RelaxedClusterTransfer {
     }
 
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "Transferer::migrateCluster: migrating cluster_gid={} with {} tasks {} edges to rank {}\n",
       cluster_gid, tasks_to_migrate.size(), edges_to_migrate.size(), rank
     );
@@ -420,7 +420,7 @@ struct RelaxedClusterTransfer {
     double dst_work_before
   ) {
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "Transferer::migrationClusterHandler: received cluster_gid={} with {} tasks {} edges from rank {}\n",
       cluster_gid, tasks.size(), edges.size(), from_rank
     );
@@ -435,7 +435,7 @@ struct RelaxedClusterTransfer {
       // Add all received tasks to local PhaseData
       for (auto const& task : tasks) {
         COMM_LOG(
-          LoadBalancer, normal,
+          ::comm::util::loadBalancerComponent(), normal,
           "Transferer::migrationClusterHandler: adding task {} from cluster_gid={} received from rank {}\n",
           task.getId(), cluster_gid, from_rank
         );
@@ -489,7 +489,7 @@ struct RelaxedClusterTransfer {
       }
     } else {
       COMM_LOG(
-        LoadBalancer, normal,
+        ::comm::util::loadBalancerComponent(), normal,
         "Transferer::migrationClusterHandler: rejecting incoming cluster_gid={} from rank {}\n",
         cluster_gid, from_rank
       );
@@ -502,7 +502,7 @@ struct RelaxedClusterTransfer {
 
   void clusterAccepted(int cluster_gid) {
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "Transferer::clusterAccepted: cluster_gid={} accepted by remote rank\n",
       cluster_gid
     );
@@ -516,7 +516,7 @@ struct RelaxedClusterTransfer {
     std::vector<model::Task> const& tasks
   ) {
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "Transferer::sendBackClusterHandler: cluster sent back cluster_gid={} with {} tasks\n",
       cluster_gid, tasks.size()
     );
@@ -553,7 +553,7 @@ struct RelaxedClusterTransfer {
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "RelaxedClusterTransfer::outgoingCluster removing cluster_gid={}\n",
       cluster_gid
     );
@@ -573,7 +573,7 @@ struct RelaxedClusterTransfer {
     TaskClusterSummaryInfo cluster_gid_summary
   ) {
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "RelaxedClusterTransfer::incomingCluster adding cluster_gid={}\n",
       cluster_gid
     );
@@ -614,7 +614,7 @@ struct RelaxedClusterTransfer {
 
 
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "RelaxedClusterTransfer::acceptIncomingClusterSwap cluster_gid={}, has_cluster_or_null={}, current_work={}, max_work={}, dst_work_before={}\n",
       recv_cluster_gid, has_cluster_or_null, current_work, stats_.max, dst_work_before
     );

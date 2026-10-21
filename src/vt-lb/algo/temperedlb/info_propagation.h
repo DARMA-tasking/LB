@@ -94,7 +94,7 @@ struct InformationPropagation {
     }
 
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "done with poll: local_data size={}\n", local_data_.size()
     );
 

@@ -14,7 +14,7 @@ comm's source tree or use comm's private test files.
 The commands below assume that `LB` and `comm` are cloned next to each other.
 
 ```bash
-git clone https://github.com/DARMA-tasking/comm.git
+git clone -b develop https://github.com/DARMA-tasking/comm.git
 
 cmake -S comm -B comm/build \
   -DCMAKE_BUILD_TYPE=Release \
@@ -38,6 +38,13 @@ To build without those interface checks on a `C++17` toolchain, add
 `-DCMAKE_CXX_STANDARD=17` when configuring LB:
 
 ```bash
+cmake -S comm -B comm/build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$PWD/comm/install" \
+  -Dvt_backend_enabled=OFF \
+  -DCMAKE_CXX_STANDARD=17
+cmake --build comm/build --target install
+
 cmake -S LB -B LB/build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH="$PWD/comm/install" \

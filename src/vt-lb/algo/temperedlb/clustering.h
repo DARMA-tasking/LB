@@ -88,7 +88,7 @@ struct Clusterer {
    */
   int addCluster(std::vector<TaskType> const& tasks, int cluster_global_id = -1) {
     COMM_LOG(
-      LoadBalancer, normal,
+      ::comm::util::loadBalancerComponent(), normal,
       "Clusterer: addCluster: cluster_global_id={}, num_tasks={}\n",
       cluster_global_id, tasks.size()
     );
@@ -106,7 +106,7 @@ struct Clusterer {
     cl.members = tasks;
     for (const auto& t : tasks) {
       COMM_LOG(
-        LoadBalancer, normal,
+        ::comm::util::loadBalancerComponent(), normal,
         "Clusterer: addCluster: assigning task {} to cluster {}\n",
         t, next_id
       );
@@ -388,7 +388,7 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
 
     if (rank0()) {
       COMM_LOG(
-        Clusterer, normal, "LeidenCPMStandalone: start nodes={} edges={} gamma={:.4f}\n",
+        ::comm::util::clustererComponent(), normal, "LeidenCPMStandalone: start nodes={} edges={} gamma={:.4f}\n",
         node_to_tasks_.size(), edges_.size(), gamma_
       );
     }
@@ -396,7 +396,7 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     int level = 0;
     while (level < max_levels_) {
       if (rank0()) {
-        COMM_LOG(Clusterer, normal, "LeidenCPMStandalone: level {}\n", level);
+        COMM_LOG(::comm::util::clustererComponent(), normal, "LeidenCPMStandalone: level {}\n", level);
       }
       bool moved_any = localMovingPhase();
       refinementPhase();
@@ -404,7 +404,7 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
       bool coarsened = coarsenGraph();
       if (rank0()) {
         COMM_LOG(
-          Clusterer, normal, "  after level {}: moved={} coarsened={} nodes={} edges={}\n",
+          ::comm::util::clustererComponent(), normal, "  after level {}: moved={} coarsened={} nodes={} edges={}\n",
           level,
           moved_any ? "yes" : "no",
           coarsened ? "yes" : "no",
@@ -418,9 +418,9 @@ struct LeidenCPMStandaloneClusterer : Clusterer {
     materializeClusters();
 
     if (rank0()) {
-      COMM_LOG(Clusterer, normal, "LeidenCPMStandalone: final communities={}\n", clusters_.size());
+      COMM_LOG(::comm::util::clustererComponent(), normal, "LeidenCPMStandalone: final communities={}\n", clusters_.size());
       for (auto const& c : clusters_) {
-        COMM_LOG(Clusterer, normal, "  community {} size={} load={:.2f}\n", c.id, c.members.size(), c.load);
+        COMM_LOG(::comm::util::clustererComponent(), normal, "  community {} size={} load={:.2f}\n", c.id, c.members.size(), c.load);
       }
     }
   }
@@ -579,7 +579,7 @@ private:
       }
 
       if (rank0()) {
-        COMM_LOG(Clusterer, normal, "  local pass {} moved={}\n", pass, moved ? "yes" : "no");
+        COMM_LOG(::comm::util::clustererComponent(), normal, "  local pass {} moved={}\n", pass, moved ? "yes" : "no");
       }
       if (!moved) break;
     }
@@ -645,7 +645,7 @@ private:
       ++splits;
     }
     if (rank0()) {
-      COMM_LOG(Clusterer, normal, "  refinement: splits={}\n", splits);
+      COMM_LOG(::comm::util::clustererComponent(), normal, "  refinement: splits={}\n", splits);
     }
   }
 

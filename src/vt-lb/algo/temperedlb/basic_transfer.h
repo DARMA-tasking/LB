@@ -131,7 +131,7 @@ struct BasicTransfer final : Transferer<CommT> {
           auto const selected_rank = TransferUtil::sampleFromCMF(deterministic, under, cmf, gen_sample_, seed_);
 
           COMM_LOG(
-            LoadBalancer, verbose,
+            ::comm::util::loadBalancerComponent(), verbose,
             "BasicTransfer: selected_rank={}, load_info_.size()={}\n",
             selected_rank, load_info_.size()
           );
@@ -148,7 +148,7 @@ struct BasicTransfer final : Transferer<CommT> {
           );
 
           COMM_LOG(
-            LoadBalancer, verbose,
+            ::comm::util::loadBalancerComponent(), verbose,
             "BasicTransfer: under.size()={}, "
             "selected_rank={}, selected_load={}, obj_id={}, "
             "is_migratable()={}, obj_load={}, target_max_load={}, "
@@ -172,7 +172,7 @@ struct BasicTransfer final : Transferer<CommT> {
             this->migrateTask(selected_rank, cur_tasks[obj_id]);
 
             COMM_LOG(
-              LoadBalancer, verbose,
+              ::comm::util::loadBalancerComponent(), verbose,
               "BasicTransfer: migrating obj_id={:x} of load={} to rank={}\n",
               obj_id, model::LoadType(obj_load), selected_rank
             );
@@ -204,7 +204,7 @@ struct BasicTransfer final : Transferer<CommT> {
   /*virtual*/ bool acceptIncomingTask(model::Task const& task) override final {
     RankInfo& cur_load = load_info_.at(this->pd_.getRank());
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "BasicTransfer::acceptIncomingTask: current load={} task load={} total load={} max={}\n",
       cur_load.load, task.getLoad(), cur_load.load + task.getLoad(), stats_.max
     );

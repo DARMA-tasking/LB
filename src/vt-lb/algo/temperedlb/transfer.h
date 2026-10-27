@@ -45,7 +45,7 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TRANSFER_H
 
 #include <vt-lb/model/types.h>
-#include <vt-lb/comm/comm_traits.h>
+#include <comm/comm/comm_traits.h>
 #include <comm/util/logging.h>
 #include <vt-lb/util/assert.h>
 #include <vt-lb/model/PhaseData.h>
@@ -63,12 +63,11 @@ enum class TransactionStatus : int {
   Rejected = 2
 };
 
-template <typename CommT>
+template <COMM_COMMUNICATOR CommT>
 struct Transferer {
-  static_assert(
-    comm_traits::CommunicatorTraits<CommT>::is_valid,
-    "CommT must satisfy the communicator interface"
-  );
+#if !COMM_HAS_CONCEPTS
+  static_assert(comm::Communicator<CommT>, "CommT must satisfy the communicator interface");
+#endif
 
   using HandleType = typename CommT::template HandleType<Transferer<CommT>>;
 

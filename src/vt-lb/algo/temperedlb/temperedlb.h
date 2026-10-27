@@ -44,7 +44,7 @@
 #if !defined INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_TEMPEREDLB_H
 
-#include <vt-lb/comm/comm_traits.h>
+#include <comm/comm/comm_traits.h>
 #include <vt-lb/algo/baselb/baselb.h>
 
 // Include all model types
@@ -83,15 +83,13 @@
 
 namespace vt_lb::algo::temperedlb {
 
-template <typename CommT>
+template <COMM_COMMUNICATOR CommT>
 struct TemperedLB final : baselb::BaseLB {
   using HandleType = typename CommT::template HandleType<TemperedLB<CommT>>;
 
-  // Assert that CommT conforms to the communication interface we expect
-  static_assert(
-    comm_traits::is_comm_conformant<CommT>::value,
-    "CommT must be comm conformant"
-  );
+#if !COMM_HAS_CONCEPTS
+  static_assert(comm::Communicator<CommT>, "CommT must be comm conformant");
+#endif
 
   /**
    * @brief Construct a new TemperedLB object

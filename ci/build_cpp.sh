@@ -131,6 +131,7 @@ cmake -G "${CMAKE_GENERATOR:-Ninja}" \
     -DCMAKE_INSTALL_PREFIX="$COMM_BUILD/install" \
     -Dvt_DIR="$VT_BUILD/install/cmake" \
     -Dvt_backend_enabled=ON \
+    -DCMAKE_CXX_STANDARD="${LB_CMAKE_CXX_STANDARD:-20}" \
     -DCMAKE_PROJECT_comm_INCLUDE="$source_dir/cmake/comm_vt_compat.cmake"
 cmake --build "$COMM_BUILD/build" ${dashj} --target install
 

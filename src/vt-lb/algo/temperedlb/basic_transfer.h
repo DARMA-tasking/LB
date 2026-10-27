@@ -45,7 +45,7 @@
 #define INCLUDED_VT_LB_ALGO_TEMPEREDLB_BASIC_TRANSFER_H
 
 #include <vt-lb/model/types.h>
-#include <vt-lb/comm/comm_traits.h>
+#include <comm/comm/comm_traits.h>
 #include <comm/util/logging.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
@@ -55,12 +55,11 @@
 
 namespace vt_lb::algo::temperedlb {
 
-template <typename CommT>
+template <COMM_COMMUNICATOR CommT>
 struct BasicTransfer final : Transferer<CommT> {
-  static_assert(
-    comm_traits::CommunicatorTraits<CommT>::is_valid,
-    "CommT must satisfy the communicator interface"
-  );
+#if !COMM_HAS_CONCEPTS
+  static_assert(comm::Communicator<CommT>, "CommT must satisfy the communicator interface");
+#endif
 
   BasicTransfer(
     CommT& comm,

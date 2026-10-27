@@ -23,8 +23,9 @@ cmake -S comm -B comm/build \
 cmake --build comm/build --target install
 ```
 
-`LB` uses `C++20` by default, so communicator implementations are checked
-against the required interface at compile time.
+`LB` uses `C++20` by default. Communicator implementations are checked
+against the required interface at compile time, using concepts under `C++20`
+and equivalent type traits under `C++17`.
 
 ```bash
 cmake -S LB -B LB/build \
@@ -34,8 +35,8 @@ cmake -S LB -B LB/build \
 cmake --build LB/build
 ```
 
-To build without those interface checks on a `C++17` toolchain, add
-`-DCMAKE_CXX_STANDARD=17` when configuring LB:
+To build on a `C++17` toolchain, add `-DCMAKE_CXX_STANDARD=17` when configuring
+LB:
 
 ```bash
 cmake -S LB -B LB/build \

@@ -2,7 +2,6 @@ set(
   TOP_LEVEL_SUBDIRS
   algo
     algo/baselb algo/temperedlb algo/driver
-  comm
   input
   model
   util
@@ -77,6 +76,8 @@ add_library(
 )
 
 add_library(${VT_LB_LIBRARY_NS} ALIAS ${VT_LB_LIBRARY})
+
+target_compile_features(${VT_LB_LIBRARY} PUBLIC cxx_std_17)
 
 include(turn_on_warnings)
 turn_on_warnings(${VT_LB_LIBRARY})

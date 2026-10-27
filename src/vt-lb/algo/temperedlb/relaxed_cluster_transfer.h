@@ -47,7 +47,7 @@
 #include <vt-lb/algo/temperedlb/transfer.h>
 #include <vt-lb/model/PhaseData.h>
 #include <vt-lb/algo/temperedlb/statistics.h>
-#include <vt-lb/comm/comm_traits.h>
+#include <comm/comm/comm_traits.h>
 #include <vt-lb/algo/temperedlb/work_model.h>
 #include <vt-lb/algo/temperedlb/configuration.h>
 #include <vt-lb/algo/temperedlb/cluster_summarizer.h>
@@ -61,12 +61,11 @@
 
 namespace vt_lb::algo::temperedlb {
 
-template <typename CommT>
+template <COMM_COMMUNICATOR CommT>
 struct RelaxedClusterTransfer {
-  static_assert(
-    comm_traits::CommunicatorTraits<CommT>::is_valid,
-    "CommT must satisfy the communicator interface"
-  );
+#if !COMM_HAS_CONCEPTS
+  static_assert(comm::Communicator<CommT>, "CommT must satisfy the communicator interface");
+#endif
 
   using ThisType = RelaxedClusterTransfer<CommT>;
   using HandleType = typename CommT::template HandleType<ThisType>;

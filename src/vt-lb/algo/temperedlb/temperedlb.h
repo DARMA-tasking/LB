@@ -183,7 +183,7 @@ struct TemperedLB final : baselb::BaseLB {
     InformationPropagation<CommT, T> ip(comm_, config_);
     auto gathered_info = ip.run(initial_data);
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "gathered load info size={}\n",
       gathered_info.size()
     );
@@ -196,11 +196,11 @@ struct TemperedLB final : baselb::BaseLB {
 
     for (int trial = 0; trial < config_.num_trials_; ++trial) {
       if (comm_.getRank() == 0) {
-        COMM_LOG(LoadBalancer, normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
+        COMM_LOG(::comm::util::loadBalancerComponent(), normal, "Starting trial {}/{}\n", trial + 1, config_.num_trials_);
       }
       runTrial(trial);
       if (comm_.getRank() == 0) {
-        COMM_LOG(LoadBalancer, normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
+        COMM_LOG(::comm::util::loadBalancerComponent(), normal, "Finished trial {}/{}\n", trial + 1, config_.num_trials_);
       }
     }
 
@@ -215,7 +215,7 @@ struct TemperedLB final : baselb::BaseLB {
 
     if (comm_.getRank() == 0) {
       COMM_LOG(
-        LoadBalancer, normal,
+        ::comm::util::loadBalancerComponent(), normal,
         "Best trial: max work = {}\n", std::get<0>(trial_work_distribution_.front())
       );
     }
@@ -230,7 +230,7 @@ struct TemperedLB final : baselb::BaseLB {
     for (int iter = 0; iter < config_.num_iters_; ++iter) {
       if (comm_.getRank() == 0) {
         COMM_LOG(
-          LoadBalancer, normal,
+          ::comm::util::loadBalancerComponent(), normal,
           "  Starting iteration {}/{}\n",
           iter + 1, config_.num_iters_
         );
@@ -249,7 +249,7 @@ struct TemperedLB final : baselb::BaseLB {
 
       if (comm_.getRank() == 0) {
         COMM_LOG(
-          LoadBalancer, normal,
+          ::comm::util::loadBalancerComponent(), normal,
           "  Finished iteration {}/{}\n",
           iter + 1, config_.num_iters_
         );
@@ -285,7 +285,7 @@ struct TemperedLB final : baselb::BaseLB {
       config_.work_model_, work_breakdown
     );
 
-    COMM_LOG(LoadBalancer, normal, "Total work: {}\n", total_work);
+    COMM_LOG(::comm::util::loadBalancerComponent(), normal, "Total work: {}\n", total_work);
 
     auto work_stats = computeStatistics(total_work, "Work");
 
@@ -320,7 +320,7 @@ struct TemperedLB final : baselb::BaseLB {
     if (wm.beta == 0.0 && wm.gamma == 0.0 && wm.delta == 0.0) {
       auto rank_info = RankInfo{total_work, config_.work_model_.rank_alpha};
       auto info = runInformationPropagation(rank_info);
-      COMM_LOG(LoadBalancer, normal, "runTrial: gathered load info from {} ranks\n", info.size());
+      COMM_LOG(::comm::util::loadBalancerComponent(), normal, "runTrial: gathered load info from {} ranks\n", info.size());
       BasicTransfer<CommT> transfer(comm_, *phase_data_, info, work_stats);
       std::mt19937 gen_select_;
       std::random_device seed_;
@@ -362,7 +362,7 @@ struct TemperedLB final : baselb::BaseLB {
       auto info = runInformationPropagation(rank_info);
 
       COMM_LOG(
-        LoadBalancer, verbose,
+        ::comm::util::loadBalancerComponent(), verbose,
         "runTrial: gathered load info from {} ranks\n",
         info.size()
       );
@@ -408,7 +408,7 @@ private:
 
     if (comm_.getRank() == root) {
       COMM_LOG(
-        LoadBalancer, normal,
+        ::comm::util::loadBalancerComponent(), normal,
         "global max clusters across ranks: {}\n",
         global_max_clusters_
       );
@@ -439,7 +439,7 @@ private:
     }
     if (comm_.getRank() == 0) {
       COMM_LOG(
-        LoadBalancer, normal, "{} statistics -- min: {}, max: {}, avg: {}, I: {}\n",
+        ::comm::util::loadBalancerComponent(), normal, "{} statistics -- min: {}, max: {}, avg: {}, I: {}\n",
         name, global_min, global_max, global_avg, I
       );
     }

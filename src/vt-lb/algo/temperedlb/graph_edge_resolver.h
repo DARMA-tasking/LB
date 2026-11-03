@@ -212,7 +212,7 @@ struct GraphEdgeResolver {
     std::vector<model::TaskType> const& task_ids
   ) {
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "GraphEdgeResolver::informTaskLocation: received {} task locations from rank {}\n",
       task_ids.size(), rank
     );
@@ -234,7 +234,7 @@ struct GraphEdgeResolver {
     std::vector<model::TaskType> const& task_ids
   ) {
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "GraphEdgeResolver::resolveTasks: received {} task resolution requests from rank {}\n",
       task_ids.size(), rank
     );
@@ -253,7 +253,7 @@ struct GraphEdgeResolver {
     model::TaskType task_id
   ) {
     COMM_LOG(
-      LoadBalancer, verbose,
+      ::comm::util::loadBalancerComponent(), verbose,
       "GraphEdgeResolver::validateEndpoint: received validation request for task {} from rank {}\n",
       task_id, rank
     );

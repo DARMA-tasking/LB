@@ -106,6 +106,15 @@ namespace vt_lb::algo::temperedlb {
     cmf.push_back(sum_p);
   }
 
+  // Equal eligible loads at or above the target can give every rank zero
+  // weight. Keep these destinations selectable by using a uniform distribution.
+  if (sum_p == 0.0) {
+    for (std::size_t i = 0; i < cmf.size(); ++i) {
+      cmf[i] = static_cast<double>(i + 1) / cmf.size();
+    }
+    return cmf;
+  }
+
   // Normalize the CMF
   for (auto& elm : cmf) {
     elm /= sum_p;
@@ -249,7 +258,7 @@ namespace vt_lb::algo::temperedlb {
       );
       if (cur_objs.size() > 0) {
         COMM_LOG(
-          LoadBalancer, verbose,
+          ::comm::util::loadBalancerComponent(), verbose,
           "TemperedLB::decide: over_avg={}, single_obj_load={}\n",
           model::LoadType(over_avg),
           model::LoadType(cur_objs[ordered_obj_ids[0]].getLoad())
@@ -310,7 +319,7 @@ namespace vt_lb::algo::temperedlb {
       );
       if (cur_objs.size() > 0) {
         COMM_LOG(
-          LoadBalancer, verbose,
+          ::comm::util::loadBalancerComponent(), verbose,
           "TemperedLB::decide: over_avg={}, marginal_obj_load={}\n",
           model::LoadType(over_avg),
           model::LoadType(cur_objs[ordered_obj_ids[0]].getLoad())

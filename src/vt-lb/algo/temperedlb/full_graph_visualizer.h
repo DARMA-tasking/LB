@@ -94,7 +94,7 @@ struct FullGraphVisualizer {
       clusters_by_rank_[r] = std::move(cmap);
     }
     ++received_children_;
-    COMM_LOG(Visualizer, verbose, "[viz] receiveAggregated from child rank={} (received={}/{})\n",
+    COMM_LOG(::comm::util::visualizerComponent(), verbose, "[viz] receiveAggregated from child rank={} (received={}/{})\n",
       static_cast<int>(from_rank), received_children_, expected_children_);
   }
 
@@ -109,10 +109,10 @@ struct FullGraphVisualizer {
         int global_cid = ClusterSummarizerUtil::localToGlobalClusterID(local_cid, my_rank, global_max_clusters_);
         local_clusters_[tid] = global_cid;
       }
-      COMM_LOG(Visualizer, normal, "[viz] init local_clusters task-maps={} unique-clusters={} (globalized, gmax={})\n",
+      COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] init local_clusters task-maps={} unique-clusters={} (globalized, gmax={})\n",
         local_clusters_.size(), countClusters(local_clusters_), global_max_clusters_);
     } else {
-      COMM_LOG(Visualizer, normal, "[viz] clusterer_=nullptr\n");
+      COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] clusterer_=nullptr\n");
     }
 
     // Binary tree topology
@@ -125,7 +125,7 @@ struct FullGraphVisualizer {
     }
     expected_children_ = static_cast<int>(children.size());
     received_children_ = 0;
-    COMM_LOG(Visualizer, normal, "[viz] parent={} children=[{}] expected_children={}\n",
+    COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] parent={} children=[{}] expected_children={}\n",
       parent,
       [&children](){
         std::string s;
@@ -141,7 +141,7 @@ struct FullGraphVisualizer {
     while (received_children_ < expected_children_) {
       if (!comm_.poll()) break;
     }
-    COMM_LOG(Visualizer, normal, "[viz] proceed to merge (received={}/{})\n",
+    COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] proceed to merge (received={}/{})\n",
       received_children_, expected_children_);
 
     // Build per-rank accumulators (DO NOT flatten)
@@ -162,14 +162,14 @@ struct FullGraphVisualizer {
     for (auto const& [r, cmap] : merged_rank_clusters) {
       total_maps += cmap.size();
       for (auto const& [tid, cid] : cmap) uniq_cids.insert(cid);
-      COMM_LOG(Visualizer, normal, "[viz] merged child rank={} task-maps={} unique-clusters={}\n",
+      COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] merged child rank={} task-maps={} unique-clusters={}\n",
         static_cast<int>(r), cmap.size(), countClusters(cmap));
     }
-    COMM_LOG(Visualizer, normal, "[viz] merged tasks={} edges={} task-maps={} unique-clusters={}\n",
+    COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] merged tasks={} edges={} task-maps={} unique-clusters={}\n",
       total_tasks, total_edges, total_maps, uniq_cids.size());
 
     if (parent >= 0) {
-      COMM_LOG(Visualizer, normal, "[viz] send to parent={}\n", parent);
+      COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] send to parent={}\n", parent);
       handle_[parent].template send<&ThisType::receiveAggregated>(
         merged_rank_phases, merged_rank_clusters, static_cast<model::RankType>(my_rank)
       );
@@ -177,7 +177,7 @@ struct FullGraphVisualizer {
       // Root: store final per-rank data
       final_rank_phases_ = std::move(merged_rank_phases);
       final_rank_clusters_ = std::move(merged_rank_clusters);
-      COMM_LOG(Visualizer, normal, "[viz] (root) final ranks={} total-cluster-maps={}\n",
+      COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] (root) final ranks={} total-cluster-maps={}\n",
         final_rank_phases_.size(), final_rank_clusters_.size());
 
       // Build and write DOT
@@ -186,9 +186,9 @@ struct FullGraphVisualizer {
       if (ofs) {
         ofs << dot;
         ofs.close();
-        COMM_LOG(Visualizer, normal, "[viz] (root) wrote DOT to '{}.dot'\n", filename_);
+        COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] (root) wrote DOT to '{}.dot'\n", filename_);
       } else {
-        COMM_LOG(Visualizer, normal, "[viz] (root) failed to open '{}.dot' for writing\n", filename_);
+        COMM_LOG(::comm::util::visualizerComponent(), normal, "[viz] (root) failed to open '{}.dot' for writing\n", filename_);
       }
     }
   }

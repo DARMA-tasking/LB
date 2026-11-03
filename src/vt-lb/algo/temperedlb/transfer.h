@@ -151,7 +151,7 @@ private:
     for (auto& [task, edges, shared_blocks] : tasks) {
       if (!acceptIncomingTask(task)) {
         COMM_LOG(
-          LoadBalancer, normal,
+          ::comm::util::loadBalancerComponent(), normal,
           "Transferer::migrationHandler: rejecting incoming task {}, load {} due to load constraints\n",
           task.getId(),
           task.getLoad()
